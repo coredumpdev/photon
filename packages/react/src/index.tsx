@@ -61,12 +61,12 @@ export function Plot({ options, className, style, children }: PlotProps) {
 
 export type LineProps = LineOptions;
 
-export function Line({ x, y, color, width, name, yAxis, step, join, decimate }: LineProps) {
+export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate }: LineProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<LineLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addLine({ x, y, color, width, name, yAxis, step, join, decimate });
+    const l = plot.addLine({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
@@ -74,7 +74,7 @@ export function Line({ x, y, color, width, name, yAxis, step, join, decimate }: 
     };
     // Structural props → recreate the layer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, width, name, yAxis, step, join, decimate]);
+  }, [plot, color, width, name, yAxis, step, join, miterLimit, decimate]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y);

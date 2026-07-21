@@ -233,7 +233,7 @@ are labeled [`good first issue`](https://github.com/coredumpdev/photon/labels/go
 - [x] 3D (surface, point cloud), polar, streaming, shared context
 - [x] React / Vue / Svelte bindings
 - [x] 3D axes/ticks & lighting controls
-- [ ] Line joins tuning, GPU-side decimation
+- [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation
 - [ ] WebGPU backend exploration
 
 ## License

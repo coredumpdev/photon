@@ -89,12 +89,12 @@ export const Line = defineComponent({
     x: arr(), y: arr(),
     color: opt<LineOptions["color"]>(), width: opt<number>(), name: opt<string>(),
     yAxis: opt<string>(), step: opt<LineOptions["step"]>(), join: opt<LineOptions["join"]>(),
-    decimate: opt<boolean>(),
+    miterLimit: opt<number>(), decimate: opt<boolean>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addLine({ x: props.x, y: props.y, color: props.color, width: props.width, name: props.name, yAxis: props.yAxis, step: props.step, join: props.join, decimate: props.decimate }),
-      () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.decimate],
+      (p) => p.addLine({ x: props.x, y: props.y, color: props.color, width: props.width, name: props.name, yAxis: props.yAxis, step: props.step, join: props.join, miterLimit: props.miterLimit, decimate: props.decimate }),
+      () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.miterLimit, props.decimate],
       () => [props.x, props.y],
       (l) => l.setData(props.x, props.y),
     );

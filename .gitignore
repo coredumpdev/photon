@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .turbo/
 coverage/
+
+# Local agent guidance (not published)
+CLAUDE.md

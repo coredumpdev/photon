@@ -2,6 +2,9 @@ import { Plot, Plot3D, PolarPlot } from "@photonviz/core";
 
 const grid = document.getElementById("grid")!;
 
+// One FPS badge per chart, pinned to that chart's top-right corner.
+const fpsBadges: HTMLElement[] = [];
+
 function panel(title: string, subtitle = ""): HTMLElement {
   const el = document.createElement("div");
   el.className = "panel";
@@ -13,16 +16,48 @@ function panel(title: string, subtitle = ""): HTMLElement {
   el.appendChild(h);
   el.appendChild(chart);
   grid.appendChild(el);
+
+  const badge = document.createElement("div");
+  badge.className = "fps";
+  badge.style.cssText =
+    "position:absolute;top:6px;right:8px;z-index:5;padding:2px 7px;border-radius:6px;" +
+    "font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#e2e8f0;" +
+    "background:rgba(14,21,38,.7);border:1px solid #1e293b;backdrop-filter:blur(3px);" +
+    "pointer-events:none;font-variant-numeric:tabular-nums;";
+  badge.textContent = "— fps";
+  // Plot sets the chart container to position:relative, so this anchors to it.
+  chart.appendChild(badge);
+  fpsBadges.push(badge);
+
   return chart;
 }
 
 // Global animation loop — every registered updater runs once per frame.
 const updaters: Array<(t: number) => void> = [];
 let frame = 0;
-function loop(): void {
+let fpsAvg = 0;       // smoothed frames-per-second
+let lastNow = 0;      // previous frame timestamp (ms)
+let fpsPaint = 0;     // throttle the DOM text update
+function loop(now: number): void {
   frame++;
   const t = frame / 60;
   for (const u of updaters) u(t);
+
+  if (lastNow > 0) {
+    const dt = now - lastNow;
+    if (dt > 0) {
+      const inst = 1000 / dt;
+      // Exponential moving average so the readout doesn't jitter.
+      fpsAvg = fpsAvg > 0 ? fpsAvg * 0.9 + inst * 0.1 : inst;
+    }
+  }
+  lastNow = now;
+  if (now - fpsPaint > 250) { // repaint ~4x/sec
+    fpsPaint = now;
+    const text = `${Math.round(fpsAvg)} fps`;
+    for (const b of fpsBadges) b.textContent = text;
+  }
+
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -235,9 +270,23 @@ function gaussian(m: number, sd: number): number {
   p.addHeatmapSpectrogram(sig, { fftSize: 256, hop: 128, sampleRate: sr, colormap: "plasma" });
 }
 
-// 1M points (decimation).
+// Line joins (miter / bevel / round on sharp corners).
 {
-  const p = new Plot(panel("1M points", "min/max decimation"), { theme: "dark" });
+  const p = new Plot(panel("Line joins", "miter · bevel · round"), { theme: "dark", toolbar: false });
+  const xs: number[] = [];
+  const zig: number[] = [];
+  for (let i = 0; i <= 12; i++) { xs.push(i); zig.push(i % 2 === 0 ? 0 : 1); } // sharp zigzag
+  const styles = ["miter", "bevel", "round"] as const;
+  const colors = ["#f472b6", "#60a5fa", "#34d399"];
+  styles.forEach((join, k) => {
+    const y = zig.map((v) => v + k * 2.2); // stack the three strokes
+    p.addLine({ x: xs, y, color: colors[k], width: 8, join, name: join });
+  });
+}
+
+// 1M points (decimation — GPU transform feedback above 200k points).
+{
+  const p = new Plot(panel("1M points", "GPU min/max decimation"), { theme: "dark" });
   const N = 1_000_000;
   const x = new Float64Array(N), y = new Float64Array(N);
   for (let i = 0; i < N; i++) { x[i] = i; y[i] = Math.sin(i / 5000) + 0.15 * Math.sin(i / 30) + gaussian(0, 0.05); }
