@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/react",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "React bindings for Photon — WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
