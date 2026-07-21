@@ -20,5 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": ["webgl2", "webgl", "plot", "plotting", "chart", "scientific", "visualization", "photon"],
+  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/core" },
+  "homepage": "https://github.com/coredumpdev/photon#readme",
   "license": "MIT"
 }

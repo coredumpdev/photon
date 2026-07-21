@@ -23,5 +23,7 @@
     "svelte": ">=4"
   },
   "keywords": ["svelte", "webgl2", "plot", "chart", "photon", "visualization"],
+  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/svelte" },
+  "homepage": "https://github.com/coredumpdev/photon#readme",
   "license": "MIT"
 }

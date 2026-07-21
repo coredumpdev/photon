@@ -26,5 +26,7 @@
     "vue": "^3.5.13"
   },
   "keywords": ["vue", "webgl2", "plot", "chart", "photon", "visualization"],
+  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/vue" },
+  "homepage": "https://github.com/coredumpdev/photon#readme",
   "license": "MIT"
 }
