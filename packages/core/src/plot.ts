@@ -5,12 +5,16 @@ import type { AxisFrame } from "./gl/transform.js";
 import { AreaLayer, type AreaOptions } from "./layers/area.js";
 import { BarLayer, type BarOptions } from "./layers/bar.js";
 import { BoxLayer, type BoxOptions } from "./layers/box.js";
+import { CandlestickLayer, type CandlestickOptions } from "./layers/candlestick.js";
 import { ContourLayer, type ContourOptions } from "./layers/contour.js";
+import { ErrorBarLayer, type ErrorBarOptions } from "./layers/errorbar.js";
 import { HeatmapLayer, type HeatmapOptions } from "./layers/heatmap.js";
 import { HexbinLayer, type HexbinOptions } from "./layers/hexbin.js";
 import type { Layer } from "./layers/layer.js";
 import { LineLayer, type LineOptions } from "./layers/line.js";
+import { QuiverLayer, type QuiverOptions } from "./layers/quiver.js";
 import { ScatterLayer, type ScatterOptions } from "./layers/scatter.js";
+import { StemLayer, type StemOptions } from "./layers/stem.js";
 import { histogram, spectrogram } from "./stats/index.js";
 import {
   darkTheme,
@@ -335,6 +339,22 @@ export class Plot {
 
   addContour(opts: ContourOptions): ContourLayer {
     return this.register(new ContourLayer(this.gl, opts));
+  }
+
+  addErrorBar(opts: ErrorBarOptions): ErrorBarLayer {
+    return this.register(new ErrorBarLayer(this.gl, opts));
+  }
+
+  addStem(opts: StemOptions): StemLayer {
+    return this.register(new StemLayer(this.gl, opts));
+  }
+
+  addQuiver(opts: QuiverOptions): QuiverLayer {
+    return this.register(new QuiverLayer(this.gl, opts));
+  }
+
+  addCandlestick(opts: CandlestickOptions): CandlestickLayer {
+    return this.register(new CandlestickLayer(this.gl, opts));
   }
 
   /** Compute an STFT of `signal` and render it as a heatmap (time × frequency). */
@@ -745,19 +765,20 @@ export class Plot {
     return { type: "plot" };
   }
 
+  // Pan/zoom shift the domain in the scale's *transformed* space (via invert),
+  // not raw data space — so a log axis stays positive instead of crossing zero
+  // into NaN. For linear/time scales this is identical to the old arithmetic.
   private panX(dxPx: number, region: ReturnType<typeof plotRegion>): void {
-    const dxData = (dxPx / region.width) * (this.scaleX.domain[1] - this.scaleX.domain[0]);
-    this.scaleX.domain = [this.scaleX.domain[0] - dxData, this.scaleX.domain[1] - dxData];
+    const f = dxPx / region.width;
+    this.scaleX.domain = [this.scaleX.invert(-f), this.scaleX.invert(1 - f)];
     this.autoX = false;
   }
 
   private panY(id: string | null, dyPx: number, region: ReturnType<typeof plotRegion>): void {
-    const dyFrac = dyPx / region.height;
+    const f = dyPx / region.height;
     for (const ya of this.yAxes.values()) {
       if (id && ya.id !== id) continue;
-      const span = ya.scale.domain[1] - ya.scale.domain[0];
-      const d = dyFrac * span;
-      ya.scale.domain = [ya.scale.domain[0] + d, ya.scale.domain[1] + d];
+      ya.scale.domain = [ya.scale.invert(f), ya.scale.invert(1 + f)];
       ya.auto = false;
     }
   }
@@ -948,17 +969,16 @@ export class Plot {
 
   private zoomAround(nx: number, ny: number, factor: number): void {
     const lock = this.axisLock();
+    // Zoom about the cursor in transformed space (log-safe; see panX/panY).
     if (lock.x) {
-      const [x0, x1] = this.scaleX.domain;
-      const cx = x0 + nx * (x1 - x0);
-      this.scaleX.domain = [cx + (x0 - cx) * factor, cx + (x1 - cx) * factor];
+      const t = nx * (1 - factor);
+      this.scaleX.domain = [this.scaleX.invert(t), this.scaleX.invert(t + factor)];
       this.autoX = false;
     }
     if (lock.y) {
+      const t = ny * (1 - factor);
       for (const ya of this.yAxes.values()) {
-        const [y0, y1] = ya.scale.domain;
-        const cy = y0 + ny * (y1 - y0);
-        ya.scale.domain = [cy + (y0 - cy) * factor, cy + (y1 - cy) * factor];
+        ya.scale.domain = [ya.scale.invert(t), ya.scale.invert(t + factor)];
         ya.auto = false;
       }
     }

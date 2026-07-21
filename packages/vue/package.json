@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/vue",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vue bindings for Photon — WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",

@@ -293,6 +293,148 @@ function gaussian(m: number, sd: number): number {
   p.addLine({ x, y, color: "#34d399", width: 1.5 });
 }
 
+// Hexbin — 2D density of a two-blob cloud.
+{
+  const p = new Plot(panel("Hexbin", "25k points · density"), { theme: "dark" });
+  const M = 25_000;
+  const x = new Float64Array(M), y = new Float64Array(M);
+  for (let i = 0; i < M; i++) {
+    const blob = i % 2 === 0 ? -1.4 : 1.4;
+    x[i] = gaussian(blob, 1);
+    y[i] = gaussian(blob * 0.6, 1.1);
+  }
+  p.addHexbin({ x, y, radius: 0.22, colormap: "plasma" });
+  p.setView({ x: [-5, 5], y: [-5, 5] });
+}
+
+// colorBy scatter — points colored by a scalar field.
+{
+  const p = new Plot(panel("Scatter · colorBy", "value → viridis"), { theme: "dark" });
+  const M = 1200;
+  const x = new Float64Array(M), y = new Float64Array(M), v = new Float64Array(M);
+  for (let i = 0; i < M; i++) {
+    x[i] = gaussian(0, 1.4); y[i] = gaussian(0, 1.4);
+    v[i] = Math.hypot(x[i]!, y[i]!); // color by distance from origin
+  }
+  p.addScatter({ x, y, size: 6, colorBy: { values: v, colormap: "viridis" } });
+  p.setView({ x: [-5, 5], y: [-5, 5] });
+}
+
+// Log axis — exponential decays on a log-y scale (straight lines).
+{
+  const p = new Plot(panel("Log axis", "exp decay · log y"), {
+    theme: "dark", scales: { y: { type: "log" } }, axes: { x: { title: "t" }, y: { title: "amplitude" } },
+  });
+  const N = 200;
+  const x = Float64Array.from({ length: N }, (_, i) => (i / N) * 10);
+  const taus = [1.2, 2.5, 5];
+  const colors = ["#f472b6", "#60a5fa", "#34d399"];
+  taus.forEach((tau, k) => {
+    const y = Float64Array.from(x, (t) => Math.exp(-t / tau) * (1 + gaussian(0, 0.02)) + 1e-3);
+    p.addLine({ x, y, color: colors[k], width: 1.5, name: `τ=${tau}` });
+  });
+}
+
+// Time axis — a day of samples with date-formatted ticks.
+{
+  const p = new Plot(panel("Time axis", "1 day · date ticks"), {
+    theme: "dark", scales: { x: { type: "time" } },
+  });
+  const start = Date.UTC(2024, 0, 1);
+  const N = 24 * 60; // one sample per minute
+  const x = new Float64Array(N), y = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    x[i] = start + i * 60_000;
+    const h = i / 60;
+    y[i] = 20 + 6 * Math.sin((h - 9) / 24 * 2 * Math.PI) + gaussian(0, 0.4); // diurnal curve
+  }
+  p.addLine({ x, y, color: "#22d3ee", width: 1.5 });
+}
+
+// Step line — a digital/staircase signal.
+{
+  const p = new Plot(panel("Step line", "staircase · step:after"), { theme: "dark", toolbar: false });
+  const N = 24;
+  const x = Float64Array.from({ length: N }, (_, i) => i);
+  const y = Float64Array.from({ length: N }, () => Math.round(rand() * 3));
+  p.addLine({ x, y, color: "#fbbf24", width: 2.5, step: "after", join: "miter" });
+  p.setView({ x: [0, N - 1], y: [-0.5, 3.5] });
+}
+
+// Butt vs miter — the join fix, side by side on sharp corners.
+{
+  const p = new Plot(panel("Butt vs miter", "gaps vs filled joins"), { theme: "dark", toolbar: false });
+  const xs: number[] = [], zig: number[] = [];
+  for (let i = 0; i <= 12; i++) { xs.push(i); zig.push(i % 2 === 0 ? 0 : 1); }
+  p.addLine({ x: xs, y: zig.map((v) => v + 2.4), color: "#94a3b8", width: 9, join: "butt", name: "butt" });
+  p.addLine({ x: xs, y: zig, color: "#f472b6", width: 9, join: "miter", name: "miter" });
+}
+
+// Error bars — I-beam whiskers with caps over a line.
+{
+  const p = new Plot(panel("Error bars", "whiskers + caps"), { theme: "dark" });
+  const N = 12;
+  const x = Float64Array.from({ length: N }, (_, i) => i);
+  const y = Float64Array.from({ length: N }, (_, i) => Math.sin(i / 2) * 3 + 5);
+  const yerr = Float64Array.from({ length: N }, () => 0.4 + rand() * 0.9);
+  p.addLine({ x, y, color: "#60a5fa", width: 1.5 });
+  p.addErrorBar({ x, y, yerr, color: "#60a5fa", capSize: 7 });
+}
+
+// Error band — shaded confidence ribbon around a curve.
+{
+  const p = new Plot(panel("Error band", "confidence ribbon"), { theme: "dark" });
+  const N = 120;
+  const x = Float64Array.from({ length: N }, (_, i) => (i / 10));
+  const y = Float64Array.from(x, (t) => Math.sin(t));
+  const err = Float64Array.from(x, (t) => 0.12 + 0.12 * Math.abs(Math.cos(t)));
+  p.addErrorBar({ x, y, yerr: err, color: "#a78bfa", band: true, whiskers: false, bandOpacity: 0.28 });
+  p.addLine({ x, y, color: "#a78bfa", width: 2 });
+}
+
+// Stem plot — a discrete, sampled signal.
+{
+  const p = new Plot(panel("Stem plot", "discrete signal"), { theme: "dark", toolbar: false });
+  const N = 30;
+  const x = Float64Array.from({ length: N }, (_, i) => i);
+  const y = Float64Array.from({ length: N }, (_, i) => Math.exp(-i / 12) * Math.cos(i / 2));
+  p.addStem({ x, y, color: "#34d399", markerSize: 6 });
+  p.setView({ x: [-1, N], y: [-1, 1.1] });
+}
+
+// Quiver — a rotational vector field, arrows colored by magnitude.
+{
+  const p = new Plot(panel("Quiver", "vector field"), { theme: "dark" });
+  const G = 16;
+  const xs: number[] = [], ys: number[] = [], us: number[] = [], vs: number[] = [];
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) {
+    const x = (i / (G - 1)) * 4 - 2, y = (j / (G - 1)) * 4 - 2;
+    xs.push(x); ys.push(y);
+    us.push(-y); vs.push(x); // curl / rotation
+  }
+  p.addQuiver({ x: xs, y: ys, u: us, v: vs, colorBy: { colormap: "viridis" } });
+  p.setView({ x: [-2.4, 2.4], y: [-2.4, 2.4] });
+}
+
+// Candlestick — OHLC random walk on a time axis.
+{
+  const p = new Plot(panel("Candlestick", "OHLC · daily"), { theme: "dark", scales: { x: { type: "time" } } });
+  const N = 40;
+  const start = Date.UTC(2024, 0, 1);
+  const x = new Float64Array(N), o = new Float64Array(N), h = new Float64Array(N), l = new Float64Array(N), c = new Float64Array(N);
+  let price = 100;
+  for (let i = 0; i < N; i++) {
+    const open = price;
+    const close = open + gaussian(0, 2.2);
+    x[i] = start + i * 86_400_000;
+    o[i] = open; c[i] = close;
+    h[i] = Math.max(open, close) + Math.abs(gaussian(0, 1.1));
+    l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1.1));
+    price = close;
+  }
+  p.addCandlestick({ x, open: o, high: h, low: l, close: c });
+}
+
 // 3D surface.
 {
   const p3 = new Plot3D(panel("3D surface", "axes · light controls"), {

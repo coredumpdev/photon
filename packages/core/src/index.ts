@@ -21,6 +21,14 @@ export { HexbinLayer } from "./layers/hexbin.js";
 export type { HexbinOptions } from "./layers/hexbin.js";
 export { ContourLayer } from "./layers/contour.js";
 export type { ContourOptions } from "./layers/contour.js";
+export { ErrorBarLayer } from "./layers/errorbar.js";
+export type { ErrorBarOptions } from "./layers/errorbar.js";
+export { StemLayer } from "./layers/stem.js";
+export type { StemOptions } from "./layers/stem.js";
+export { QuiverLayer } from "./layers/quiver.js";
+export type { QuiverOptions } from "./layers/quiver.js";
+export { CandlestickLayer } from "./layers/candlestick.js";
+export type { CandlestickOptions } from "./layers/candlestick.js";
 export type { Layer, DrawState } from "./layers/layer.js";
 
 // Polar
