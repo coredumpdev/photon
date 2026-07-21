@@ -29,11 +29,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck, test, build
+      - name: Build, typecheck, test
         run: |
+          pnpm build
           pnpm typecheck
           pnpm test
-          pnpm build
 
       - name: Publish to npm
         run: pnpm -r --filter "./packages/*" publish --access public --no-git-checks
