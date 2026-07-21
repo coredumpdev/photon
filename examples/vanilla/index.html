@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Photon — chart gallery</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #0b1020; color: #cbd5e1; }
+      header { padding: 16px 20px 4px; }
+      header h1 { margin: 0; font-size: 18px; }
+      header h1 b { color: #60a5fa; }
+      header p { margin: 4px 0 0; font-size: 13px; color: #94a3b8; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; padding: 16px 20px 40px; }
+      .panel { border: 1px solid #1e293b; border-radius: 10px; background: #0e1526; overflow: hidden; }
+      .panel h2 { margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #e2e8f0; border-bottom: 1px solid #1e293b; }
+      .panel h2 span { color: #64748b; font-weight: 400; }
+      .chart { height: 260px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1><b>Photon</b> — WebGL2 chart gallery</h1>
+      <p>Top rows stream live at 60fps (one shared WebGL2 context); lower rows are static. Static panels: hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit.</p>
+    </header>
+    <div class="grid" id="grid"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

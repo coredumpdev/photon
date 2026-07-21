@@ -1,0 +1,30 @@
+{
+  "name": "@photonviz/vue",
+  "version": "0.0.1",
+  "description": "Vue bindings for Photon — WebGL2 scientific plotting",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@photonviz/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": ">=3.3"
+  },
+  "devDependencies": {
+    "vue": "^3.5.13"
+  },
+  "keywords": ["vue", "webgl2", "plot", "chart", "photon", "visualization"],
+  "license": "MIT"
+}

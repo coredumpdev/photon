@@ -1,0 +1,169 @@
+import { parseColor, toColorCss } from "../gl/context.js";
+import { createProgram, uniformLocations } from "../gl/program.js";
+import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
+import type { Color, Range } from "../types.js";
+import type { DrawState, Layer } from "./layer.js";
+
+export interface BarOptions {
+  /** Bar center positions (data space). */
+  x: ArrayLike<number>;
+  /** Bar top values. */
+  y: ArrayLike<number>;
+  /** Baseline(s). Number or per-bar array — pass cumulative values to stack. */
+  base?: number | ArrayLike<number>;
+  /** Bar width in data units. Defaults to 80% of the median spacing. */
+  width?: number;
+  /** Shift bars by this many data units (use for grouped bars). */
+  offset?: number;
+  color?: string | Color;
+  name?: string;
+  yAxis?: string;
+}
+
+const VERT = /* glsl */ `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;  // unit rect [0,1]^2
+layout(location = 1) in vec4 aRect;    // (x0,y0,x1,y1) offset data space
+${TRANSFORM_GLSL}
+void main() {
+  vec2 p = mix(aRect.xy, aRect.zw, aCorner);
+  gl_Position = vec4(dataToClip(p), 0.0, 1.0);
+}`;
+
+const FRAG = /* glsl */ `#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 outColor;
+void main() { outColor = vec4(uColor.rgb * uColor.a, uColor.a); }`;
+
+const CORNERS = new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]);
+
+const programCache = new WeakMap<WebGL2RenderingContext, WebGLProgram>();
+function getProgram(gl: WebGL2RenderingContext): WebGLProgram {
+  let p = programCache.get(gl);
+  if (!p) { p = createProgram(gl, VERT, FRAG); programCache.set(gl, p); }
+  return p;
+}
+
+function medianSpacing(x: ArrayLike<number>, n: number): number {
+  if (n < 2) return 1;
+  const diffs: number[] = [];
+  for (let i = 1; i < n; i++) diffs.push(Math.abs(x[i]! - x[i - 1]!));
+  diffs.sort((a, b) => a - b);
+  return diffs[Math.floor(diffs.length / 2)] || 1;
+}
+
+let counter = 0;
+
+export class BarLayer implements Layer {
+  readonly id: string;
+  readonly name: string;
+  readonly colorCss: string;
+  readonly yAxis: string;
+  private gl: WebGL2RenderingContext;
+  private program: WebGLProgram;
+  private vao: WebGLVertexArrayObject;
+  private buffers: WebGLBuffer[] = [];
+  private uniforms: Record<string, WebGLUniformLocation | null>;
+  private count: number;
+  private color: Color;
+  private barWidth: number;
+  private offset: number;
+  private xRef = 0;
+  private yRef = 0;
+  private xBounds: Range = [0, 0];
+  private yBounds: Range = [0, 0];
+
+  constructor(gl: WebGL2RenderingContext, opts: BarOptions) {
+    this.id = `bar-${counter++}`;
+    this.gl = gl;
+    this.program = getProgram(gl);
+    const colorInput = opts.color ?? "#3b82f6";
+    this.color = Array.isArray(colorInput) ? (colorInput as Color) : parseColor(colorInput as string);
+    this.colorCss = typeof colorInput === "string" ? colorInput : toColorCss(this.color);
+    this.name = opts.name ?? this.id;
+    this.yAxis = opts.yAxis ?? "y";
+
+    const n = Math.min(opts.x.length, opts.y.length);
+    this.count = n;
+    this.barWidth = opts.width ?? medianSpacing(opts.x, n) * 0.8;
+    this.offset = opts.offset ?? 0;
+    const rects = this.buildRects(opts.x, opts.y, opts.base, n);
+
+    const vao = gl.createVertexArray()!;
+    this.vao = vao;
+    gl.bindVertexArray(vao);
+    const cornerBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, CORNERS, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    const rectBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, rectBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, rects, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(1, 1);
+    gl.bindVertexArray(null);
+    this.buffers = [cornerBuf, rectBuf];
+
+    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uColor"]);
+  }
+
+  private buildRects(
+    x: ArrayLike<number>, y: ArrayLike<number>,
+    base: number | ArrayLike<number> | undefined, n: number,
+  ): Float32Array {
+    const width = this.barWidth, off = this.offset;
+    const baseAt = (i: number): number =>
+      base == null ? 0 : typeof base === "number" ? base : base[i]!;
+    this.xRef = n > 0 ? x[0]! : 0;
+    this.yRef = n > 0 ? y[0]! : 0;
+    const rects = new Float32Array(n * 4);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const cx = x[i]! + off;
+      const x0 = cx - width / 2, x1 = cx + width / 2;
+      const b = baseAt(i), top = y[i]!;
+      rects[i * 4] = x0 - this.xRef;
+      rects[i * 4 + 1] = b - this.yRef;
+      rects[i * 4 + 2] = x1 - this.xRef;
+      rects[i * 4 + 3] = top - this.yRef;
+      minX = Math.min(minX, x0); maxX = Math.max(maxX, x1);
+      minY = Math.min(minY, b, top); maxY = Math.max(maxY, b, top);
+    }
+    this.xBounds = [minX, maxX];
+    this.yBounds = [minY, maxY];
+    return rects;
+  }
+
+  /** Replace bar values and re-upload (for streaming). */
+  setData(x: ArrayLike<number>, y: ArrayLike<number>, base?: number | ArrayLike<number>): void {
+    const n = Math.min(x.length, y.length);
+    this.count = n;
+    const rects = this.buildRects(x, y, base, n);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers[1]!);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, rects, this.gl.DYNAMIC_DRAW);
+  }
+
+  bounds() {
+    if (this.count === 0) return null;
+    return { x: this.xBounds, y: this.yBounds };
+  }
+
+  draw(state: DrawState): void {
+    if (this.count === 0) return;
+    const gl = state.gl;
+    gl.useProgram(this.program);
+    setTransformUniforms(gl, this.uniforms, state.x, state.y, this.xRef, this.yRef);
+    gl.uniform4f(this.uniforms.uColor!, this.color[0], this.color[1], this.color[2], this.color[3]);
+    gl.bindVertexArray(this.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.count);
+    gl.bindVertexArray(null);
+  }
+
+  dispose(): void {
+    this.gl.deleteVertexArray(this.vao);
+    for (const b of this.buffers) this.gl.deleteBuffer(b);
+  }
+}

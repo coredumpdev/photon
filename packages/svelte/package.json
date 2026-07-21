@@ -1,0 +1,27 @@
+{
+  "name": "@photonviz/svelte",
+  "version": "0.0.1",
+  "description": "Svelte bindings (action) for Photon — WebGL2 scientific plotting",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@photonviz/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "svelte": ">=4"
+  },
+  "keywords": ["svelte", "webgl2", "plot", "chart", "photon", "visualization"],
+  "license": "MIT"
+}

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-label="Photon chart gallery preview">
+  <defs>
+    <linearGradient id="ga" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
+    <linearGradient id="hm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#440154"/><stop offset="0.5" stop-color="#21918c"/><stop offset="1" stop-color="#fde725"/></linearGradient>
+    <clipPath id="p"><rect x="0" y="0" width="380" height="180" rx="8"/></clipPath>
+  </defs>
+  <rect width="1200" height="420" fill="#0b1020"/>
+
+  <!-- Panel: Line -->
+  <g transform="translate(10,10)">
+    <rect width="380" height="180" rx="8" fill="#0e1526" stroke="#1e293b"/>
+    <text x="14" y="26" font-family="system-ui" font-size="13" font-weight="600" fill="#e2e8f0">Line</text>
+    <g clip-path="url(#p)">
+      <polyline fill="none" stroke="#60a5fa" stroke-width="2.5" points="10,120 50,90 90,130 130,70 170,110 210,60 250,100 290,50 330,90 370,70"/>
+      <polyline fill="none" stroke="#f472b6" stroke-width="2.5" points="10,150 50,140 90,150 130,130 170,145 210,120 250,140 290,115 330,135 370,125"/>
+    </g>
+  </g>
+
+  <!-- Panel: Bars -->
+  <g transform="translate(410,10)">
+    <rect width="380" height="180" rx="8" fill="#0e1526" stroke="#1e293b"/>
+    <text x="14" y="26" font-family="system-ui" font-size="13" font-weight="600" fill="#e2e8f0">Bar · grouped</text>
+    <g>
+      <rect x="40" y="90" width="24" height="72" fill="#60a5fa"/><rect x="66" y="70" width="24" height="92" fill="#f472b6"/>
+      <rect x="130" y="60" width="24" height="102" fill="#60a5fa"/><rect x="156" y="110" width="24" height="52" fill="#f472b6"/>
+      <rect x="220" y="80" width="24" height="82" fill="#60a5fa"/><rect x="246" y="50" width="24" height="112" fill="#f472b6"/>
+      <rect x="310" y="100" width="24" height="62" fill="#60a5fa"/><rect x="336" y="76" width="24" height="86" fill="#f472b6"/>
+    </g>
+  </g>
+
+  <!-- Panel: Scatter -->
+  <g transform="translate(810,10)">
+    <rect width="380" height="180" rx="8" fill="#0e1526" stroke="#1e293b"/>
+    <text x="14" y="26" font-family="system-ui" font-size="13" font-weight="600" fill="#e2e8f0">Scatter · colorBy</text>
+    <g>
+      <circle cx="90" cy="110" r="5" fill="#440154"/><circle cx="140" cy="80" r="5" fill="#3b528b"/>
+      <circle cx="180" cy="130" r="5" fill="#21918c"/><circle cx="220" cy="60" r="5" fill="#5ec962"/>
+      <circle cx="260" cy="100" r="5" fill="#fde725"/><circle cx="300" cy="140" r="5" fill="#21918c"/>
+      <circle cx="160" cy="105" r="5" fill="#31688e"/><circle cx="240" cy="120" r="5" fill="#35b779"/>
+      <circle cx="120" cy="140" r="5" fill="#443983"/><circle cx="280" cy="70" r="5" fill="#90d743"/>
+    </g>
+  </g>
+
+  <!-- Panel: Heatmap -->
+  <g transform="translate(10,220)">
+    <rect width="380" height="180" rx="8" fill="#0e1526" stroke="#1e293b"/>
+    <text x="14" y="26" font-family="system-ui" font-size="13" font-weight="600" fill="#e2e8f0">Heatmap</text>
+    <rect x="40" y="40" width="300" height="120" fill="url(#hm)" rx="4"/>
+  </g>
+
+  <!-- Panel: Polar -->
+  <g transform="translate(410,220)">
+    <rect width="380" height="180" rx="8" fill="#0e1526" stroke="#1e293b"/>
+    <text x="14" y="26" font-family="system-ui" font-size="13" font-weight="600" fill="#e2e8f0">Polar</text>
+    <g transform="translate(190,105)" stroke="#334155" fill="none">
+      <circle r="20"/><circle r="40"/><circle r="60"/>
+      <line x1="-60" y1="0" x2="60" y2="0"/><line x1="0" y1="-60" x2="0" y2="60"/>
+      <line x1="-42" y1="-42" x2="42" y2="42"/><line x1="-42" y1="42" x2="42" y2="-42"/>
+    </g>
+    <path transform="translate(190,105)" fill="none" stroke="#a78bfa" stroke-width="2.5"
+      d="M55,0 C40,25 20,40 0,55 C-25,40 -40,20 -55,0 C-40,-25 -20,-40 0,-55 C25,-40 40,-20 55,0 Z"/>
+  </g>
+
+  <!-- Panel: 3D surface -->
+  <g transform="translate(810,220)">
+    <rect width="380" height="180" rx="8" fill="#0e1526" stroke="#1e293b"/>
+    <text x="14" y="26" font-family="system-ui" font-size="13" font-weight="600" fill="#e2e8f0">3D surface</text>
+    <g transform="translate(190,110)" stroke-width="1">
+      <polygon points="-120,0 0,-46 120,0 0,46" fill="none" stroke="#334155"/>
+      <path d="M-120,0 L-60,-23 L0,-46 M-90,11 L-30,-11 L30,-34 M-60,23 L0,0 L60,-23 M-30,34 L30,11 L90,-11"
+            fill="none" stroke="#21918c" opacity="0.7"/>
+      <path d="M-60,-23 L-30,34 M0,-46 L60,-23 M60,-23 L30,11 M-30,-11 L30,11"
+            fill="none" stroke="#5ec962" opacity="0.5"/>
+      <polygon points="-40,-8 0,-24 40,-8 0,8" fill="#fde725" opacity="0.35"/>
+    </g>
+  </g>
+</svg>
