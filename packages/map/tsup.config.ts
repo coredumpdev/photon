@@ -5,7 +5,9 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   clean: true,
-  sourcemap: true,
+  // No sourcemaps: the embedded world dataset would otherwise emit a useless
+  // ~25 MB world.js.map that only bloats the published package.
+  sourcemap: false,
   target: "es2020",
   external: ["@photonviz/core"],
 });

@@ -1,15 +1,20 @@
 {
   "name": "@photonviz/react",
   "version": "0.2.0",
-  "description": "React bindings for Photon — WebGL2 scientific plotting",
+  "description": "React bindings for Photon \u2014 WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
@@ -27,8 +32,22 @@
     "react": "^18.3.1",
     "@types/react": "^18.3.12"
   },
-  "keywords": ["react", "webgl2", "plot", "chart", "photon", "visualization"],
-  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/react" },
+  "keywords": [
+    "react",
+    "webgl2",
+    "plot",
+    "chart",
+    "photon",
+    "visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/react"
+  },
   "homepage": "https://github.com/coredumpdev/photon#readme",
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }

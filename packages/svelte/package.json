@@ -1,15 +1,20 @@
 {
   "name": "@photonviz/svelte",
   "version": "0.2.0",
-  "description": "Svelte bindings (action) for Photon — WebGL2 scientific plotting",
+  "description": "Svelte bindings (action) for Photon \u2014 WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
@@ -23,8 +28,22 @@
   "peerDependencies": {
     "svelte": ">=4"
   },
-  "keywords": ["svelte", "webgl2", "plot", "chart", "photon", "visualization"],
-  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/svelte" },
+  "keywords": [
+    "svelte",
+    "webgl2",
+    "plot",
+    "chart",
+    "photon",
+    "visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/svelte"
+  },
   "homepage": "https://github.com/coredumpdev/photon#readme",
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }

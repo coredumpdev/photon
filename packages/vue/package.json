@@ -1,15 +1,20 @@
 {
   "name": "@photonviz/vue",
   "version": "0.2.0",
-  "description": "Vue bindings for Photon — WebGL2 scientific plotting",
+  "description": "Vue bindings for Photon \u2014 WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
@@ -26,8 +31,22 @@
   "devDependencies": {
     "vue": "^3.5.13"
   },
-  "keywords": ["vue", "webgl2", "plot", "chart", "photon", "visualization"],
-  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/vue" },
+  "keywords": [
+    "vue",
+    "webgl2",
+    "plot",
+    "chart",
+    "photon",
+    "visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/vue"
+  },
   "homepage": "https://github.com/coredumpdev/photon#readme",
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }

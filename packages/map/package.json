@@ -1,16 +1,24 @@
 {
   "name": "@photonviz/map",
   "version": "0.2.0",
-  "description": "Web Mercator vector-tile basemap for Photon — zero-dependency, self-hosted (MVT / PMTiles)",
+  "description": "Web Mercator vector-tile basemap for Photon \u2014 zero-dependency, self-hosted (MVT / PMTiles)",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./world": { "types": "./dist/world.d.ts", "import": "./dist/world.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./world": {
+      "types": "./dist/world.d.ts",
+      "import": "./dist/world.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
@@ -20,8 +28,23 @@
   "dependencies": {
     "@photonviz/core": "workspace:*"
   },
-  "keywords": ["webgl2", "map", "vector-tiles", "mvt", "pmtiles", "web-mercator", "photon"],
-  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/map" },
+  "keywords": [
+    "webgl2",
+    "map",
+    "vector-tiles",
+    "mvt",
+    "pmtiles",
+    "web-mercator",
+    "photon"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/map"
+  },
   "homepage": "https://github.com/coredumpdev/photon#readme",
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@photonviz/core",
   "version": "0.2.0",
-  "description": "WebGL2 scientific plotting core — framework-agnostic",
+  "description": "WebGL2 scientific plotting core \u2014 framework-agnostic",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -12,15 +12,33 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["webgl2", "webgl", "plot", "plotting", "chart", "scientific", "visualization", "photon"],
-  "repository": { "type": "git", "url": "git+https://github.com/coredumpdev/photon.git", "directory": "packages/core" },
+  "keywords": [
+    "webgl2",
+    "webgl",
+    "plot",
+    "plotting",
+    "chart",
+    "scientific",
+    "visualization",
+    "photon"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/core"
+  },
   "homepage": "https://github.com/coredumpdev/photon#readme",
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }
