@@ -5,9 +5,13 @@ import {
   CandlestickLayer,
   ContourLayer,
   ErrorBarLayer,
+  GraphLayer,
   HeatmapLayer,
   HexbinLayer,
+  ImageLayer,
   LineLayer,
+  PatchesLayer,
+  PieLayer,
   Plot as CorePlot,
   Plot3D as CorePlot3D,
   PolarPlot as CorePolarPlot,
@@ -22,7 +26,24 @@ import {
   type ErrorBarOptions,
   type HeatmapOptions,
   type HexbinOptions,
+  type Annotation as AnnotationSpec,
+  type Bar3DLayer,
+  type Bar3DOptions,
+  type Contour3DLayer,
+  type Contour3DOptions,
+  type GraphInput,
+  type IsosurfaceLayer,
+  type IsosurfaceOptions,
+  type ImageOptions,
+  type Line3DLayer,
+  type Line3DOptions,
   type LineOptions,
+  type Quiver3DLayer,
+  type Quiver3DOptions,
+  type VolumeLayer,
+  type VolumeOptions,
+  type PatchesOptions,
+  type PieOptions,
   type Plot3DOptions,
   type PlotOptions,
   type PointCloudLayer,
@@ -122,19 +143,19 @@ export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, 
 
 export type ScatterProps = ScatterOptions;
 
-export function Scatter({ x, y, color, size, name, yAxis, colorBy }: ScatterProps) {
+export function Scatter({ x, y, color, size, marker, name, yAxis, colorBy }: ScatterProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<ScatterLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addScatter({ x, y, color, size, name, yAxis, colorBy });
+    const l = plot.addScatter({ x, y, color, size, marker, name, yAxis, colorBy });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, size, name, yAxis, colorBy]);
+  }, [plot, color, size, marker, name, yAxis, colorBy]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y);
@@ -147,19 +168,19 @@ export function Scatter({ x, y, color, size, name, yAxis, colorBy }: ScatterProp
 
 export type BarProps = BarOptions;
 
-export function Bar({ x, y, base, width, offset, color, name, yAxis }: BarProps) {
+export function Bar({ x, y, base, width, offset, orientation, color, name, yAxis }: BarProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<BarLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addBar({ x, y, base, width, offset, color, name, yAxis });
+    const l = plot.addBar({ x, y, base, width, offset, orientation, color, name, yAxis });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, width, offset, color, name, yAxis]);
+  }, [plot, width, offset, orientation, color, name, yAxis]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y, base);
@@ -458,6 +479,97 @@ export function Candlestick(props: CandlestickProps) {
   return null;
 }
 
+export type PieProps = PieOptions;
+
+/** A pie / donut chart. Set `equalAspect` on the Plot so it stays circular. Static. */
+export function Pie(props: PieProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<PieLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addPie(props);
+    layer.current = l;
+    plot.render();
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.values, props.colors, props.colormap, props.center, props.radius, props.innerRadius, props.startAngle, props.name, props.yAxis]);
+  return null;
+}
+
+export type PatchesProps = PatchesOptions;
+
+/** Filled polygons (choropleth-capable), triangulated with earcut. Static. */
+export function Patches(props: PatchesProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<PatchesLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addPatches(props);
+    layer.current = l;
+    plot.render();
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.patches, props.color, props.colormap, props.domain, props.opacity, props.name, props.yAxis]);
+  return null;
+}
+
+export type ImageProps = ImageOptions;
+
+/** An RGBA image / URL over a data-space extent. Static (rebuilt on change). */
+export function Image(props: ImageProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<ImageLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addImage(props);
+    layer.current = l;
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.source, props.extent, props.smooth, props.opacity, props.name, props.yAxis]);
+  return null;
+}
+
+export type GraphProps = GraphInput;
+
+/** A node-link graph (auto force-layout when positions are omitted). Static. */
+export function Graph(props: GraphProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<GraphLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addGraph(props);
+    layer.current = l;
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.y, props.edges, props.nodes, props.nodeColor, props.edgeColor, props.nodeSize, props.name, props.yAxis]);
+  return null;
+}
+
+export type AnnotationProps = AnnotationSpec;
+
+/** A span / band / box / label annotation drawn above the data. */
+export function Annotation(props: AnnotationProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    return plot.addAnnotation(props);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, JSON.stringify(props)]);
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Polar plot
 //
@@ -618,12 +730,119 @@ export function PointCloud(props: PointCloudProps) {
   const layer = useRef<PointCloudLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    layer.current = plot.addPointCloud(props);
-    // Plot3D has no layer removal → nothing to clean up (layer persists).
+    const l = plot.addPointCloud(props);
+    layer.current = l;
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.y, props.z, props.color, props.size, props.sizes, props.colorBy, props.labels, props.name]);
+  return null;
+}
+
+export type Line3DProps = Line3DOptions;
+
+/** A 3D polyline / path. Static — Plot3D has no removal API (no-op cleanup). */
+export function Line3D(props: Line3DProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<Line3DLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    layer.current = plot.addLine3D(props);
     return () => {
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, props.x, props.y, props.z, props.color, props.size, props.colorBy]);
+  }, [plot, props.x, props.y, props.z, props.color, props.name]);
+  return null;
+}
+
+export type Bar3DProps = Bar3DOptions;
+
+/** 3D bars on an x/z grid. Static — Plot3D has no removal API (no-op cleanup). */
+export function Bar3D(props: Bar3DProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<Bar3DLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    layer.current = plot.addBar3D(props);
+    return () => {
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.y, props.z, props.width, props.color, props.colorBy, props.name]);
+  return null;
+}
+
+export type Quiver3DProps = Quiver3DOptions;
+
+/** A 3D vector field. Static — Plot3D has no removal API (no-op cleanup). */
+export function Quiver3D(props: Quiver3DProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<Quiver3DLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    layer.current = plot.addQuiver3D(props);
+    return () => {
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.y, props.z, props.u, props.v, props.w, props.scale, props.color, props.colorBy, props.headSize, props.name]);
+  return null;
+}
+
+export type Contour3DProps = Contour3DOptions;
+
+/** 3D iso-height contour lines. Static — Plot3D has no removal API (no-op cleanup). */
+export function Contour3D(props: Contour3DProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<Contour3DLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    layer.current = plot.addContour3D(props);
+    return () => {
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.values, props.cols, props.rows, props.extentX, props.extentZ, props.levels, props.color, props.colormap, props.name]);
+  return null;
+}
+
+export type IsosurfaceProps = IsosurfaceOptions;
+
+/** A marching-cubes isosurface of a 3D scalar volume. Static. */
+export function Isosurface(props: IsosurfaceProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<IsosurfaceLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addIsosurface(props);
+    layer.current = l;
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.values, props.dims, props.isoLevel, props.extent, props.color, props.opacity, props.name]);
+  return null;
+}
+
+export type VolumeProps = VolumeOptions;
+
+/** Direct volume rendering (GPU raymarch) of a 3D scalar field. Static. */
+export function Volume(props: VolumeProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<VolumeLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addVolume(props);
+    layer.current = l;
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.values, props.dims, props.extent, props.colormap, props.domain, props.density, props.name]);
   return null;
 }

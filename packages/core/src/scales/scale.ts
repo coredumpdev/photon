@@ -142,9 +142,44 @@ export class TimeScale implements Scale {
   }
 }
 
-export type ScaleType = "linear" | "log" | "time";
+/**
+ * A categorical (factor) axis. Internally it is **linear over a band domain**
+ * `[-0.5, n-0.5]`, so factor `i` sits at the band centre and `norm(i)` equals the
+ * ordinary linear projection — the GPU transform needs no special handling, and a
+ * layer plotting at integer indices lands on band centres automatically.
+ * "Categorical-ness" lives only in the ticks/labels (one per factor).
+ */
+export class CategoricalScale implements Scale {
+  readonly type = "categorical";
+  readonly log = false;
+  factors: string[];
+  domain: Range;
+  constructor(factors: string[] = []) {
+    this.factors = factors;
+    const n = factors.length;
+    this.domain = n > 0 ? [-0.5, n - 0.5] : [-0.5, 0.5];
+  }
+  norm(value: number): number {
+    const [a, b] = this.domain;
+    return b === a ? 0 : (value - a) / (b - a);
+  }
+  // Continuous linear inverse (satisfies the Scale contract used by pan/box math).
+  // The nearest factor index is `Math.round(scale.invert(t))`.
+  invert(t: number): number {
+    const [a, b] = this.domain;
+    return a + t * (b - a);
+  }
+  ticks(): Tick[] {
+    return this.factors.map((f, i) => ({ value: i, label: f, grid: false }));
+  }
+  formatTick(value: number): string {
+    return this.factors[Math.round(value)] ?? "";
+  }
+}
 
-export function makeScale(type: ScaleType, domain?: Range): Scale {
+export type ScaleType = "linear" | "log" | "time" | "categorical";
+
+export function makeScale(type: ScaleType, domain?: Range, factors?: string[]): Scale {
   switch (type) {
     case "linear":
       return new LinearScale(domain);
@@ -152,6 +187,8 @@ export function makeScale(type: ScaleType, domain?: Range): Scale {
       return new LogScale(domain);
     case "time":
       return new TimeScale(domain);
+    case "categorical":
+      return new CategoricalScale(factors ?? []);
     default:
       throw new Error(`Unknown scale type: ${type as string}`);
   }

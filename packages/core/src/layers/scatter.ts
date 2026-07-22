@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormapLUT, type ColormapName } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
 import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
@@ -6,12 +6,26 @@ import type { Color, Range } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 import { pickNearest, type PickMode, type Picked } from "./pick.js";
 
+/** Marker glyph shape for a scatter series. */
+export type MarkerShape = "circle" | "square" | "triangle" | "diamond" | "cross" | "plus";
+
+const MARKERS: Record<MarkerShape, number> = {
+  circle: 0,
+  square: 1,
+  triangle: 2,
+  diamond: 3,
+  cross: 4,
+  plus: 5,
+};
+
 export interface ScatterOptions {
   x: ArrayLike<number>;
   y: ArrayLike<number>;
   color?: string | Color;
   /** Marker diameter in CSS pixels. */
   size?: number;
+  /** Marker glyph. Default `"circle"`. */
+  marker?: MarkerShape;
   name?: string;
   yAxis?: string;
   /**
@@ -47,17 +61,56 @@ void main() {
   gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
+// Marker glyphs via analytic signed-distance fields in the unit quad [-1,1]^2,
+// anti-aliased with screen-space derivatives (fwidth). Circle keeps its own soft
+// edge so existing charts are pixel-unchanged; other shapes share the SDF path.
 const FRAG = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vLocal;
 in vec4 vColor;
 uniform vec4 uColor;
 uniform float uUseVertexColor;
+uniform int uMarker;
 out vec4 outColor;
+
+float sdBox(vec2 p, vec2 b) {
+  vec2 d = abs(p) - b;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+// iq's equilateral-triangle SDF (apex toward +y).
+float sdTri(vec2 p) {
+  const float k = sqrt(3.0);
+  p.x = abs(p.x) - 1.0;
+  p.y = p.y + 1.0 / k;
+  if (p.x + k * p.y > 0.0) p = vec2(p.x - k * p.y, -k * p.x - p.y) / 2.0;
+  p.x -= clamp(p.x, -2.0, 0.0);
+  return -length(p) * sign(p.y);
+}
+
 void main() {
-  float r = length(vLocal);
-  if (r > 1.0) discard;
-  float alpha = smoothstep(1.0, 1.0 - 0.15, r);  // soft edge
+  vec2 p = vLocal;
+  if (uMarker == 0) {
+    // Circle — original soft-edged path, unchanged.
+    float r = length(p);
+    if (r > 1.0) discard;
+    float alpha = smoothstep(1.0, 1.0 - 0.15, r);
+    vec4 c0 = uUseVertexColor > 0.5 ? vColor : uColor;
+    outColor = vec4(c0.rgb * c0.a * alpha, c0.a * alpha);
+    return;
+  }
+  float d;
+  if (uMarker == 1) d = sdBox(p, vec2(0.88));                        // square
+  else if (uMarker == 2) d = sdTri(p);                              // triangle (point up)
+  else if (uMarker == 3) d = abs(p.x) + abs(p.y) - 1.0;             // diamond
+  else if (uMarker == 4) {                                           // cross (×)
+    vec2 q = vec2(p.x + p.y, p.x - p.y) * 0.70710678;
+    d = min(sdBox(q, vec2(1.0, 0.30)), sdBox(q, vec2(0.30, 1.0)));
+  } else {                                                           // plus (+)
+    d = min(sdBox(p, vec2(1.0, 0.30)), sdBox(p, vec2(0.30, 1.0)));
+  }
+  float aa = fwidth(d) + 1e-4;
+  float alpha = 1.0 - smoothstep(-aa, aa, d);
+  if (alpha <= 0.0) discard;
   vec4 c = uUseVertexColor > 0.5 ? vColor : uColor;
   outColor = vec4(c.rgb * c.a * alpha, c.a * alpha);
 }`;
@@ -85,6 +138,7 @@ export class ScatterLayer implements Layer {
   private uniforms: Record<string, WebGLUniformLocation | null>;
   private count: number;
   private size: number;
+  private marker: number;
   private color: Color;
   private useVertexColor: boolean;
   private labels?: ArrayLike<string>;
@@ -100,6 +154,7 @@ export class ScatterLayer implements Layer {
     this.gl = gl;
     this.program = getProgram(gl);
     this.size = opts.size ?? 5;
+    this.marker = MARKERS[opts.marker ?? "circle"];
     const colorInput = opts.color ?? "#3b82f6";
     this.color = Array.isArray(colorInput) ? (colorInput as Color) : parseColor(colorInput as string);
     this.colorCss = typeof colorInput === "string" ? colorInput : toColorCss(this.color);
@@ -133,7 +188,7 @@ export class ScatterLayer implements Layer {
     const colors = new Float32Array(n * 4);
     if (opts.colorBy) {
       const vals = opts.colorBy.values;
-      const cmap = colormap(opts.colorBy.colormap ?? "viridis");
+      const lut = colormapLUT(opts.colorBy.colormap ?? "viridis");
       let lo = opts.colorBy.domain?.[0] ?? Infinity;
       let hi = opts.colorBy.domain?.[1] ?? -Infinity;
       if (!opts.colorBy.domain) {
@@ -145,8 +200,10 @@ export class ScatterLayer implements Layer {
       }
       const span = hi - lo || 1;
       for (let i = 0; i < n; i++) {
-        const [r, g, b] = cmap((vals[i]! - lo) / span);
-        colors[i * 4] = r; colors[i * 4 + 1] = g; colors[i * 4 + 2] = b; colors[i * 4 + 3] = 1;
+        let t = (vals[i]! - lo) / span;
+        t = t <= 0 ? 0 : t >= 1 ? 1 : t;
+        const j = ((t * 255) | 0) * 3;
+        colors[i * 4] = lut[j]!; colors[i * 4 + 1] = lut[j + 1]!; colors[i * 4 + 2] = lut[j + 2]!; colors[i * 4 + 3] = 1;
       }
     }
 
@@ -178,7 +235,7 @@ export class ScatterLayer implements Layer {
     this.buffers = [cornerBuf, posBuf, colorBuf];
 
     this.uniforms = uniformLocations(gl, this.program, [
-      ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uSize", "uUseVertexColor",
+      ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uSize", "uUseVertexColor", "uMarker",
     ]);
   }
 
@@ -237,6 +294,7 @@ export class ScatterLayer implements Layer {
     gl.uniform2f(this.uniforms.uResolution!, state.pixelWidth, state.pixelHeight);
     gl.uniform1f(this.uniforms.uSize!, (this.size / 2) * state.dpr);
     gl.uniform1f(this.uniforms.uUseVertexColor!, this.useVertexColor ? 1 : 0);
+    gl.uniform1i(this.uniforms.uMarker!, this.marker);
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.count);
     gl.bindVertexArray(null);

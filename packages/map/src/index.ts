@@ -74,7 +74,8 @@ export type { MapStyle, Paint, FillPaint, LinePaint, RGBA } from "./style.js";
 // Vector-tile decoding (advanced / custom pipelines)
 export { decodeMvt, classifyRings, signedArea } from "./mvt.js";
 export type { MvtFeature, GeomType, PropValue } from "./mvt.js";
-export { earcut } from "./earcut.js";
+// Re-exported from core (single source of truth) for backward compatibility.
+export { earcut } from "@photonviz/core";
 export { buildTileMesh } from "./mesh.js";
 export type { TileMesh, PickFeature } from "./mesh.js";
 export { buildGeoJsonMesh } from "./geojson.js";

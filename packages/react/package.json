@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/react",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "React bindings for Photon \u2014 WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,6 +46,8 @@
     "directory": "packages/react"
   },
   "homepage": "https://github.com/coredumpdev/photon#readme",
+  "author": "Muzaffer Tolga Yakar <muzaffertolgayakar@gmail.com>",
+  "bugs": "https://github.com/coredumpdev/photon/issues",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

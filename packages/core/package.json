@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/core",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "WebGL2 scientific plotting core \u2014 framework-agnostic",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,7 +19,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "vitest bench --run"
   },
   "keywords": [
     "webgl2",
@@ -37,6 +38,8 @@
     "directory": "packages/core"
   },
   "homepage": "https://github.com/coredumpdev/photon#readme",
+  "author": "Muzaffer Tolga Yakar <muzaffertolgayakar@gmail.com>",
+  "bugs": "https://github.com/coredumpdev/photon/issues",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

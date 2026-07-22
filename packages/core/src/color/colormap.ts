@@ -23,17 +23,44 @@ const ANCHORS: Record<ColormapName, RGB[]> = {
   ],
 };
 
-/** Returns a `(t in 0..1) => RGB` sampler for the named colormap. */
-export function colormap(name: ColormapName = "viridis"): (t: number) => RGB {
+/** Precomputed samples so the hot per-pixel path is one lookup, not an anchor lerp. */
+const LUT_SIZE = 256;
+const lutCache = new Map<ColormapName, Float32Array>();
+
+function buildLUT(name: ColormapName): Float32Array {
   const anchors = ANCHORS[name];
   const last = anchors.length - 1;
-  return (t: number) => {
-    const clamped = t <= 0 ? 0 : t >= 1 ? 1 : t;
-    const pos = clamped * last;
+  const lut = new Float32Array(LUT_SIZE * 3);
+  for (let s = 0; s < LUT_SIZE; s++) {
+    const pos = (s / (LUT_SIZE - 1)) * last;
     const i = Math.min(last - 1, Math.floor(pos));
     const f = pos - i;
     const a = anchors[i]!;
     const b = anchors[i + 1]!;
-    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    lut[s * 3] = a[0] + (b[0] - a[0]) * f;
+    lut[s * 3 + 1] = a[1] + (b[1] - a[1]) * f;
+    lut[s * 3 + 2] = a[2] + (b[2] - a[2]) * f;
+  }
+  return lut;
+}
+
+/**
+ * The raw `256×3` (r,g,b in 0..1) lookup table for a colormap, cached per name.
+ * Hot loops (heatmap, colorBy, …) can index it directly — `j = ((clamp(t)*255)|0)*3`
+ * — to avoid a per-element closure call and tuple allocation.
+ */
+export function colormapLUT(name: ColormapName = "viridis"): Float32Array {
+  let lut = lutCache.get(name);
+  if (!lut) { lut = buildLUT(name); lutCache.set(name, lut); }
+  return lut;
+}
+
+/** Returns a `(t in 0..1) => RGB` sampler for the named colormap (LUT-backed). */
+export function colormap(name: ColormapName = "viridis"): (t: number) => RGB {
+  const lut = colormapLUT(name);
+  return (t: number) => {
+    const c = t <= 0 ? 0 : t >= 1 ? 1 : t;
+    const j = ((c * (LUT_SIZE - 1)) | 0) * 3;
+    return [lut[j]!, lut[j + 1]!, lut[j + 2]!];
   };
 }

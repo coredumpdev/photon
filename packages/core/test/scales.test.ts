@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LinearScale, LogScale, TimeScale } from "../src/scales/scale.js";
+import { CategoricalScale, LinearScale, LogScale, TimeScale, makeScale } from "../src/scales/scale.js";
 
 describe("LinearScale", () => {
   it("normalizes and inverts", () => {
@@ -44,5 +44,49 @@ describe("TimeScale", () => {
     const ticks = s.ticks();
     expect(ticks.length).toBeGreaterThan(0);
     expect(ticks.every((t) => t.value >= 0 && t.value <= day)).toBe(true);
+  });
+});
+
+describe("CategoricalScale", () => {
+  it("fixes the domain to the factor bands", () => {
+    const s = new CategoricalScale(["a", "b", "c"]);
+    expect(s.domain).toEqual([-0.5, 2.5]);
+    expect(s.log).toBe(false);
+  });
+  it("places factors at band centres", () => {
+    const s = new CategoricalScale(["a", "b", "c"]);
+    expect(s.norm(0)).toBeCloseTo(1 / 6);
+    expect(s.norm(1)).toBeCloseTo(0.5);
+    expect(s.norm(2)).toBeCloseTo(5 / 6);
+  });
+  it("inverts continuously; round() gives the nearest factor index", () => {
+    const s = new CategoricalScale(["a", "b", "c"]);
+    expect(s.invert(0.5)).toBeCloseTo(1);
+    expect(s.invert(1 / 6)).toBeCloseTo(0);
+    expect(Math.round(s.invert(0.83))).toBe(2);
+  });
+  it("emits one gridless tick per factor", () => {
+    const ticks = new CategoricalScale(["a", "b", "c"]).ticks();
+    expect(ticks.map((t) => t.value)).toEqual([0, 1, 2]);
+    expect(ticks.map((t) => t.label)).toEqual(["a", "b", "c"]);
+    expect(ticks.every((t) => t.grid === false)).toBe(true);
+  });
+  it("formats a value to its (rounded) factor label", () => {
+    const s = new CategoricalScale(["a", "b", "c"]);
+    expect(s.formatTick(1)).toBe("b");
+    expect(s.formatTick(0.4)).toBe("a");
+    expect(s.formatTick(2.4)).toBe("c");
+  });
+  it("is built by makeScale with factors", () => {
+    const s = makeScale("categorical", undefined, ["x", "y"]);
+    expect(s).toBeInstanceOf(CategoricalScale);
+    expect(s.domain).toEqual([-0.5, 1.5]);
+    expect(s.log).toBe(false);
+  });
+  it("handles empty factors", () => {
+    const s = new CategoricalScale([]);
+    expect(s.domain).toEqual([-0.5, 0.5]);
+    expect(s.ticks()).toHaveLength(0);
+    expect(s.formatTick(0)).toBe("");
   });
 });

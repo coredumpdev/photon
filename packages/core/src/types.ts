@@ -27,6 +27,44 @@ export interface AxisConfig {
   minorTicks?: boolean | number;
   /** Axis title, drawn along the axis. */
   title?: string;
+
+  // ---- Styling (all optional; omitting a field keeps the theme default). ------
+  /** Draw the axis line. Default true. */
+  showAxisLine?: boolean;
+  /** Axis line color. Default: the per-axis `color`, else `theme.axis`. */
+  axisLineColor?: string;
+  /** Axis line width in px. Default 1. */
+  axisLineWidth?: number;
+  /** Draw tick marks. Default true. */
+  showTicks?: boolean;
+  /** Tick mark color. Default: the per-axis `color`, else `theme.axis`. */
+  tickColor?: string;
+  /** Major tick length in px. Default 5 (minor ticks are 3). */
+  tickLength?: number;
+  /** Tick mark line width in px. Default 1. */
+  tickWidth?: number;
+  /** Tick label color. Default: the per-axis `color`, else `theme.text`. */
+  labelColor?: string;
+  /** Tick label font (CSS `font` shorthand). Default `theme.font`. */
+  labelFont?: string;
+  /** Rotate tick labels by this many degrees. Default 0. */
+  labelRotation?: number;
+  /** Gap in px between a tick and its label. Default 3. */
+  labelStandoff?: number;
+  /** Axis title color. Default: the per-axis `color`, else `theme.text`. */
+  titleColor?: string;
+  /** Axis title font (CSS `font` shorthand). Default `theme.font`. */
+  titleFont?: string;
+  /** Draw grid lines for this axis. Default true. */
+  showGrid?: boolean;
+  /** Major grid line color. Default `theme.grid`. */
+  gridColor?: string;
+  /** Grid line width in px. Default 1. */
+  gridWidth?: number;
+  /** Grid line dash pattern (Canvas `setLineDash`). Default solid. */
+  gridDash?: number[];
+  /** Minor grid line color. Default `theme.gridMinor`. */
+  gridMinorColor?: string;
 }
 
 export type Dim = "x" | "y";

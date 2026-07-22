@@ -42,7 +42,7 @@ Pass a new typed-array reference to stream — the layer updates via `setData` u
 
 ## Components
 
-`Plot` · `Line` · `Scatter` · `Bar` · `Area` · `Heatmap` · `Box` · `Hexbin` · `Contour` · `ErrorBar` · `Stem` · `Quiver` · `Candlestick` · `YAxis`
+`Plot` · `Line` · `Scatter` · `Bar` · `Area` · `Heatmap` · `Box` · `Hexbin` · `Contour` · `ErrorBar` · `Stem` · `Quiver` · `Candlestick` · `Pie` · `Patches` · `YAxis`
 
 **Polar** — `PolarPlot` with `PolarLine` / `PolarScatter`.
 **3D** — `Plot3D` with `Surface` / `PointCloud`.

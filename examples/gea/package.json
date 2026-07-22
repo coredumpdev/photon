@@ -1,0 +1,20 @@
+{
+  "name": "@photonviz/example-gea",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@geajs/core": "^1.4.0",
+    "@photonviz/core": "workspace:*",
+    "@photonviz/gea": "workspace:*",
+    "@photonviz/map": "workspace:*"
+  },
+  "devDependencies": {
+    "@geajs/vite-plugin": "^1.4.1",
+    "vite": "^8.0.0",
+    "typescript": "^5.7"
+  }
+}

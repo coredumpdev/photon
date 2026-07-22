@@ -6,9 +6,16 @@ import {
   Plot3D as CorePlot3D,
   PolarPlot as CorePolarPlot,
   ScatterLayer,
+  type Annotation,
   type AreaOptions,
+  type Bar3DOptions,
   type BarOptions,
   type BoxOptions,
+  type Contour3DOptions,
+  type GraphInput,
+  type ImageOptions,
+  type IsosurfaceOptions,
+  type Line3DOptions,
   type CandlestickOptions,
   type ContourOptions,
   type ErrorBarOptions,
@@ -16,6 +23,8 @@ import {
   type HexbinOptions,
   type Layer,
   type LineOptions,
+  type PatchesOptions,
+  type PieOptions,
   type PlotOptions,
   type Plot3DOptions,
   type PointCloudOptions,
@@ -23,9 +32,11 @@ import {
   type PolarOptions,
   type PolarScatterOptions,
   type PolarSeries,
+  type Quiver3DOptions,
   type QuiverOptions,
   type ScatterOptions,
   type StemOptions,
+  type VolumeOptions,
   type SurfaceOptions,
   type YAxisOptions,
 } from "@photonviz/core";
@@ -44,6 +55,10 @@ export type SeriesSpec =
   | ({ type: "stem" } & StemOptions)
   | ({ type: "quiver" } & QuiverOptions)
   | ({ type: "candlestick" } & CandlestickOptions)
+  | ({ type: "pie" } & PieOptions)
+  | ({ type: "patches" } & PatchesOptions)
+  | ({ type: "image" } & ImageOptions)
+  | ({ type: "graph" } & GraphInput)
   | ({ type: "map" } & MapOptions)
   | ({ type: "geojson" } & GeoJsonOptions);
 
@@ -55,6 +70,7 @@ export interface PlotConfig {
   options?: PlotOptions;
   yAxes?: YAxisSpec[];
   series?: SeriesSpec[];
+  annotations?: Annotation[];
 }
 
 function addSeries(p: CorePlot, s: SeriesSpec): Layer {
@@ -71,6 +87,10 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "stem": return p.addStem(s);
     case "quiver": return p.addQuiver(s);
     case "candlestick": return p.addCandlestick(s);
+    case "pie": return p.addPie(s);
+    case "patches": return p.addPatches(s);
+    case "image": return p.addImage(s);
+    case "graph": return p.addGraph(s);
     case "map": return addMap(p, s);
     case "geojson": return addGeoJson(p, s);
   }
@@ -90,6 +110,10 @@ function updateSeries(layer: Layer, s: SeriesSpec): void {
     case "stem": break; // static
     case "quiver": break; // static
     case "candlestick": break; // static
+    case "pie": break; // static
+    case "patches": break; // static
+    case "image": break; // static
+    case "graph": break; // static
     case "map": break; // basemap streams tiles itself
     case "geojson": break; // static
   }
@@ -107,6 +131,7 @@ export function plot(node: HTMLElement, config: PlotConfig) {
   const p = new CorePlot(node, config.options);
   for (const ya of config.yAxes ?? []) p.addYAxis(ya.id, ya);
   let layers = (config.series ?? []).map((s) => addSeries(p, s));
+  for (const a of config.annotations ?? []) p.addAnnotation(a);
 
   return {
     update(next: PlotConfig) {
@@ -118,6 +143,9 @@ export function plot(node: HTMLElement, config: PlotConfig) {
         for (let i = 0; i < layers.length; i++) updateSeries(layers[i]!, specs[i]!);
         p.render();
       }
+      // Re-apply annotations wholesale (cheap; they're Canvas2D overlays).
+      p.clearAnnotations();
+      for (const a of next.annotations ?? []) p.addAnnotation(a);
     },
     destroy() {
       p.destroy();
@@ -182,7 +210,13 @@ export function polarPlot(node: HTMLElement, config: PolarConfig) {
 
 export type LayerSpec3D =
   | ({ type: "surface" } & SurfaceOptions)
-  | ({ type: "pointcloud" } & PointCloudOptions);
+  | ({ type: "pointcloud" } & PointCloudOptions)
+  | ({ type: "line3d" } & Line3DOptions)
+  | ({ type: "bar3d" } & Bar3DOptions)
+  | ({ type: "quiver3d" } & Quiver3DOptions)
+  | ({ type: "contour3d" } & Contour3DOptions)
+  | ({ type: "isosurface" } & IsosurfaceOptions)
+  | ({ type: "volume" } & VolumeOptions);
 
 export interface Plot3DConfig {
   options?: Plot3DOptions;
@@ -193,6 +227,12 @@ function addLayer3D(p: CorePlot3D, s: LayerSpec3D) {
   switch (s.type) {
     case "surface": return p.addSurface(s);
     case "pointcloud": return p.addPointCloud(s);
+    case "line3d": return p.addLine3D(s);
+    case "bar3d": return p.addBar3D(s);
+    case "quiver3d": return p.addQuiver3D(s);
+    case "contour3d": return p.addContour3D(s);
+    case "isosurface": return p.addIsosurface(s);
+    case "volume": return p.addVolume(s);
   }
 }
 

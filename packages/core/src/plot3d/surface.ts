@@ -1,7 +1,7 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { createProgram, uniformLocations } from "../gl/program.js";
 import type { Range } from "../types.js";
-import type { Bounds3, Layer3D } from "./layer3d.js";
+import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
 export interface SurfaceOptions {
@@ -13,6 +13,10 @@ export interface SurfaceOptions {
   extentX?: Range;
   extentZ?: Range;
   colormap?: ColormapName;
+  /** Series name (colorbar label / legend). */
+  name?: string;
+  /** Render the grid as a wireframe (lines) instead of a lit filled surface. */
+  wireframe?: boolean;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -38,10 +42,31 @@ void main() {
   outColor = vec4(vColor * shade, 1.0);
 }`;
 
+// Wireframe: per-vertex color, no lighting.
+const WF_VERT = /* glsl */ `#version 300 es
+precision highp float;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+uniform mat4 uMVP;
+out vec3 vColor;
+void main() { vColor = aColor; gl_Position = uMVP * vec4(aPos, 1.0); }`;
+
+const WF_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+in vec3 vColor;
+out vec4 outColor;
+void main() { outColor = vec4(vColor, 1.0); }`;
+
 const programCache = new WeakMap<WebGL2RenderingContext, WebGLProgram>();
 function getProgram(gl: WebGL2RenderingContext): WebGLProgram {
   let p = programCache.get(gl);
   if (!p) { p = createProgram(gl, VERT, FRAG); programCache.set(gl, p); }
+  return p;
+}
+const wireCache = new WeakMap<WebGL2RenderingContext, WebGLProgram>();
+function getWireProgram(gl: WebGL2RenderingContext): WebGLProgram {
+  let p = wireCache.get(gl);
+  if (!p) { p = createProgram(gl, WF_VERT, WF_FRAG); wireCache.set(gl, p); }
   return p;
 }
 
@@ -49,6 +74,7 @@ let counter = 0;
 
 export class SurfaceLayer implements Layer3D {
   readonly id: string;
+  readonly name?: string;
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject;
@@ -56,13 +82,19 @@ export class SurfaceLayer implements Layer3D {
   private uniforms: Record<string, WebGLUniformLocation | null>;
   private vertexCount: number;
   private b3: Bounds3;
+  private cmapName: ColormapName;
+  private vDomain: Range = [0, 1];
+  private wireframe: boolean;
   private lightDir: [number, number, number] = [0.5, 1, 0.35];
   private ambient = 0.35;
 
   constructor(gl: WebGL2RenderingContext, opts: SurfaceOptions) {
     this.id = `surface-${counter++}`;
     this.gl = gl;
-    this.program = getProgram(gl);
+    this.wireframe = opts.wireframe ?? false;
+    this.program = this.wireframe ? getWireProgram(gl) : getProgram(gl);
+    this.name = opts.name;
+    this.cmapName = opts.colormap ?? "viridis";
     const { cols, rows, values } = opts;
     const [x0, x1] = opts.extentX ?? [0, cols - 1];
     const [z0, z1] = opts.extentZ ?? [0, rows - 1];
@@ -86,39 +118,62 @@ export class SurfaceLayer implements Layer3D {
     };
 
     const data: number[] = [];
-    const vert = (c: number, r: number) => {
-      const [nx, ny, nz] = normalAt(c, r);
-      const [cr, cg, cb] = cmap((at(c, r) - vmin) / span);
-      data.push(wx(c), at(c, r), wz(r), nx, ny, nz, cr, cg, cb);
-    };
-    for (let r = 0; r < rows - 1; r++) {
-      for (let c = 0; c < cols - 1; c++) {
-        vert(c, r); vert(c + 1, r); vert(c + 1, r + 1);
-        vert(c, r); vert(c + 1, r + 1); vert(c, r + 1);
-      }
-    }
-
-    this.vertexCount = data.length / 9;
     this.b3 = { x: [x0, x1], y: [vmin, vmax], z: [z0, z1] };
+    this.vDomain = [vmin, vmax];
 
     const vao = gl.createVertexArray()!;
     const buffer = gl.createBuffer()!;
     this.vao = vao; this.buffer = buffer;
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+
+    if (this.wireframe) {
+      // Grid lines: per interior vertex, an edge to the right + down neighbour.
+      const vertL = (c: number, r: number) => {
+        const [cr, cg, cb] = cmap((at(c, r) - vmin) / span);
+        data.push(wx(c), at(c, r), wz(r), cr, cg, cb);
+      };
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (c < cols - 1) { vertL(c, r); vertL(c + 1, r); }
+          if (r < rows - 1) { vertL(c, r); vertL(c, r + 1); }
+        }
+      }
+      this.vertexCount = data.length / 6;
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    } else {
+      const vert = (c: number, r: number) => {
+        const [nx, ny, nz] = normalAt(c, r);
+        const [cr, cg, cb] = cmap((at(c, r) - vmin) / span);
+        data.push(wx(c), at(c, r), wz(r), nx, ny, nz, cr, cg, cb);
+      };
+      for (let r = 0; r < rows - 1; r++) {
+        for (let c = 0; c < cols - 1; c++) {
+          vert(c, r); vert(c + 1, r); vert(c + 1, r + 1);
+          vert(c, r); vert(c + 1, r + 1); vert(c, r + 1);
+        }
+      }
+      this.vertexCount = data.length / 9;
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+    }
     gl.bindVertexArray(null);
 
     this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uLightDir", "uAmbient"]);
   }
 
   bounds3() { return this.b3; }
+
+  colorInfo(): ColorInfo { return { colormap: this.cmapName, domain: this.vDomain, label: this.name }; }
 
   /** Set the light direction (world space) and ambient term (0..1). */
   setLight(dir: [number, number, number], ambient: number): void {
@@ -129,10 +184,15 @@ export class SurfaceLayer implements Layer3D {
   draw(gl: WebGL2RenderingContext, mvp: Mat4): void {
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.uniforms.uMVP!, false, mvp);
-    gl.uniform3f(this.uniforms.uLightDir!, this.lightDir[0], this.lightDir[1], this.lightDir[2]);
-    gl.uniform1f(this.uniforms.uAmbient!, this.ambient);
-    gl.bindVertexArray(this.vao);
-    gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    if (this.wireframe) {
+      gl.bindVertexArray(this.vao);
+      gl.drawArrays(gl.LINES, 0, this.vertexCount);
+    } else {
+      gl.uniform3f(this.uniforms.uLightDir!, this.lightDir[0], this.lightDir[1], this.lightDir[2]);
+      gl.uniform1f(this.uniforms.uAmbient!, this.ambient);
+      gl.bindVertexArray(this.vao);
+      gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    }
     gl.bindVertexArray(null);
   }
 

@@ -41,7 +41,7 @@ export function Chart({ x, y }: { x: Float64Array; y: Float64Array }) {
 
 ## Components
 
-`Plot` · `Line` · `Scatter` · `Bar` · `Area` · `Heatmap` · `Box` · `Hexbin` · `Contour` · `ErrorBar` · `Stem` · `Quiver` · `Candlestick` · `YAxis`
+`Plot` · `Line` · `Scatter` · `Bar` · `Area` · `Heatmap` · `Box` · `Hexbin` · `Contour` · `ErrorBar` · `Stem` · `Quiver` · `Candlestick` · `Pie` · `Patches` · `YAxis`
 
 **Polar** — `PolarPlot` with `PolarLine` / `PolarScatter`.
 **3D** — `Plot3D` with `Surface` / `PointCloud`.

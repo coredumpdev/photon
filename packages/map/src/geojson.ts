@@ -9,7 +9,7 @@
  * float32 precise even for a small region. Pure and unit-tested.
  */
 import type { Range } from "@photonviz/core";
-import { earcut } from "./earcut.js";
+import { earcut } from "@photonviz/core";
 import { lonLatToWorld } from "./mercator.js";
 import type { PickFeature, TileMesh } from "./mesh.js";
 import type { PropValue } from "./mvt.js";

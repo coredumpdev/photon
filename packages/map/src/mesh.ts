@@ -14,7 +14,7 @@
  * Polygon features are also kept (with properties, in absolute world coords) so
  * the map layer can hit-test them for feature picking. Pure and unit-tested.
  */
-import { earcut } from "./earcut.js";
+import { earcut } from "@photonviz/core";
 import { tileWorldBounds, type TileId } from "./mercator.js";
 import { classifyRings, type MvtFeature, type PropValue } from "./mvt.js";
 import { strokePolyline } from "./stroke.js";

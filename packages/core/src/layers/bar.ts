@@ -15,6 +15,12 @@ export interface BarOptions {
   width?: number;
   /** Shift bars by this many data units (use for grouped bars). */
   offset?: number;
+  /**
+   * `"v"` (default) draws vertical bars: `x` positions along the x axis, `y`
+   * values along the y axis. `"h"` draws horizontal bars: `x` positions along the
+   * **y** axis, `y` values along the **x** axis, `width` is the bar thickness.
+   */
+  orientation?: "v" | "h";
   color?: string | Color;
   name?: string;
   yAxis?: string;
@@ -69,6 +75,7 @@ export class BarLayer implements Layer {
   private color: Color;
   private barWidth: number;
   private offset: number;
+  private orientation: "v" | "h";
   private xRef = 0;
   private yRef = 0;
   private xBounds: Range = [0, 0];
@@ -88,6 +95,7 @@ export class BarLayer implements Layer {
     this.count = n;
     this.barWidth = opts.width ?? medianSpacing(opts.x, n) * 0.8;
     this.offset = opts.offset ?? 0;
+    this.orientation = opts.orientation ?? "v";
     const rects = this.buildRects(opts.x, opts.y, opts.base, n);
 
     const vao = gl.createVertexArray()!;
@@ -115,22 +123,32 @@ export class BarLayer implements Layer {
     base: number | ArrayLike<number> | undefined, n: number,
   ): Float32Array {
     const width = this.barWidth, off = this.offset;
+    const horizontal = this.orientation === "h";
     const baseAt = (i: number): number =>
       base == null ? 0 : typeof base === "number" ? base : base[i]!;
-    this.xRef = n > 0 ? x[0]! : 0;
-    this.yRef = n > 0 ? y[0]! : 0;
+    // The position axis references x[0]; the value axis references y[0]. Which one
+    // is horizontal (x) vs vertical (y) depends on orientation.
+    const posRef = n > 0 ? x[0]! : 0;
+    const valRef = n > 0 ? y[0]! : 0;
+    this.xRef = horizontal ? valRef : posRef;
+    this.yRef = horizontal ? posRef : valRef;
     const rects = new Float32Array(n * 4);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (let i = 0; i < n; i++) {
-      const cx = x[i]! + off;
-      const x0 = cx - width / 2, x1 = cx + width / 2;
-      const b = baseAt(i), top = y[i]!;
-      rects[i * 4] = x0 - this.xRef;
-      rects[i * 4 + 1] = b - this.yRef;
-      rects[i * 4 + 2] = x1 - this.xRef;
-      rects[i * 4 + 3] = top - this.yRef;
-      minX = Math.min(minX, x0); maxX = Math.max(maxX, x1);
-      minY = Math.min(minY, b, top); maxY = Math.max(maxY, b, top);
+      const cpos = x[i]! + off;                 // center along the position axis
+      const p0 = cpos - width / 2, p1 = cpos + width / 2;
+      const b = baseAt(i), val = y[i]!;         // extent along the value axis
+      // Emit the rect in actual (axis-x, axis-y) space, offset by the refs.
+      const ax0 = horizontal ? b : p0;
+      const ax1 = horizontal ? val : p1;
+      const ay0 = horizontal ? p0 : b;
+      const ay1 = horizontal ? p1 : val;
+      rects[i * 4] = ax0 - this.xRef;
+      rects[i * 4 + 1] = ay0 - this.yRef;
+      rects[i * 4 + 2] = ax1 - this.xRef;
+      rects[i * 4 + 3] = ay1 - this.yRef;
+      minX = Math.min(minX, ax0, ax1); maxX = Math.max(maxX, ax0, ax1);
+      minY = Math.min(minY, ay0, ay1); maxY = Math.max(maxY, ay0, ay1);
     }
     this.xBounds = [minX, maxX];
     this.yBounds = [minY, maxY];

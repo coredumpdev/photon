@@ -436,11 +436,213 @@ function gaussian(m: number, sd: number): number {
   p.addCandlestick({ x, open: o, high: h, low: l, close: c });
 }
 
-// 3D surface.
+// Full styling — background/border fill, plot title, legend, categorical x axis
+// with rotated tick labels, and per-axis grid styling. All Bokeh-like flat props.
 {
-  const p3 = new Plot3D(panel("3D surface", "axes · light controls"), {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+  const p = new Plot(panel("Styled + categorical", "bg · title · legend · rotated ticks"), {
+    theme: "dark",
+    background: "#0b1220",
+    border: "#060a14",
+    title: { text: "Quarterly revenue", align: "left" },
+    legend: { position: "top-left" },
+    scales: { x: { type: "categorical", factors: months }, y: { domain: [0, 110] } },
+    axes: {
+      x: { title: "month", labelRotation: 40, gridColor: "rgba(148,163,184,0.10)" },
+      y: { title: "revenue", gridColor: "rgba(148,163,184,0.10)", gridDash: [3, 3] },
+    },
+    showToolbar: false,
+  });
+  const idx = Float64Array.from(months, (_, i) => i);
+  const revenue = Float64Array.from(months, (_, i) => 30 + i * 9 + rand() * 12);
+  const target = Float64Array.from(months, () => 70 + rand() * 12);
+  p.addBar({ x: idx, y: revenue, width: 0.6, color: "#38bdf8", name: "revenue" });
+  p.addLine({ x: idx, y: target, color: "#f59e0b", width: 2.5, name: "target" });
+}
+
+// Grouped (clustered) bars over a categorical axis.
+{
+  const cats = ["Q1", "Q2", "Q3", "Q4"];
+  const p = new Plot(panel("Grouped bars", "categorical · 3 series"), {
+    theme: "dark",
+    legend: { position: "top-left" },
+    scales: { x: { type: "categorical", factors: cats }, y: { domain: [0, 100] } },
+    showToolbar: false,
+  });
+  const idx = Float64Array.from(cats, (_, i) => i);
+  const mk = (): Float64Array => Float64Array.from(cats, () => 20 + rand() * 70);
+  p.addGroupedBars({
+    x: idx,
+    series: [
+      { y: mk(), color: "#38bdf8", name: "north" },
+      { y: mk(), color: "#f472b6", name: "south" },
+      { y: mk(), color: "#a3e635", name: "west" },
+    ],
+  });
+}
+
+// Stacked bars — series accumulate on top of each other.
+{
+  const cats = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const p = new Plot(panel("Stacked bars", "categorical · cumulative"), {
+    theme: "dark",
+    legend: { position: "top-left" },
+    scales: { x: { type: "categorical", factors: cats } },
+    showToolbar: false,
+  });
+  const idx = Float64Array.from(cats, (_, i) => i);
+  const mk = (m: number): Float64Array => Float64Array.from(cats, () => m + rand() * m);
+  p.addStackedBars({
+    x: idx,
+    width: 0.6,
+    series: [
+      { y: mk(10), color: "#22d3ee", name: "email" },
+      { y: mk(8), color: "#818cf8", name: "social" },
+      { y: mk(6), color: "#fbbf24", name: "direct" },
+    ],
+  });
+}
+
+// Horizontal bars — categorical y axis, values along x.
+{
+  const cats = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"];
+  const p = new Plot(panel("Horizontal bars", "hbar · categorical y"), {
+    theme: "dark",
+    scales: { y: { type: "categorical", factors: cats }, x: { domain: [0, 100] } },
+    showToolbar: false,
+  });
+  const idx = Float64Array.from(cats, (_, i) => i);
+  const vals = Float64Array.from(cats, (_, i) => 30 + i * 12 + rand() * 10);
+  p.addBar({ x: idx, y: vals, width: 0.6, orientation: "h", color: "#34d399", name: "score" });
+}
+
+// Scatter marker glyphs — one row per shape.
+{
+  const p = new Plot(panel("Scatter markers", "6 glyph shapes"), { theme: "dark", showToolbar: false });
+  const shapes = ["circle", "square", "triangle", "diamond", "cross", "plus"] as const;
+  const colors = ["#38bdf8", "#f472b6", "#a3e635", "#fbbf24", "#a78bfa", "#34d399"];
+  const M = 12;
+  const x = Float64Array.from({ length: M }, (_, i) => i);
+  shapes.forEach((mk, r) => {
+    const y = Float64Array.from({ length: M }, () => shapes.length - 1 - r);
+    p.addScatter({ x, y, size: 14, marker: mk, color: colors[r], name: mk });
+  });
+  p.setView({ x: [-1, M], y: [-1, shapes.length] });
+}
+
+// Pie chart (equal aspect, chrome hidden).
+{
+  const p = new Plot(panel("Pie", "market share"), {
+    theme: "dark",
+    equalAspect: true,
+    showToolbar: false,
+    hover: false,
+    axes: { x: { ticks: [], showAxisLine: false }, y: { ticks: [], showAxisLine: false } },
+  });
+  p.addPie({ values: [35, 25, 20, 12, 8], colormap: "viridis" });
+  p.setView({ x: [-1.25, 1.25], y: [-1.25, 1.25] });
+}
+
+// Donut chart (inner radius > 0).
+{
+  const p = new Plot(panel("Donut", "categories"), {
+    theme: "dark",
+    equalAspect: true,
+    showToolbar: false,
+    hover: false,
+    axes: { x: { ticks: [], showAxisLine: false }, y: { ticks: [], showAxisLine: false } },
+  });
+  p.addPie({ values: [8, 6, 5, 4, 3, 2], innerRadius: 0.55 });
+  p.setView({ x: [-1.25, 1.25], y: [-1.25, 1.25] });
+}
+
+// Patches — a jittered choropleth grid (polygon fill via earcut).
+{
+  const p = new Plot(panel("Patches", "polygons · choropleth"), { theme: "dark", showToolbar: false });
+  const cols = 6, rows = 4;
+  const patches = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const j = () => (rand() - 0.5) * 0.22;
+      patches.push({
+        x: [c + j(), c + 1 + j(), c + 1 + j(), c + j()],
+        y: [r + j(), r + j(), r + 1 + j(), r + 1 + j()],
+        value: Math.sin(c * 0.7) + Math.cos(r * 0.9) + rand() * 0.4,
+      });
+    }
+  }
+  p.addPatches({ patches, colormap: "plasma" });
+  p.setView({ x: [-0.3, cols + 0.3], y: [-0.3, rows + 0.3] });
+}
+
+// Stacked area — cumulative bands.
+{
+  const p = new Plot(panel("Stacked area", "cumulative bands"), { theme: "dark", showToolbar: false });
+  const N = 120;
+  const x = Float64Array.from({ length: N }, (_, i) => i);
+  const s = (a: number, b: number, c: number) =>
+    Float64Array.from({ length: N }, (_, i) => a + Math.sin(i * b + c) * a * 0.4 + a * 0.3);
+  p.addStackedArea({
+    x,
+    series: [
+      { y: s(3, 0.05, 0), color: "rgba(56,189,248,0.6)", name: "a" },
+      { y: s(2.5, 0.06, 1), color: "rgba(244,114,182,0.6)", name: "b" },
+      { y: s(2, 0.04, 2), color: "rgba(163,230,53,0.6)", name: "c" },
+    ],
+  });
+  p.setView({ x: [0, N - 1], y: [0, 14] });
+}
+
+// Annotations — span, band, box, label over a line.
+{
+  const p = new Plot(panel("Annotations", "span · band · box · label"), { theme: "dark", showToolbar: false });
+  const N = 100;
+  const x = Float64Array.from({ length: N }, (_, i) => i);
+  const y = Float64Array.from({ length: N }, (_, i) => Math.sin(i * 0.15) * 3 + 5);
+  p.addLine({ x, y, color: "#38bdf8", width: 2 });
+  p.setView({ x: [0, N - 1], y: [0, 10] });
+  p.addAnnotation({ type: "band", dim: "y", from: 6, to: 8, color: "rgba(52,211,153,0.15)" });
+  p.addAnnotation({ type: "span", dim: "y", value: 5, color: "#f59e0b", dash: [5, 4] });
+  p.addAnnotation({ type: "span", dim: "x", value: 50, color: "#f472b6", dash: [5, 4] });
+  p.addAnnotation({ type: "box", x: [20, 35], y: [2, 4], border: "#a78bfa" });
+  p.addAnnotation({ type: "label", x: 52, y: 9, text: "event", color: "#f472b6" });
+}
+
+// Image glyph — a procedurally-generated RGBA image over an extent.
+{
+  const p = new Plot(panel("Image", "RGBA glyph · textured quad"), { theme: "dark", showToolbar: false });
+  const iw = 96, ih = 96;
+  const id = new ImageData(iw, ih);
+  for (let yy = 0; yy < ih; yy++) {
+    for (let xx = 0; xx < iw; xx++) {
+      const i = (yy * iw + xx) * 4;
+      const d = Math.hypot(xx - iw / 2, yy - ih / 2) / (iw / 2);
+      id.data[i] = Math.round((xx / iw) * 255);
+      id.data[i + 1] = Math.round((yy / ih) * 255);
+      id.data[i + 2] = Math.round(Math.max(0, 1 - d) * 255);
+      id.data[i + 3] = 255;
+    }
+  }
+  p.addImage({ source: id, extent: { x: [0, 10], y: [0, 10] } });
+  p.setView({ x: [-0.5, 10.5], y: [-0.5, 10.5] });
+}
+
+// Graph / network — force-directed layout of a small node-link graph.
+{
+  const p = new Plot(panel("Graph", "force layout · nodes + edges"), { theme: "dark", showToolbar: false, equalAspect: true });
+  const edges: [number, number][] = [
+    [0, 1], [0, 2], [0, 3], [1, 2], [3, 4], [4, 5], [5, 3],
+    [2, 6], [6, 7], [7, 2], [8, 9], [9, 0], [6, 8], [1, 4],
+  ];
+  p.addGraph({ edges, nodeColor: "#38bdf8", edgeColor: "rgba(148,163,184,0.4)", nodeSize: 13 });
+}
+
+// 3D surface — now with a title + colorbar.
+{
+  const p3 = new Plot3D(panel("3D surface", "title · colorbar · light"), {
     axisLabels: { x: "x", y: "z", z: "y" },
     lightControls: true,
+    title: "Sinc surface",
   });
   const cols = 64, rows = 64;
   const values = new Float64Array(cols * rows);
@@ -449,7 +651,150 @@ function gaussian(m: number, sd: number): number {
     const rr = Math.hypot(xx, yy) + 1e-6;
     values[r * cols + c] = (Math.sin(rr * 2) / rr) * 3;
   }
-  p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "viridis" });
+  p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "viridis", name: "height" });
+}
+
+// 3D bars — a colormapped bar field on an x/z grid.
+{
+  const p3 = new Plot3D(panel("3D bars", "colormapped · lit"), {
+    axisLabels: { x: "x", y: "value", z: "z" },
+    title: "Bar field",
+  });
+  const gx = 8, gz = 8;
+  const x: number[] = [], z: number[] = [], y: number[] = [];
+  for (let i = 0; i < gx; i++) {
+    for (let j = 0; j < gz; j++) {
+      x.push(i);
+      z.push(j);
+      y.push(1.5 + Math.sin(i * 0.6) * Math.cos(j * 0.6) * 1.5 + rand() * 0.3);
+    }
+  }
+  p3.addBar3D({ x, z, y, colorBy: { colormap: "plasma" }, name: "value" });
+}
+
+// 3D lines — parametric helices (legend of named paths).
+{
+  const p3 = new Plot3D(panel("3D lines", "paths · legend"), {
+    axisLabels: { x: "x", y: "y", z: "z" },
+    legend: true,
+  });
+  const N = 400;
+  const helix = (turns: number, phase: number) => {
+    const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const t = (i / (N - 1)) * Math.PI * 2 * turns;
+      x[i] = Math.cos(t + phase);
+      z[i] = Math.sin(t + phase);
+      y[i] = (i / (N - 1)) * 4 - 2;
+    }
+    return { x, y, z };
+  };
+  const a = helix(4, 0), b = helix(4, Math.PI);
+  p3.addLine3D({ ...a, color: "#38bdf8", name: "α" });
+  p3.addLine3D({ ...b, color: "#f472b6", name: "β" });
+}
+
+// 3D wireframe surface + reset button + hover.
+{
+  const p3 = new Plot3D(panel("3D wireframe", "lines · hover · reset"), {
+    axisLabels: { x: "x", y: "z", z: "y" },
+    title: "Wireframe",
+  });
+  const cols = 40, rows = 40;
+  const values = new Float64Array(cols * rows);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4;
+    const rr = Math.hypot(xx, yy) + 1e-6;
+    values[r * cols + c] = (Math.sin(rr * 1.5) / rr) * 3;
+  }
+  p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "plasma", wireframe: true, name: "height" });
+}
+
+// 3D quiver — a vector field colored by magnitude.
+{
+  const p3 = new Plot3D(panel("3D quiver", "vector field · colorbar"), {
+    axisLabels: { x: "x", y: "y", z: "z" },
+  });
+  const g = 6;
+  const x: number[] = [], y: number[] = [], z: number[] = [], u: number[] = [], v: number[] = [], w: number[] = [];
+  for (let i = 0; i < g; i++) for (let j = 0; j < g; j++) for (let k = 0; k < g; k++) {
+    const px = (i / (g - 1)) * 2 - 1, py = (j / (g - 1)) * 2 - 1, pz = (k / (g - 1)) * 2 - 1;
+    x.push(px); y.push(py); z.push(pz);
+    u.push(-py); v.push(px); w.push(pz * 0.3); // swirl
+  }
+  p3.addQuiver3D({ x, y, z, u, v, w, scale: 0.4, colorBy: { colormap: "viridis" }, name: "speed" });
+}
+
+// 3D contour — iso-height rings stacked at their level heights.
+{
+  const p3 = new Plot3D(panel("3D contour", "iso-height rings"), {
+    axisLabels: { x: "x", y: "z", z: "y" },
+    title: "Contour",
+  });
+  const cols = 50, rows = 50;
+  const values = new Float64Array(cols * rows);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4;
+    const rr = Math.hypot(xx, yy) + 1e-6;
+    values[r * cols + c] = (Math.sin(rr * 1.5) / rr) * 3;
+  }
+  p3.addContour3D({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], levels: 14, colormap: "viridis", name: "height" });
+}
+
+// 3D isosurface — marching cubes on a metaball volume.
+{
+  const p3 = new Plot3D(panel("3D isosurface", "marching cubes · metaballs"), {
+    axisLabels: { x: "x", y: "y", z: "z" },
+    title: "Isosurface",
+  });
+  const nx = 40, ny = 40, nz = 40;
+  const vol = new Float64Array(nx * ny * nz);
+  const blobs = [[-0.5, 0, 0], [0.6, 0.3, -0.2], [0.1, -0.5, 0.4]];
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const px = (x / (nx - 1)) * 2 - 1, py = (y / (ny - 1)) * 2 - 1, pz = (z / (nz - 1)) * 2 - 1;
+    let s = 0;
+    for (const b of blobs) { const d2 = (px - b[0]!) ** 2 + (py - b[1]!) ** 2 + (pz - b[2]!) ** 2; s += Math.exp(-d2 * 6); }
+    vol[x + y * nx + z * nx * ny] = s;
+  }
+  p3.addIsosurface({ values: vol, dims: [nx, ny, nz], isoLevel: 0.5, extent: { x: [-1, 1], y: [-1, 1], z: [-1, 1] }, color: "#38bdf8", name: "blob" });
+}
+
+// 3D scatter — per-point size + labels (hover shows the label).
+{
+  const p3 = new Plot3D(panel("3D scatter", "per-point size · labels"), {
+    axisLabels: { x: "x", y: "y", z: "z" },
+  });
+  const N = 300;
+  const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N);
+  const sizes = new Float64Array(N), vals = new Float64Array(N);
+  const labels: string[] = [];
+  for (let i = 0; i < N; i++) {
+    x[i] = gaussian(0, 1); y[i] = gaussian(0, 1); z[i] = gaussian(0, 1);
+    const r = Math.hypot(x[i]!, y[i]!, z[i]!);
+    sizes[i] = 3 + r * 6;
+    vals[i] = r;
+    labels.push(`p${i} · r=${r.toFixed(2)}`);
+  }
+  p3.addPointCloud({ x, y, z, sizes, labels, colorBy: { values: vals, colormap: "plasma" }, name: "r" });
+}
+
+// 3D volume — GPU raymarch of a scalar field (+ grid planes, auto-rotate).
+{
+  const p3 = new Plot3D(panel("3D volume", "raymarch · grid · auto-rotate"), {
+    axisLabels: { x: "x", y: "y", z: "z" },
+    title: "Volume",
+    autoRotate: true,
+  });
+  const nx = 48, ny = 48, nz = 48;
+  const vol = new Float64Array(nx * ny * nz);
+  const blobs = [[-0.4, 0, 0], [0.5, 0.3, -0.2], [0.1, -0.4, 0.4]];
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const px = (x / (nx - 1)) * 2 - 1, py = (y / (ny - 1)) * 2 - 1, pz = (z / (nz - 1)) * 2 - 1;
+    let s = 0;
+    for (const b of blobs) { const d2 = (px - b[0]!) ** 2 + (py - b[1]!) ** 2 + (pz - b[2]!) ** 2; s += Math.exp(-d2 * 5); }
+    vol[x + y * nx + z * nx * ny] = s;
+  }
+  p3.addVolume({ values: vol, dims: [nx, ny, nz], extent: { x: [-1, 1], y: [-1, 1], z: [-1, 1] }, colormap: "plasma", density: 1.3, name: "density" });
 }
 
 // 3D point cloud.

@@ -1,0 +1,12 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #0a0a0a; color: #eee; font-family: system-ui, sans-serif; }
+h1 { font: 700 22px system-ui, sans-serif; padding: 16px 16px 0; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+.panel { border: 1px solid #333; border-radius: 8px; overflow: hidden; background: #111; }
+.panel h2 { margin: 0; padding: 8px 12px; font: 600 13px system-ui, sans-serif; color: #ddd; border-bottom: 1px solid #333; }
+.chart { height: 260px; }

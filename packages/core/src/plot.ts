@@ -8,10 +8,15 @@ import { BoxLayer, type BoxOptions } from "./layers/box.js";
 import { CandlestickLayer, type CandlestickOptions } from "./layers/candlestick.js";
 import { ContourLayer, type ContourOptions } from "./layers/contour.js";
 import { ErrorBarLayer, type ErrorBarOptions } from "./layers/errorbar.js";
+import { GraphLayer, type GraphOptions } from "./layers/graph.js";
 import { HeatmapLayer, type HeatmapOptions } from "./layers/heatmap.js";
 import { HexbinLayer, type HexbinOptions } from "./layers/hexbin.js";
+import { ImageLayer, type ImageOptions } from "./layers/image.js";
 import type { Layer } from "./layers/layer.js";
 import { LineLayer, type LineOptions } from "./layers/line.js";
+import { forceLayout } from "./graph/force.js";
+import { PatchesLayer, type PatchesOptions } from "./layers/patches.js";
+import { PieLayer, type PieOptions } from "./layers/pie.js";
 import { QuiverLayer, type QuiverOptions } from "./layers/quiver.js";
 import { ScatterLayer, type ScatterOptions } from "./layers/scatter.js";
 import { StemLayer, type StemOptions } from "./layers/stem.js";
@@ -22,13 +27,16 @@ import {
   drawCrosshairXY,
   drawGrid,
   drawMarker,
+  drawTitle,
   drawXAxis,
   drawYAxis,
   lightTheme,
   plotRegion,
   pxX,
   pxY,
+  resolveAxisStyle,
   type Layout,
+  type PlotTitleOptions,
   type Theme,
 } from "./render/overlay.js";
 import type { PickMode } from "./layers/pick.js";
@@ -40,16 +48,99 @@ export interface AxisScaleOptions {
   type?: ScaleType;
   /** Fixed domain. If omitted, the axis autoscales to the data. */
   domain?: Range;
+  /** Factor labels for a `"categorical"` axis (fixes the domain to the bands). */
+  factors?: string[];
+}
+
+/** Legend placement + styling. `legend: true` uses all defaults. */
+export interface LegendOptions {
+  /** Corner within the plot region. Default `"top-right"`. */
+  position?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  /** Stack entries vertically (default) or in a row. */
+  orientation?: "vertical" | "horizontal";
+  background?: string;
+  border?: string;
+  textColor?: string;
+  font?: string;
 }
 
 export interface YAxisOptions extends AxisConfig {
   type?: ScaleType;
   domain?: Range;
+  /** Factor labels for a `"categorical"` axis. */
+  factors?: string[];
   /** Which side to draw the axis on. Default `"right"` for secondary axes. */
   side?: "left" | "right";
   /** Axis + label color (secondary axes often match their series). */
   color?: string;
 }
+
+/** One series in a grouped/stacked bar chart. */
+export interface BarSeries {
+  /** Value per category (parallel to the shared `x` positions). */
+  y: ArrayLike<number>;
+  color?: string;
+  name?: string;
+}
+
+/** Options for {@link Plot.addGroupedBars} — one cluster of bars per category. */
+export interface GroupedBarOptions {
+  /** Category positions (e.g. `0..n-1` for a categorical axis). */
+  x: ArrayLike<number>;
+  series: BarSeries[];
+  /** Total width of one group (all its bars) in data units. Default 0.8. */
+  groupWidth?: number;
+  /** Fractional gap between bars within a group, 0..1. Default 0.1. */
+  gap?: number;
+  /** `"v"` vertical (default) or `"h"` horizontal bars. */
+  orientation?: "v" | "h";
+  yAxis?: string;
+}
+
+/** Options for {@link Plot.addStackedBars} — series stacked on top of each other. */
+export interface StackedBarOptions {
+  /** Category positions (e.g. `0..n-1` for a categorical axis). */
+  x: ArrayLike<number>;
+  series: BarSeries[];
+  /** Bar width in data units. Defaults to 80% of the median spacing. */
+  width?: number;
+  /** `"v"` vertical (default) or `"h"` horizontal bars. */
+  orientation?: "v" | "h";
+  yAxis?: string;
+}
+
+/** One series in a stacked area chart. */
+export interface AreaSeries {
+  y: ArrayLike<number>;
+  color?: string;
+  name?: string;
+}
+
+/** Options for {@link Plot.addStackedArea}. */
+export interface StackedAreaOptions {
+  x: ArrayLike<number>;
+  series: AreaSeries[];
+  yAxis?: string;
+}
+
+/** Options for {@link Plot.addGraph}. Positions are optional — omit them (give `nodes`) to auto-lay-out. */
+export interface GraphInput extends Omit<GraphOptions, "x" | "y"> {
+  x?: ArrayLike<number>;
+  y?: ArrayLike<number>;
+  /** Node count when `x`/`y` are omitted (else inferred from the max edge index). */
+  nodes?: number;
+}
+
+/**
+ * A Canvas2D overlay marker drawn above the data, projected through the scales:
+ * a full-width/height guide line (`span`), a shaded range (`band`), a rectangle
+ * (`box`), or text (`label`). `yAxis` targets a secondary axis where relevant.
+ */
+export type Annotation =
+  | { type: "span"; dim: Dim; value: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
+  | { type: "band"; dim: Dim; from: number; to: number; color?: string; yAxis?: string }
+  | { type: "box"; x: Range; y: Range; color?: string; border?: string; yAxis?: string }
+  | { type: "label"; x: number; y: number; text: string; color?: string; font?: string; align?: "left" | "center" | "right"; yAxis?: string };
 
 /** One line of the hover tooltip header, produced by {@link PlotOptions.hoverReadout}. */
 export interface HoverReadoutRow {
@@ -61,6 +152,14 @@ export interface PlotOptions {
   scales?: { x?: AxisScaleOptions; y?: AxisScaleOptions };
   axes?: { x?: AxisConfig; y?: AxisConfig };
   theme?: "light" | "dark" | Theme;
+  /** Fill color for the plot region (inside the margins). Default transparent. */
+  background?: string;
+  /** Fill color for the whole canvas incl. margins. Default transparent. */
+  border?: string;
+  /** Plot title, drawn in a reserved strip above the plot. */
+  title?: string | PlotTitleOptions;
+  /** Show a legend of named series. `true` uses defaults; pass an object to place/style it. */
+  legend?: boolean | LegendOptions;
   margin?: Partial<Layout["margin"]>;
   /** Enable wheel-zoom and drag interaction. Default true. */
   interactive?: boolean;
@@ -120,6 +219,8 @@ interface YAxisState {
 
 const DEFAULT_MARGIN = { top: 16, right: 16, bottom: 40, left: 56 };
 const Y_AXIS_GAP = 52;
+/** Extra top margin reserved for the plot title when one is set. */
+const TITLE_RESERVE = 28;
 
 /** Layers that can report a nearest point participate in hover/tooltip. */
 interface Pickable {
@@ -223,6 +324,13 @@ export class Plot {
   private selected: { layer: Pickable; x: number; y: number; index: number } | null = null;
   private infoBox: HTMLDivElement;
 
+  private annotations: Annotation[] = [];
+  private bgFill?: string;
+  private borderFill?: string;
+  private title: PlotTitleOptions | null;
+  private legend: LegendOptions | null;
+  private legendDiv: HTMLDivElement;
+
   constructor(container: HTMLElement, options: PlotOptions = {}) {
     this.container = container;
     if (getComputedStyle(container).position === "static") {
@@ -242,19 +350,24 @@ export class Plot {
 
     const sx = options.scales?.x ?? {};
     const sy = options.scales?.y ?? {};
-    this.scaleX = makeScale(sx.type ?? "linear", sx.domain ?? [0, 1]);
-    this.autoX = sx.domain == null;
-    this.initialX = sx.domain ?? null;
+    // A categorical axis is fixed to its factor bands: never autoscale, and `home()`
+    // restores that band domain.
+    const xCat = sx.type === "categorical";
+    this.scaleX = makeScale(sx.type ?? "linear", sx.domain ?? [0, 1], sx.factors);
+    this.autoX = !xCat && sx.domain == null;
+    this.initialX = xCat ? this.scaleX.domain : (sx.domain ?? null);
     this.axisX = new Axis(options.axes?.x);
 
     // Primary y axis.
+    const yCat = sy.type === "categorical";
+    const yScale = makeScale(sy.type ?? "linear", sy.domain ?? [0, 1], sy.factors);
     this.yAxes.set("y", {
       id: "y",
-      scale: makeScale(sy.type ?? "linear", sy.domain ?? [0, 1]),
+      scale: yScale,
       axis: new Axis(options.axes?.y),
       side: "left",
-      auto: sy.domain == null,
-      initial: sy.domain ?? null,
+      auto: !yCat && sy.domain == null,
+      initial: yCat ? yScale.domain : (sy.domain ?? null),
     });
 
     this.isDark = options.theme === "dark";
@@ -265,6 +378,11 @@ export class Plot {
           ? lightTheme
           : options.theme;
     this.baseMargin = { ...DEFAULT_MARGIN, ...options.margin };
+    this.bgFill = options.background;
+    this.borderFill = options.border;
+    this.title =
+      typeof options.title === "string" ? { text: options.title } : (options.title ?? null);
+    this.legend = options.legend === true ? {} : (options.legend || null);
     this.mode = options.mode ?? "pan";
     this.hoverEnabled = options.hover !== false;
     this.pickMode = options.pick ?? "x";
@@ -325,6 +443,23 @@ export class Plot {
     } as CSSStyleDeclaration);
     container.appendChild(this.infoBox);
 
+    // Legend (a DOM overlay like the tooltip; positioned inside the plot region).
+    this.legendDiv = document.createElement("div");
+    Object.assign(this.legendDiv.style, {
+      position: "absolute",
+      display: "none",
+      zIndex: "5",
+      pointerEvents: "none",
+      padding: "6px 8px",
+      borderRadius: "6px",
+      font: "12px system-ui, -apple-system, sans-serif",
+      lineHeight: "1.5",
+      background: this.isDark ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)",
+      color: this.isDark ? "#e2e8f0" : "#1e293b",
+      border: `1px solid ${this.isDark ? "rgba(148,163,184,0.25)" : "rgba(100,116,139,0.2)"}`,
+    } as CSSStyleDeclaration);
+    container.appendChild(this.legendDiv);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -368,7 +503,7 @@ export class Plot {
       else rightCount++;
     }
     return {
-      top: this.baseMargin.top,
+      top: this.baseMargin.top + (this.title ? TITLE_RESERVE : 0),
       bottom: this.baseMargin.bottom,
       left: this.baseMargin.left + Math.max(0, leftCount - 1) * Y_AXIS_GAP,
       right: this.baseMargin.right + rightCount * Y_AXIS_GAP,
@@ -461,6 +596,70 @@ export class Plot {
     return this.register(new BarLayer(this.gl, opts));
   }
 
+  /**
+   * Grouped (clustered) bars: one {@link BarLayer} per series, each shifted within
+   * its category group so the bars sit side by side. Returns the layers in order.
+   */
+  addGroupedBars(opts: GroupedBarOptions): BarLayer[] {
+    const m = opts.series.length;
+    if (m === 0) return [];
+    const groupWidth = opts.groupWidth ?? 0.8;
+    const slot = groupWidth / m;
+    const barWidth = slot * (1 - (opts.gap ?? 0.1));
+    const layers: BarLayer[] = [];
+    for (let s = 0; s < m; s++) {
+      const ser = opts.series[s]!;
+      // Center the cluster on each category: offsets are symmetric about 0.
+      const off = (s - (m - 1) / 2) * slot;
+      layers.push(
+        new BarLayer(this.gl, {
+          x: opts.x,
+          y: ser.y,
+          width: barWidth,
+          offset: off,
+          color: ser.color,
+          name: ser.name,
+          orientation: opts.orientation,
+          yAxis: opts.yAxis,
+        }),
+      );
+    }
+    for (const l of layers) this.register(l);
+    return layers;
+  }
+
+  /**
+   * Stacked bars: each series is drawn from the running cumulative total of the
+   * ones before it, so they stack. Returns the layers bottom-to-top.
+   */
+  addStackedBars(opts: StackedBarOptions): BarLayer[] {
+    const n = opts.x.length;
+    const cum = new Float64Array(n); // running baseline per category
+    const layers: BarLayer[] = [];
+    for (const ser of opts.series) {
+      const base = Float64Array.from(cum);
+      const top = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        top[i] = cum[i]! + (ser.y[i] ?? 0);
+        cum[i] = top[i]!;
+      }
+      layers.push(
+        new BarLayer(this.gl, {
+          x: opts.x,
+          y: top,
+          base,
+          width: opts.width,
+          color: ser.color,
+          name: ser.name,
+          orientation: opts.orientation,
+          yAxis: opts.yAxis,
+        }),
+      );
+    }
+    for (const l of layers) this.register(l);
+    return layers;
+  }
+
   addArea(opts: AreaOptions): AreaLayer {
     return this.register(new AreaLayer(this.gl, opts));
   }
@@ -495,6 +694,90 @@ export class Plot {
 
   addCandlestick(opts: CandlestickOptions): CandlestickLayer {
     return this.register(new CandlestickLayer(this.gl, opts));
+  }
+
+  /** Filled polygons (choropleth-capable). Rings are triangulated with earcut. */
+  addPatches(opts: PatchesOptions): PatchesLayer {
+    return this.register(new PatchesLayer(this.gl, opts));
+  }
+
+  /** A pie / donut chart. Set `equalAspect: true` on the plot so it stays circular. */
+  addPie(opts: PieOptions): PieLayer {
+    return this.register(new PieLayer(this.gl, opts));
+  }
+
+  /** An RGBA image / URL drawn over a data-space extent. URLs redraw on load. */
+  addImage(opts: ImageOptions): ImageLayer {
+    return this.register(
+      new ImageLayer(this.gl, {
+        ...opts,
+        onLoad: () => {
+          this.requestRender();
+          opts.onLoad?.();
+        },
+      }),
+    );
+  }
+
+  /**
+   * A node-link graph. Provide node `x`/`y`, or omit them (with `nodes`, or let the
+   * count be inferred from the edges) to auto-place with a force-directed layout.
+   */
+  addGraph(opts: GraphInput): GraphLayer {
+    let { x, y } = opts;
+    if (!x || !y) {
+      const n = opts.nodes ?? opts.edges.reduce((m, [a, b]) => Math.max(m, a, b), -1) + 1;
+      const layout = forceLayout(n, opts.edges);
+      x = layout.x;
+      y = layout.y;
+    }
+    return this.register(new GraphLayer(this.gl, { ...opts, x, y }));
+  }
+
+  /**
+   * Stacked area: each series is filled from the running cumulative total of the
+   * ones before it. Returns the layers bottom-to-top.
+   */
+  addStackedArea(opts: StackedAreaOptions): AreaLayer[] {
+    const n = opts.x.length;
+    const cum = new Float64Array(n);
+    const layers: AreaLayer[] = [];
+    for (const ser of opts.series) {
+      const base = Float64Array.from(cum);
+      const top = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        top[i] = cum[i]! + (ser.y[i] ?? 0);
+        cum[i] = top[i]!;
+      }
+      layers.push(
+        new AreaLayer(this.gl, { x: opts.x, y: top, base, color: ser.color, name: ser.name, yAxis: opts.yAxis }),
+      );
+    }
+    for (const l of layers) this.register(l);
+    return layers;
+  }
+
+  /**
+   * Add a Canvas2D annotation (span / band / box / label) drawn above the data.
+   * Returns a disposer that removes just this annotation.
+   */
+  addAnnotation(a: Annotation): () => void {
+    this.annotations.push(a);
+    this.requestRender();
+    return () => {
+      const i = this.annotations.indexOf(a);
+      if (i >= 0) {
+        this.annotations.splice(i, 1);
+        this.requestRender();
+      }
+    };
+  }
+
+  /** Remove all annotations. */
+  clearAnnotations(): void {
+    if (this.annotations.length === 0) return;
+    this.annotations = [];
+    this.requestRender();
   }
 
   /** Compute an STFT of `signal` and render it as a heatmap (time × frequency). */
@@ -541,14 +824,16 @@ export class Plot {
   /** Register an additional named y axis. Series opt in via `addLine({ yAxis })`. */
   addYAxis(id: string, opts: YAxisOptions = {}): void {
     if (this.yAxes.has(id)) throw new Error(`Y axis "${id}" already exists`);
-    const { type, domain, side, color, ...axisConfig } = opts;
+    const { type, domain, factors, side, color, ...axisConfig } = opts;
+    const cat = type === "categorical";
+    const scale = makeScale(type ?? "linear", domain ?? [0, 1], factors);
     this.yAxes.set(id, {
       id,
-      scale: makeScale(type ?? "linear", domain ?? [0, 1]),
+      scale,
       axis: new Axis(axisConfig),
       side: side ?? "right",
-      auto: domain == null,
-      initial: domain ?? null,
+      auto: !cat && domain == null,
+      initial: cat ? scale.domain : (domain ?? null),
       color,
     });
     this.autoscale();
@@ -670,6 +955,7 @@ export class Plot {
     this.selectionDiv.remove();
     this.tooltip.remove();
     this.infoBox.remove();
+    this.legendDiv.remove();
     for (const l of this.layers) l.dispose();
     this.container.removeChild(this.gridCanvas);
     this.container.removeChild(this.dataCanvas);
@@ -714,10 +1000,20 @@ export class Plot {
     const primary = this.primaryY();
     const ticksX = this.axisX.resolve(this.scaleX);
     const ticksYPrimary = primary.axis.resolve(primary.scale);
+    const styleX = resolveAxisStyle(this.axisX.config, this.theme);
+    const styleYPrimary = resolveAxisStyle(primary.axis.config, this.theme, primary.color);
 
     // Grid (behind data): x lines + primary-y lines only, to avoid clutter.
     this.gridCtx.clearRect(0, 0, layout.cssWidth, layout.cssHeight);
-    drawGrid(this.gridCtx, region, this.scaleX, primary.scale, ticksX, ticksYPrimary, this.theme);
+    if (this.borderFill) {
+      this.gridCtx.fillStyle = this.borderFill;
+      this.gridCtx.fillRect(0, 0, layout.cssWidth, layout.cssHeight);
+    }
+    if (this.bgFill) {
+      this.gridCtx.fillStyle = this.bgFill;
+      this.gridCtx.fillRect(region.left, region.top, region.width, region.height);
+    }
+    drawGrid(this.gridCtx, region, this.scaleX, primary.scale, ticksX, ticksYPrimary, styleX, styleYPrimary);
 
     // Data: render into the shared WebGL canvas (sized to this plot), then blit.
     const gl = this.gl;
@@ -763,20 +1059,26 @@ export class Plot {
 
     // Axes (above data).
     this.axisCtx.clearRect(0, 0, layout.cssWidth, layout.cssHeight);
-    drawXAxis(this.axisCtx, region, this.scaleX, ticksX, this.theme, this.axisX.config.title);
+    drawXAxis(this.axisCtx, region, this.scaleX, ticksX, styleX, this.axisX.config.title);
 
     const positions = this.yAxisPositions();
     for (const ya of this.yAxes.values()) {
       const pos = positions.get(ya.id)!;
       const ticks = ya.axis.resolve(ya.scale);
-      drawYAxis(this.axisCtx, region, ya.scale, ticks, this.theme, {
+      const styleY = ya === primary ? styleYPrimary : resolveAxisStyle(ya.axis.config, this.theme, ya.color);
+      drawYAxis(this.axisCtx, region, ya.scale, ticks, styleY, {
         x: pos.x,
         side: ya.side,
         title: ya.axis.config.title,
-        color: ya.color,
         titleX: pos.titleX,
       });
     }
+
+    // Plot title in the reserved top strip.
+    if (this.title) drawTitle(this.axisCtx, region, this.title, this.isDark);
+
+    // Annotations (span/band/box/label) above the data, clipped to the region.
+    if (this.annotations.length) this.renderAnnotations(region);
 
     // Both-axis guide lines while the pointer is pressed.
     if (this.crosshair && this.pressPx) {
@@ -793,6 +1095,132 @@ export class Plot {
 
     // Pinned point details (clicked, or hovered in "hover" mode).
     this.updateInfoBox(region);
+
+    // Legend of named series.
+    this.updateLegend(region);
+  }
+
+  /** Named series that can appear in the legend: any layer exposing name + colorCss. */
+  private legendEntries(): Array<{ name: string; colorCss: string }> {
+    const out: Array<{ name: string; colorCss: string }> = [];
+    for (const l of this.layers) {
+      const a = l as Partial<{ name: string; colorCss: string }>;
+      if (typeof a.name === "string" && a.name && typeof a.colorCss === "string") {
+        out.push({ name: a.name, colorCss: a.colorCss });
+      }
+    }
+    return out;
+  }
+
+  /** Rebuild and position the legend overlay (or hide it). */
+  private updateLegend(region: ReturnType<typeof plotRegion>): void {
+    const div = this.legendDiv;
+    const entries = this.legend ? this.legendEntries() : [];
+    if (!this.legend || entries.length === 0) {
+      div.style.display = "none";
+      return;
+    }
+    const cfg = this.legend;
+    if (cfg.background) div.style.background = cfg.background;
+    if (cfg.border) div.style.border = `1px solid ${cfg.border}`;
+    if (cfg.textColor) div.style.color = cfg.textColor;
+    if (cfg.font) div.style.font = cfg.font;
+    const horizontal = cfg.orientation === "horizontal";
+    div.style.display = "flex";
+    div.style.flexDirection = horizontal ? "row" : "column";
+    div.style.gap = horizontal ? "12px" : "3px";
+
+    div.replaceChildren();
+    for (const e of entries) {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "6px";
+      const swatch = document.createElement("span");
+      Object.assign(swatch.style, {
+        width: "10px",
+        height: "10px",
+        borderRadius: "2px",
+        background: e.colorCss,
+        flex: "0 0 auto",
+      } as CSSStyleDeclaration);
+      const label = document.createElement("span");
+      label.textContent = e.name;
+      row.appendChild(swatch);
+      row.appendChild(label);
+      div.appendChild(row);
+    }
+
+    // Position inside the plot region, inset from the chosen corner.
+    const inset = 8;
+    const pos = cfg.position ?? "top-right";
+    const w = div.offsetWidth;
+    const h = div.offsetHeight;
+    const left = pos.endsWith("left")
+      ? region.left + inset
+      : region.left + region.width - w - inset;
+    const top = pos.startsWith("top")
+      ? region.top + inset
+      : region.top + region.height - h - inset;
+    div.style.left = `${Math.max(0, left)}px`;
+    div.style.top = `${Math.max(0, top)}px`;
+  }
+
+  /** Draw all annotations, projected through the scales and clipped to the region. */
+  private renderAnnotations(region: ReturnType<typeof plotRegion>): void {
+    const ctx = this.axisCtx;
+    const left = region.left, right = region.left + region.width;
+    const top = region.top, bottom = region.top + region.height;
+    const yScaleOf = (id?: string): Scale => (this.yAxes.get(id ?? "y") ?? this.primaryY()).scale;
+    const px = (v: number): number => pxX(region, this.scaleX.norm(v));
+    const py = (s: Scale, v: number): number => pxY(region, s.norm(v));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, right - left, bottom - top);
+    ctx.clip();
+    for (const a of this.annotations) {
+      ctx.setLineDash([]);
+      if (a.type === "span") {
+        ctx.strokeStyle = a.color ?? this.theme.axis;
+        ctx.lineWidth = a.width ?? 1;
+        if (a.dash) ctx.setLineDash(a.dash);
+        ctx.beginPath();
+        if (a.dim === "x") {
+          const x = Math.round(px(a.value)) + 0.5;
+          ctx.moveTo(x, top); ctx.lineTo(x, bottom);
+        } else {
+          const y = Math.round(py(yScaleOf(a.yAxis), a.value)) + 0.5;
+          ctx.moveTo(left, y); ctx.lineTo(right, y);
+        }
+        ctx.stroke();
+      } else if (a.type === "band") {
+        ctx.fillStyle = a.color ?? "rgba(59,130,246,0.15)";
+        if (a.dim === "x") {
+          const x0 = px(a.from), x1 = px(a.to);
+          ctx.fillRect(Math.min(x0, x1), top, Math.abs(x1 - x0), bottom - top);
+        } else {
+          const s = yScaleOf(a.yAxis);
+          const y0 = py(s, a.from), y1 = py(s, a.to);
+          ctx.fillRect(left, Math.min(y0, y1), right - left, Math.abs(y1 - y0));
+        }
+      } else if (a.type === "box") {
+        const s = yScaleOf(a.yAxis);
+        const x0 = px(a.x[0]), x1 = px(a.x[1]);
+        const y0 = py(s, a.y[0]), y1 = py(s, a.y[1]);
+        const rx = Math.min(x0, x1), ry = Math.min(y0, y1);
+        const rw = Math.abs(x1 - x0), rh = Math.abs(y1 - y0);
+        if (a.color) { ctx.fillStyle = a.color; ctx.fillRect(rx, ry, rw, rh); }
+        if (a.border) { ctx.strokeStyle = a.border; ctx.lineWidth = 1; ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh); }
+      } else {
+        const s = yScaleOf(a.yAxis);
+        ctx.fillStyle = a.color ?? this.theme.text;
+        ctx.font = a.font ?? this.theme.font;
+        ctx.textAlign = a.align ?? "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(a.text, px(a.x), py(s, a.y));
+      }
+    }
+    ctx.restore();
   }
 
   private renderHover(region: ReturnType<typeof plotRegion>): void {

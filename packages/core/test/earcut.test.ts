@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { earcut } from "../src/earcut.js";
+import { earcut } from "../src/geo/earcut.js";
 
 /** Sum of |triangle| areas produced for a flat coord array + index list. */
 function triangulatedArea(data: number[], tris: number[]): number {
@@ -82,8 +82,7 @@ describe("earcut", () => {
     expect(triangulatedArea(data, tris)).toBeCloseTo(expected, 4);
   });
 
-  it("triangulates a larger random-ish convex polygon exactly", () => {
-    // Regular octagon, area = 2(1+√2)·s² with s the side; verify via shoelace.
+  it("triangulates a regular octagon exactly", () => {
     const pts: number[] = [];
     const N = 8;
     for (let k = 0; k < N; k++) {

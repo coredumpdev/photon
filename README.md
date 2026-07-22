@@ -4,7 +4,7 @@
 
 <p align="center">
   <b>GPU-accelerated scientific plotting for the web.</b><br/>
-  One framework-agnostic core · thin React, Vue &amp; Svelte bindings · millions of points at 60fps.
+  One framework-agnostic core · React, Vue, Svelte, Solid &amp; Gea bindings · millions of points at 60fps.
 </p>
 
 <p align="center">
@@ -33,10 +33,12 @@ thousand points. Photon renders **geometry on the GPU** and draws the axes,
 ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 **sharp text**.
 
-- ⚡ **Fast** — instanced WebGL2 rendering + min/max decimation; millions of points stay interactive.
-- 🔬 **Scientific** — log & time scales, custom ticks, multiple Y axes, error-free float precision for timestamps.
-- 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic React / Vue / Svelte wrappers.
-- 📈 **Batteries included** — line, scatter, bar, area, step, histogram, box, violin, heatmap, contour, hexbin, spectrogram, polar, and **3D**.
+- ⚡ **Fast** — instanced WebGL2 rendering + min/max decimation (GPU above 200k pts); millions of points stay interactive. LUT-backed colormaps, benchmarked (`pnpm bench`).
+- 🔬 **Scientific** — linear/log/time **and categorical** scales, custom ticks, multiple Y axes, error-free float precision for timestamps.
+- 📈 **Batteries included** — line, step, scatter (marker glyphs), bar (grouped/stacked/horizontal), area (+ stacked), histogram, box, violin, heatmap, contour, hexbin, spectrogram, **pie/donut**, **patches/polygons**, **graph/network**, **image**, **annotations** (span/band/box/label), polar, and a full **3D** suite.
+- 🎨 **Fully styleable** — Bokeh-like flat props: `background`, `title`, `legend`, and per-axis line/tick/label/grid color, font & label rotation.
+- 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers.
+- 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.
 - 🗺️ **Maps** — [`@photonviz/map`](./packages/map) renders a Web Mercator vector basemap **from scratch** (MVT + PMTiles + GeoJSON), works **fully offline**, no Mapbox / MapLibre / Leaflet.
 - 🌊 **Streaming-ready** — `setData()` re-uploads GPU buffers for real-time dashboards.
 - 🖼️ **Many charts, one context** — a single shared WebGL2 context backs every chart, so a page can hold dozens without exhausting the browser's context limit.
@@ -54,7 +56,7 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 ```bash
 npm i @photonviz/core
 # framework bindings (optional)
-npm i @photonviz/react     # or @photonviz/vue, @photonviz/svelte
+npm i @photonviz/react     # or @photonviz/vue, @photonviz/svelte, @photonviz/solid, @photonviz/gea
 # vector maps (optional)
 npm i @photonviz/map
 ```
@@ -129,24 +131,78 @@ defineProps<{ x: Float64Array; y: Float64Array }>();
 ```
 </details>
 
+<details><summary><b>Solid</b> — <code>@photonviz/solid</code></summary>
+
+```tsx
+import { Plot, Line, Scatter } from "@photonviz/solid";
+
+export function Chart(props: { x: Float64Array; y: () => Float64Array }) {
+  return (
+    <div style={{ height: "320px" }}>
+      <Plot options={{ theme: "dark" }}>
+        <Line x={props.x} y={props.y()} color="#60a5fa" width={2} name="signal" />
+        <Scatter x={props.x} y={props.y()} size={4} marker="diamond" />
+      </Plot>
+    </div>
+  );
+}
+// Pass a signal to a data prop to stream — the layer re-uploads via setData.
+```
+</details>
+
+<details><summary><b>Gea</b> — <code>@photonviz/gea</code></summary>
+
+```tsx
+import { Component } from "@geajs/core";
+import { Plot } from "@photonviz/gea";
+
+export default class Chart extends Component {
+  template() {
+    return (
+      <div style="height:320px">
+        <Plot options={{ theme: "dark" }} series={[{ type: "line", x: this.props.x, y: this.props.y, color: "#60a5fa" }]} />
+      </div>
+    );
+  }
+}
+// Config-driven (Gea has no context API); stream via the onReady handle.
+```
+</details>
+
 ## Chart types
 
 | Type | API | Notes |
 | --- | --- | --- |
-| Line | `plot.addLine({ x, y, color, width })` | Real thick lines + round joins/caps (GPU) |
+| Line | `plot.addLine({ x, y, color, width })` | Real thick lines + round/miter/bevel joins (GPU) |
 | Step | `plot.addLine({ …, step: "before" \| "after" \| "center" })` | Line variant |
-| Scatter | `plot.addScatter({ x, y, size, colorBy })` | Instanced; `colorBy` maps a colormap |
-| Bar | `plot.addBar({ x, y, width, offset, base })` | `offset` → grouped, `base` → stacked |
-| Area | `plot.addArea({ x, y, base })` | `base` → stacked |
+| Scatter | `plot.addScatter({ x, y, size, marker, colorBy })` | Instanced; `marker`: circle/square/triangle/diamond/cross/plus |
+| Bar | `plot.addBar({ x, y, width, offset, base, orientation })` | `orientation:"h"` → horizontal |
+| Grouped / stacked bars | `plot.addGroupedBars({ x, series })` · `plot.addStackedBars(...)` | Categorical clusters / stacks |
+| Area / stacked | `plot.addArea({ x, y, base })` · `plot.addStackedArea({ x, series })` | Cumulative bands |
 | Histogram | `plot.addHistogram(values, { bins })` | CPU binning → bars |
-| Box | `plot.addBox({ groups })` | Tukey quartiles, whiskers, outliers |
-| Violin | `plot.addBox({ groups, violin: true, box: false })` | Gaussian KDE |
-| Heatmap | `plot.addHeatmap({ values, cols, rows, extent, colormap })` | Texture-backed |
+| Box / Violin | `plot.addBox({ groups, violin? })` | Tukey quartiles + whiskers / Gaussian KDE |
+| Heatmap / Image | `plot.addHeatmap({ values, cols, rows, extent })` · `plot.addImage({ source, extent })` | Texture-backed; RGBA / URL |
 | Contour | `plot.addContour({ values, cols, rows, extent, levels })` | Marching squares |
 | Hexbin | `plot.addHexbin({ x, y, radius, colormap })` | Density aggregation |
+| Pie / Donut | `plot.addPie({ values, innerRadius?, colormap? })` | Wedges (set `equalAspect`) |
+| Patches | `plot.addPatches({ patches, colormap? })` | Filled polygons (earcut), choropleth |
+| Graph | `plot.addGraph({ edges, nodes? })` | Node-link; auto force layout |
+| Annotations | `plot.addAnnotation({ type: "span" \| "band" \| "box" \| "label", … })` | Canvas2D overlay |
 | Spectrogram | `plot.addHeatmapSpectrogram(signal, { fftSize, hop, sampleRate })` | STFT → heatmap |
 
 Colormaps: `viridis`, `plasma`, `coolwarm`, `grayscale`.
+
+### Styling & config — Bokeh-like flat props
+
+```ts
+new Plot(el, {
+  background: "#0b1220",              // plot-region fill  (+ border for the margins)
+  title: { text: "Revenue", align: "left" },
+  legend: { position: "top-right" }, // named series with color swatches
+  scales: { x: { type: "categorical", factors: ["Jan", "Feb", "Mar"] } },
+  axes: { x: { labelRotation: 40, gridColor: "rgba(148,163,184,.1)", gridDash: [3, 3] } },
+});
+```
 
 ### Polar — `PolarPlot`
 
@@ -161,11 +217,19 @@ p.addScatter({ theta, r, size: 6 });
 
 ```ts
 import { Plot3D } from "@photonviz/core";
-const p = new Plot3D(el);
-p.addSurface({ values, cols, rows, extentX, extentZ, colormap });  // z = f(x, y)
-p.addPointCloud({ x, y, z, size, colorBy });                       // 3D scatter
-// drag to orbit · wheel to zoom · data auto-normalized into a unit cube
+const p = new Plot3D(el, { title: "Field", legend: true, autoRotate: true });
+p.addSurface({ values, cols, rows, extentX, extentZ, colormap, wireframe });  // z = f(x, y)
+p.addPointCloud({ x, y, z, sizes, labels, colorBy });                          // 3D scatter
+p.addBar3D({ x, z, y, colorBy });                                              // 3D bars
+p.addLine3D({ x, y, z });  p.addQuiver3D({ x, y, z, u, v, w });                // paths / vectors
+p.addContour3D({ values, cols, rows, levels });                                // iso-height rings
+p.addIsosurface({ values, dims, isoLevel });                                   // marching cubes
+p.addVolume({ values, dims, colormap, density });                             // GPU raymarch
+// drag to orbit · wheel to zoom · hover for a point tooltip + ring · ⌂ resets the view
 ```
+
+3D plots get a colorbar (colormapped layers), legend, canvas title, back-wall grid
+planes, and optional `autoRotate` — all as flat `Plot3DOptions`.
 
 ## Maps — `@photonviz/map`
 
@@ -205,8 +269,8 @@ const hit = map.pickFeature(worldX, worldY);   // { layer, properties } | null
 - **Interactive** — `equalAspect` (no distortion), `boundedPan`, feature picking,
   thick roads/borders, styled by tile-layer + properties.
 
-Wrapped for every framework too: `<Map>` / `<GeoJson>` (React, Vue) and
-`{ type: "map" }` / `{ type: "geojson" }` series (Svelte).
+Wrapped for every framework too: `<Map>` / `<GeoJson>` (React, Vue, Solid) and
+`{ type: "map" }` / `{ type: "geojson" }` series (Svelte, Gea).
 
 ## Custom ticks
 
@@ -254,20 +318,24 @@ function frame() {
 | [`@photonviz/react`](./packages/react) | React components + `usePlot` hook |
 | [`@photonviz/vue`](./packages/vue) | Vue components (provide/inject) |
 | [`@photonviz/svelte`](./packages/svelte) | Svelte `use:plot` action |
+| [`@photonviz/solid`](./packages/solid) | Solid.js components (JSX-free source) |
+| [`@photonviz/gea`](./packages/gea) | [Gea](https://github.com/dashersw/gea) components (config-driven) |
 
 Every chart type, `PolarPlot`, `Plot3D`, and the map layers are wrapped in all
-three frameworks. Runnable examples: [`examples/react`](./examples/react),
-[`examples/vue`](./examples/vue), [`examples/svelte`](./examples/svelte).
+five frameworks. Runnable examples: [`examples/react`](./examples/react),
+[`examples/vue`](./examples/vue), [`examples/svelte`](./examples/svelte),
+[`examples/solid`](./examples/solid), [`examples/gea`](./examples/gea).
 
 ## Development
 
 ```bash
 pnpm install
 pnpm test        # unit tests (vitest)
+pnpm bench       # micro-benchmarks of the pure hot paths (vitest bench)
 pnpm typecheck   # strict tsc across packages
 pnpm build       # build all packages (tsup)
 pnpm example     # live gallery (vite)
-pnpm example:react   # React example  (also :vue, :svelte)
+pnpm example:react   # React example  (also :vue, :svelte, :solid, :gea)
 ```
 
 The vanilla gallery also has dedicated pages: `/map.html` (vector tiles),
@@ -282,12 +350,15 @@ are labeled [`good first issue`](https://github.com/coredumpdev/photon/labels/go
 
 ## Roadmap
 
-- [x] 2D core, thick lines, log/time scales, hover/tooltip, multiple Y axes
+- [x] 2D core, thick lines, log/time/**categorical** scales, hover/tooltip, multiple Y axes
+- [x] Full styling/config — background, title, **legend**, per-axis line/tick/label/grid styling
 - [x] Statistical (histogram, box/violin, heatmap), contour, hexbin, spectrogram
-- [x] 3D (surface, point cloud), polar, streaming, shared context
-- [x] React / Vue / Svelte bindings (every chart type, polar, 3D, and maps)
-- [x] 3D axes/ticks & lighting controls
-- [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation
+- [x] Pie/donut, patches/polygons, graph/network, image, annotations (span/band/box/label)
+- [x] Bars — grouped / stacked / horizontal; stacked area; scatter marker glyphs
+- [x] 3D suite — surface (+wireframe), scatter, line, bars, quiver, contour, isosurface, **volume raymarch**
+- [x] 3D chrome — legend, colorbar, title, hover tooltip+ring, grid planes, reset, auto-rotate
+- [x] React / Vue / Svelte / **Solid** / **Gea** bindings (every chart type, polar, 3D, and maps)
+- [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation, LUT colormaps
 - [x] Vector maps — `@photonviz/map` (MVT + PMTiles + GeoJSON, offline, feature picking)
 - [ ] Map text labels (glyph atlas + collision)
 - [ ] WebGPU backend exploration

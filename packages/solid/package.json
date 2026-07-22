@@ -1,0 +1,55 @@
+{
+  "name": "@photonviz/solid",
+  "version": "0.3.0",
+  "description": "Solid.js bindings for Photon — WebGL2 scientific plotting",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@photonviz/core": "workspace:*",
+    "@photonviz/map": "workspace:*"
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.6"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.3"
+  },
+  "keywords": [
+    "solid",
+    "solidjs",
+    "webgl2",
+    "plot",
+    "chart",
+    "photon",
+    "visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/solid"
+  },
+  "homepage": "https://github.com/coredumpdev/photon#readme",
+  "author": "Muzaffer Tolga Yakar <muzaffertolgayakar@gmail.com>",
+  "bugs": "https://github.com/coredumpdev/photon/issues",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

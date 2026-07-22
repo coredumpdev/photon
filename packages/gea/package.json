@@ -1,0 +1,57 @@
+{
+  "name": "@photonviz/gea",
+  "version": "0.3.0",
+  "description": "Gea (@geajs/core) bindings for Photon — WebGL2 scientific plotting",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@photonviz/core": "workspace:*",
+    "@photonviz/map": "workspace:*"
+  },
+  "peerDependencies": {
+    "@geajs/core": ">=1.4.0"
+  },
+  "devDependencies": {
+    "@geajs/core": "^1.4.0",
+    "@geajs/vite-plugin": "^1.4.1",
+    "tsdown": "^0.22.0"
+  },
+  "keywords": [
+    "gea",
+    "geajs",
+    "webgl2",
+    "plot",
+    "chart",
+    "photon",
+    "visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/gea"
+  },
+  "homepage": "https://github.com/coredumpdev/photon#readme",
+  "author": "Muzaffer Tolga Yakar <muzaffertolgayakar@gmail.com>",
+  "bugs": "https://github.com/coredumpdev/photon/issues",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

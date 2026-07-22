@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormapLUT, type ColormapName } from "../color/colormap.js";
 import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Range } from "../types.js";
@@ -75,7 +75,7 @@ export class HeatmapLayer implements Layer {
 
     // Bake values into an RGBA texture via the colormap.
     const { cols, rows, values } = opts;
-    const cmap = colormap(opts.colormap ?? "viridis");
+    const lut = colormapLUT(opts.colormap ?? "viridis");
     let lo = opts.domain?.[0] ?? Infinity;
     let hi = opts.domain?.[1] ?? -Infinity;
     if (!opts.domain) {
@@ -87,11 +87,14 @@ export class HeatmapLayer implements Layer {
     }
     const span = hi - lo || 1;
     const pixels = new Uint8Array(cols * rows * 4);
+    // Direct LUT indexing — no per-cell closure call or tuple allocation.
     for (let i = 0; i < cols * rows; i++) {
-      const [r, g, b] = cmap((values[i]! - lo) / span);
-      pixels[i * 4] = Math.round(r * 255);
-      pixels[i * 4 + 1] = Math.round(g * 255);
-      pixels[i * 4 + 2] = Math.round(b * 255);
+      let t = (values[i]! - lo) / span;
+      t = t <= 0 ? 0 : t >= 1 ? 1 : t;
+      const j = ((t * 255) | 0) * 3;
+      pixels[i * 4] = (lut[j]! * 255 + 0.5) | 0;
+      pixels[i * 4 + 1] = (lut[j + 1]! * 255 + 0.5) | 0;
+      pixels[i * 4 + 2] = (lut[j + 2]! * 255 + 0.5) | 0;
       pixels[i * 4 + 3] = 255;
     }
 

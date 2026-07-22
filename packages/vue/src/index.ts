@@ -10,8 +10,18 @@ import {
   type ErrorBarOptions,
   type HeatmapOptions,
   type HexbinOptions,
+  type Annotation as AnnotationSpec,
+  type Bar3DOptions,
+  type Contour3DOptions,
+  type GraphInput,
+  type ImageOptions,
+  type IsosurfaceOptions,
   type Layer,
+  type Line3DOptions,
   type LineOptions,
+  type PatchesOptions,
+  type Quiver3DOptions,
+  type PieOptions,
   type PlotOptions,
   type Plot3DOptions,
   type PointCloudOptions,
@@ -23,6 +33,7 @@ import {
   type ScatterOptions,
   type StemOptions,
   type SurfaceOptions,
+  type VolumeOptions,
   type YAxisOptions,
 } from "@photonviz/core";
 import { addGeoJson, addMap, type GeoJsonOptions, type MapOptions } from "@photonviz/map";
@@ -124,13 +135,13 @@ export const Scatter = defineComponent({
   name: "PhotonScatter",
   props: {
     x: arr(), y: arr(),
-    color: opt<ScatterOptions["color"]>(), size: opt<number>(), name: opt<string>(),
-    yAxis: opt<string>(), colorBy: opt<ScatterOptions["colorBy"]>(),
+    color: opt<ScatterOptions["color"]>(), size: opt<number>(), marker: opt<ScatterOptions["marker"]>(),
+    name: opt<string>(), yAxis: opt<string>(), colorBy: opt<ScatterOptions["colorBy"]>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addScatter({ x: props.x, y: props.y, color: props.color, size: props.size, name: props.name, yAxis: props.yAxis, colorBy: props.colorBy }),
-      () => [props.color, props.size, props.name, props.yAxis, props.colorBy],
+      (p) => p.addScatter({ x: props.x, y: props.y, color: props.color, size: props.size, marker: props.marker, name: props.name, yAxis: props.yAxis, colorBy: props.colorBy }),
+      () => [props.color, props.size, props.marker, props.name, props.yAxis, props.colorBy],
       () => [props.x, props.y],
       (l) => l.setData(props.x, props.y),
     );
@@ -143,12 +154,13 @@ export const Bar = defineComponent({
   props: {
     x: arr(), y: arr(),
     base: opt<BarOptions["base"]>(), width: opt<number>(), offset: opt<number>(),
+    orientation: opt<BarOptions["orientation"]>(),
     color: opt<BarOptions["color"]>(), name: opt<string>(), yAxis: opt<string>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addBar({ x: props.x, y: props.y, base: props.base, width: props.width, offset: props.offset, color: props.color, name: props.name, yAxis: props.yAxis }),
-      () => [props.width, props.offset, props.color, props.name, props.yAxis],
+      (p) => p.addBar({ x: props.x, y: props.y, base: props.base, width: props.width, offset: props.offset, orientation: props.orientation, color: props.color, name: props.name, yAxis: props.yAxis }),
+      () => [props.width, props.offset, props.orientation, props.color, props.name, props.yAxis],
       () => [props.x, props.y, props.base],
       (l) => l.setData(props.x, props.y, props.base),
     );
@@ -425,6 +437,119 @@ export const Candlestick = defineComponent({
   },
 });
 
+export const Pie = defineComponent({
+  name: "PhotonPie",
+  props: {
+    values: arr(),
+    colors: opt<PieOptions["colors"]>(),
+    colormap: opt<PieOptions["colormap"]>(),
+    center: opt<PieOptions["center"]>(),
+    radius: opt<number>(),
+    innerRadius: opt<number>(),
+    startAngle: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => p.addPie({ values: props.values, colors: props.colors, colormap: props.colormap, center: props.center, radius: props.radius, innerRadius: props.innerRadius, startAngle: props.startAngle, name: props.name, yAxis: props.yAxis }),
+      () => [props.values, props.colors, props.colormap, props.center, props.radius, props.innerRadius, props.startAngle, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const Patches = defineComponent({
+  name: "PhotonPatches",
+  props: {
+    patches: { type: Array as PropType<PatchesOptions["patches"]>, required: true },
+    color: opt<PatchesOptions["color"]>(),
+    colormap: opt<PatchesOptions["colormap"]>(),
+    domain: opt<PatchesOptions["domain"]>(),
+    opacity: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => p.addPatches({ patches: props.patches, color: props.color, colormap: props.colormap, domain: props.domain, opacity: props.opacity, name: props.name, yAxis: props.yAxis }),
+      () => [props.patches, props.color, props.colormap, props.domain, props.opacity, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const Image = defineComponent({
+  name: "PhotonImage",
+  props: {
+    source: { type: [Object, String] as unknown as PropType<ImageOptions["source"]>, required: true },
+    extent: { type: Object as PropType<ImageOptions["extent"]>, required: true },
+    smooth: opt<boolean>(), opacity: opt<number>(), name: opt<string>(), yAxis: opt<string>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => p.addImage({ source: props.source, extent: props.extent, smooth: props.smooth, opacity: props.opacity, name: props.name, yAxis: props.yAxis }),
+      () => [props.source, props.extent, props.smooth, props.opacity, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const Graph = defineComponent({
+  name: "PhotonGraph",
+  props: {
+    edges: { type: Array as PropType<GraphInput["edges"]>, required: true },
+    x: opt<GraphInput["x"]>(), y: opt<GraphInput["y"]>(), nodes: opt<number>(),
+    nodeColor: opt<GraphInput["nodeColor"]>(), edgeColor: opt<GraphInput["edgeColor"]>(),
+    nodeSize: opt<number>(), name: opt<string>(), yAxis: opt<string>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => p.addGraph({ edges: props.edges, x: props.x, y: props.y, nodes: props.nodes, nodeColor: props.nodeColor, edgeColor: props.edgeColor, nodeSize: props.nodeSize, name: props.name, yAxis: props.yAxis }),
+      () => [props.edges, props.x, props.y, props.nodes, props.nodeColor, props.edgeColor, props.nodeSize, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const Annotation = defineComponent({
+  name: "PhotonAnnotation",
+  props: {
+    type: { type: String as PropType<AnnotationSpec["type"]>, required: true },
+    dim: opt<"x" | "y">(),
+    value: opt<number>(), from: opt<number>(), to: opt<number>(),
+    x: opt<unknown>(), y: opt<unknown>(), text: opt<string>(),
+    color: opt<string>(), border: opt<string>(), width: opt<number>(),
+    dash: opt<number[]>(), font: opt<string>(), align: opt<"left" | "center" | "right">(),
+    yAxis: opt<string>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Annotation> must be used inside <Plot>");
+    let remove: (() => void) | null = null;
+    const apply = () => {
+      const p = plotRef.value;
+      if (p) remove = p.addAnnotation({ ...props } as unknown as AnnotationSpec);
+    };
+    onMounted(apply);
+    onUnmounted(() => remove?.());
+    watch(
+      () => ({ ...props }),
+      () => { remove?.(); apply(); },
+      { deep: true },
+    );
+    return () => null;
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Polar plot — a separate core class with its own container + provide/inject.
 // ---------------------------------------------------------------------------
@@ -575,10 +700,104 @@ export const PointCloud = defineComponent({
     x: arr(), y: arr(), z: arr(),
     color: opt<PointCloudOptions["color"]>(),
     size: opt<number>(),
+    sizes: opt<PointCloudOptions["sizes"]>(),
     colorBy: opt<PointCloudOptions["colorBy"]>(),
+    labels: opt<PointCloudOptions["labels"]>(),
+    name: opt<string>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addPointCloud({ x: props.x, y: props.y, z: props.z, color: props.color, size: props.size, colorBy: props.colorBy }));
+    usePlot3DLayer((p) => p.addPointCloud({ x: props.x, y: props.y, z: props.z, color: props.color, size: props.size, sizes: props.sizes, colorBy: props.colorBy, labels: props.labels, name: props.name }));
+    return () => null;
+  },
+});
+
+export const Line3D = defineComponent({
+  name: "PhotonLine3D",
+  props: {
+    x: arr(), y: arr(), z: arr(),
+    color: opt<Line3DOptions["color"]>(), name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addLine3D({ x: props.x, y: props.y, z: props.z, color: props.color, name: props.name }));
+    return () => null;
+  },
+});
+
+export const Bar3D = defineComponent({
+  name: "PhotonBar3D",
+  props: {
+    x: arr(), y: arr(), z: arr(),
+    width: opt<number>(), color: opt<Bar3DOptions["color"]>(),
+    colorBy: opt<Bar3DOptions["colorBy"]>(), name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addBar3D({ x: props.x, y: props.y, z: props.z, width: props.width, color: props.color, colorBy: props.colorBy, name: props.name }));
+    return () => null;
+  },
+});
+
+export const Quiver3D = defineComponent({
+  name: "PhotonQuiver3D",
+  props: {
+    x: arr(), y: arr(), z: arr(), u: arr(), v: arr(), w: arr(),
+    scale: opt<number>(), color: opt<Quiver3DOptions["color"]>(),
+    colorBy: opt<Quiver3DOptions["colorBy"]>(), headSize: opt<number>(), name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addQuiver3D({ x: props.x, y: props.y, z: props.z, u: props.u, v: props.v, w: props.w, scale: props.scale, color: props.color, colorBy: props.colorBy, headSize: props.headSize, name: props.name }));
+    return () => null;
+  },
+});
+
+export const Contour3D = defineComponent({
+  name: "PhotonContour3D",
+  props: {
+    values: arr(),
+    cols: { type: Number, required: true },
+    rows: { type: Number, required: true },
+    extentX: opt<Contour3DOptions["extentX"]>(),
+    extentZ: opt<Contour3DOptions["extentZ"]>(),
+    levels: opt<Contour3DOptions["levels"]>(),
+    color: opt<Contour3DOptions["color"]>(),
+    colormap: opt<Contour3DOptions["colormap"]>(),
+    name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addContour3D({ values: props.values, cols: props.cols, rows: props.rows, extentX: props.extentX, extentZ: props.extentZ, levels: props.levels, color: props.color, colormap: props.colormap, name: props.name }));
+    return () => null;
+  },
+});
+
+export const Isosurface = defineComponent({
+  name: "PhotonIsosurface",
+  props: {
+    values: arr(),
+    dims: { type: Array as unknown as PropType<IsosurfaceOptions["dims"]>, required: true },
+    isoLevel: { type: Number, required: true },
+    extent: opt<IsosurfaceOptions["extent"]>(),
+    color: opt<IsosurfaceOptions["color"]>(),
+    opacity: opt<number>(),
+    name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addIsosurface({ values: props.values, dims: props.dims, isoLevel: props.isoLevel, extent: props.extent, color: props.color, opacity: props.opacity, name: props.name }));
+    return () => null;
+  },
+});
+
+export const Volume = defineComponent({
+  name: "PhotonVolume",
+  props: {
+    values: arr(),
+    dims: { type: Array as unknown as PropType<VolumeOptions["dims"]>, required: true },
+    extent: opt<VolumeOptions["extent"]>(),
+    colormap: opt<VolumeOptions["colormap"]>(),
+    domain: opt<VolumeOptions["domain"]>(),
+    density: opt<number>(),
+    name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addVolume({ values: props.values, dims: props.dims, extent: props.extent, colormap: props.colormap, domain: props.domain, density: props.density, name: props.name }));
     return () => null;
   },
 });
