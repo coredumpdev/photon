@@ -1,5 +1,5 @@
 export { Plot } from "./plot.js";
-export type { PlotOptions, AxisScaleOptions, YAxisOptions } from "./plot.js";
+export type { PlotOptions, AxisScaleOptions, YAxisOptions, HoverReadoutRow } from "./plot.js";
 
 export { createToolbar } from "./ui/toolbar.js";
 export type { ToolbarHost, ToolbarTheme } from "./ui/toolbar.js";
@@ -30,6 +30,7 @@ export type { QuiverOptions } from "./layers/quiver.js";
 export { CandlestickLayer } from "./layers/candlestick.js";
 export type { CandlestickOptions } from "./layers/candlestick.js";
 export type { Layer, DrawState } from "./layers/layer.js";
+export type { PickMode } from "./layers/pick.js";
 
 // Polar
 export { PolarPlot } from "./polar/polar.js";
@@ -55,6 +56,14 @@ export type { Scale, ScaleType } from "./scales/scale.js";
 // Stats
 export { histogram, boxStats, quantileSorted, kde, fft, spectrogram } from "./stats/index.js";
 export type { Histogram, BoxStats, Density, Spectrogram } from "./stats/index.js";
+
+// GL toolkit — building blocks for custom layers (used by @photonviz/map, etc.)
+export { createProgram, uniformLocations } from "./gl/program.js";
+export {
+  setTransformUniforms,
+  TRANSFORM_GLSL,
+  TRANSFORM_UNIFORMS,
+} from "./gl/transform.js";
 
 // Color
 export { colormap } from "./color/colormap.js";

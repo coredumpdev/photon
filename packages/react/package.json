@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/react",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "React bindings for Photon — WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@photonviz/core": "workspace:*"
+    "@photonviz/core": "workspace:*",
+    "@photonviz/map": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18"

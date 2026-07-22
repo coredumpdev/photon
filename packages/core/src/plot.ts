@@ -19,6 +19,7 @@ import { histogram, spectrogram } from "./stats/index.js";
 import {
   darkTheme,
   drawCrosshair,
+  drawCrosshairXY,
   drawGrid,
   drawMarker,
   drawXAxis,
@@ -30,6 +31,7 @@ import {
   type Layout,
   type Theme,
 } from "./render/overlay.js";
+import type { PickMode } from "./layers/pick.js";
 import { LinearScale, makeScale, type Scale, type ScaleType } from "./scales/scale.js";
 import { createToolbar } from "./ui/toolbar.js";
 import type { AxisConfig, Dim, InteractionMode, Range } from "./types.js";
@@ -49,6 +51,12 @@ export interface YAxisOptions extends AxisConfig {
   color?: string;
 }
 
+/** One line of the hover tooltip header, produced by {@link PlotOptions.hoverReadout}. */
+export interface HoverReadoutRow {
+  label: string;
+  value: string;
+}
+
 export interface PlotOptions {
   scales?: { x?: AxisScaleOptions; y?: AxisScaleOptions };
   axes?: { x?: AxisConfig; y?: AxisConfig };
@@ -57,11 +65,47 @@ export interface PlotOptions {
   /** Enable wheel-zoom and drag interaction. Default true. */
   interactive?: boolean;
   /** Show the built-in toolbar (home + pan/box/X/Y zoom modes). Default true. */
-  toolbar?: boolean;
-  /** Initial interaction mode. Default `"box"`. */
+  showToolbar?: boolean;
+  /** Initial interaction mode. Default `"pan"`. */
   mode?: InteractionMode;
   /** Enable hover crosshair + tooltip. Default true. */
   hover?: boolean;
+  /**
+   * How hover selects the highlighted point: `"x"` nearest by x (classic),
+   * `"y"` nearest by y, or `"xy"` nearest by 2D distance — the last checks both
+   * axes, which is what a scatter/map needs. Default `"x"`.
+   */
+  pick?: PickMode;
+  /**
+   * When a point's pinned detail box appears: `"click"` pins it on click (until
+   * you click empty space), `"hover"` shows it while the cursor is over a point.
+   * Default `"click"`.
+   */
+  pointInfo?: "hover" | "click";
+  /**
+   * Show dashed guide lines on *both* the X and Y axes at the cursor — on hover
+   * and while the pointer is pressed. When false, hover shows only the vertical
+   * (X) line and there are no press guides. Default true.
+   */
+  crosshair?: boolean;
+  /**
+   * Keep data-units-per-pixel equal on both axes so nothing is distorted (the
+   * looser axis is expanded to match). Essential for maps. Default false.
+   */
+  equalAspect?: boolean;
+  /**
+   * Constrain panning/zooming so the view can't move outside the data bounds
+   * (the union of all layers' extents). Zoom still works; the view is just
+   * kept inside the limits. Default false (a map turns it on).
+   */
+  boundedPan?: boolean;
+  /**
+   * Customize the tooltip header shown on hover. Given the cursor's data-space
+   * X and Y (primary y axis), return the lines to display above the series
+   * rows — e.g. a map converts world coords to `lon`/`lat`. When omitted, the
+   * header is the default single `x = …` line. Default undefined.
+   */
+  hoverReadout?: (dataX: number, dataY: number) => HoverReadoutRow[];
 }
 
 interface YAxisState {
@@ -82,10 +126,17 @@ interface Pickable {
   readonly name: string;
   readonly colorCss: string;
   readonly yAxis: string;
-  nearestByX(x: number): { x: number; y: number; index: number } | null;
+  pick(
+    mode: PickMode,
+    cursorPx: number,
+    cursorPy: number,
+    project: (x: number, y: number) => [number, number],
+  ): { x: number; y: number; index: number } | null;
+  /** Optional user-supplied detail lines for a point index (click info). */
+  infoAt?(index: number): string[] | null;
 }
 function isPickable(layer: Layer): layer is Layer & Pickable {
-  return typeof (layer as Partial<Pickable>).nearestByX === "function";
+  return typeof (layer as Partial<Pickable>).pick === "function";
 }
 
 /** Pad a data range for autoscaling — linearly, or multiplicatively for log axes. */
@@ -99,6 +150,25 @@ function padDomain(min: number, max: number, log: boolean, frac: number): Range 
   }
   const pad = (max - min) * frac || 1;
   return [min - pad, max + pad];
+}
+
+/**
+ * Translate `[lo,hi]` so it sits within data bounds `[dlo,dhi]` **without
+ * changing its span** (so zoom level / aspect are preserved). When the view is
+ * wider than the data, the data band is kept fully inside the view instead.
+ */
+function clampAxis(domain: Range, bounds: Range): Range {
+  const [lo, hi] = domain;
+  const span = hi - lo;
+  const [dlo, dhi] = bounds;
+  if (span >= dhi - dlo) {
+    const loMin = dhi - span;
+    const clampedLo = Math.min(Math.max(lo, loMin), dlo);
+    return [clampedLo, clampedLo + span];
+  }
+  let clampedLo = Math.max(lo, dlo);
+  if (clampedLo + span > dhi) clampedLo = dhi - span;
+  return [clampedLo, clampedLo + span];
 }
 
 /**
@@ -140,7 +210,18 @@ export class Plot {
 
   private hoverEnabled: boolean;
   private hoverPx: { x: number; y: number } | null = null;
+  private pickMode: PickMode;
+  private pointInfo: "hover" | "click";
+  private crosshair: boolean;
+  private equalAspect: boolean;
+  private boundedPan: boolean;
+  private hoverReadout?: (dataX: number, dataY: number) => HoverReadoutRow[];
+  /** Cursor position while the pointer is pressed, when `crosshair`. */
+  private pressPx: { x: number; y: number } | null = null;
   private tooltip: HTMLDivElement;
+  /** A point clicked to pin its details, until another click clears it. */
+  private selected: { layer: Pickable; x: number; y: number; index: number } | null = null;
+  private infoBox: HTMLDivElement;
 
   constructor(container: HTMLElement, options: PlotOptions = {}) {
     this.container = container;
@@ -184,8 +265,14 @@ export class Plot {
           ? lightTheme
           : options.theme;
     this.baseMargin = { ...DEFAULT_MARGIN, ...options.margin };
-    this.mode = options.mode ?? "box";
+    this.mode = options.mode ?? "pan";
     this.hoverEnabled = options.hover !== false;
+    this.pickMode = options.pick ?? "x";
+    this.pointInfo = options.pointInfo ?? "click";
+    this.crosshair = options.crosshair ?? true;
+    this.equalAspect = options.equalAspect ?? false;
+    this.boundedPan = options.boundedPan ?? false;
+    this.hoverReadout = options.hoverReadout;
 
     // Selection rectangle overlay for box zoom.
     this.selectionDiv = document.createElement("div");
@@ -219,12 +306,31 @@ export class Plot {
     } as CSSStyleDeclaration);
     container.appendChild(this.tooltip);
 
+    // Pinned info box for a clicked point (persists until the next click).
+    this.infoBox = document.createElement("div");
+    Object.assign(this.infoBox.style, {
+      position: "absolute",
+      display: "none",
+      zIndex: "6",
+      pointerEvents: "none",
+      padding: "6px 8px",
+      borderRadius: "6px",
+      font: "12px system-ui, -apple-system, sans-serif",
+      lineHeight: "1.4",
+      whiteSpace: "nowrap",
+      background: this.isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.98)",
+      color: this.isDark ? "#e2e8f0" : "#1e293b",
+      border: `1px solid ${this.isDark ? "rgba(148,163,184,0.4)" : "rgba(100,116,139,0.4)"}`,
+      boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+    } as CSSStyleDeclaration);
+    container.appendChild(this.infoBox);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
 
     if (options.interactive !== false) this.attachInteraction();
-    if (options.toolbar !== false) {
+    if (options.showToolbar !== false) {
       this.toolbarHandle = createToolbar(
         container,
         {
@@ -307,6 +413,40 @@ export class Plot {
     this.autoscale();
     this.requestRender();
     return layer;
+  }
+
+  /**
+   * Register a layer built outside core (e.g. `@photonviz/map`). Use with
+   * {@link context} to construct the layer against this plot's WebGL2 context.
+   */
+  add<T extends Layer>(layer: T): T {
+    return this.register(layer);
+  }
+
+  /** The shared WebGL2 context, for constructing custom layers. */
+  get context(): WebGL2RenderingContext {
+    return this.gl;
+  }
+
+  /**
+   * Convert a client (screen) coordinate to data space — the shared x and the
+   * primary y. Returns null if the point is outside the plot region. Useful for
+   * custom hit-testing (e.g. map feature picking on click).
+   */
+  dataAt(clientX: number, clientY: number): { x: number; y: number } | null {
+    const rect = this.axisCanvas.getBoundingClientRect();
+    const region = plotRegion(this.layout());
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    if (
+      px < region.left || px > region.left + region.width ||
+      py < region.top || py > region.top + region.height
+    ) {
+      return null;
+    }
+    const nx = (px - region.left) / region.width;
+    const ny = 1 - (py - region.top) / region.height;
+    return { x: this.scaleX.invert(nx), y: this.primaryY().scale.invert(ny) };
   }
 
   addLine(opts: LineOptions): LineLayer {
@@ -529,6 +669,7 @@ export class Plot {
     this.toolbarHandle?.destroy();
     this.selectionDiv.remove();
     this.tooltip.remove();
+    this.infoBox.remove();
     for (const l of this.layers) l.dispose();
     this.container.removeChild(this.gridCanvas);
     this.container.removeChild(this.dataCanvas);
@@ -568,6 +709,8 @@ export class Plot {
   render(): void {
     const layout = this.layout();
     const region = plotRegion(layout);
+    if (this.equalAspect) this.applyAspect(region);
+    if (this.boundedPan) this.clampView();
     const primary = this.primaryY();
     const ticksX = this.axisX.resolve(this.scaleX);
     const ticksYPrimary = primary.axis.resolve(primary.scale);
@@ -635,9 +778,21 @@ export class Plot {
       });
     }
 
+    // Both-axis guide lines while the pointer is pressed.
+    if (this.crosshair && this.pressPx) {
+      drawCrosshairXY(this.axisCtx, region, this.pressPx.x, this.pressPx.y, this.theme);
+    }
+
     // Hover crosshair + markers + tooltip.
-    if (this.hoverEnabled && this.hoverPx) this.renderHover(region);
-    else this.tooltip.style.display = "none";
+    if (this.hoverEnabled && this.hoverPx) {
+      this.renderHover(region);
+    } else {
+      this.tooltip.style.display = "none";
+      if (this.pointInfo === "hover") this.selected = null; // nothing hovered
+    }
+
+    // Pinned point details (clicked, or hovered in "hover" mode).
+    this.updateInfoBox(region);
   }
 
   private renderHover(region: ReturnType<typeof plotRegion>): void {
@@ -653,41 +808,64 @@ export class Plot {
 
     const nx = (cursor.x - region.left) / region.width;
     const dataX = this.scaleX.invert(nx);
-    drawCrosshair(this.axisCtx, region, cursor.x, this.theme);
+    // y is north-up: pixels grow downward, so invert the vertical fraction.
+    const ny = 1 - (cursor.y - region.top) / region.height;
+    const dataY = this.primaryY().scale.invert(ny);
+    // Full X+Y crosshair when enabled (e.g. maps); otherwise just the x line.
+    if (this.crosshair) {
+      drawCrosshairXY(this.axisCtx, region, cursor.x, cursor.y, this.theme);
+    } else {
+      drawCrosshair(this.axisCtx, region, cursor.x, this.theme);
+    }
 
     const rows: Array<{ layer: Pickable; x: number; y: number }> = [];
     for (const layer of this.layers) {
       if (!isPickable(layer)) continue;
-      const p = layer.nearestByX(dataX);
-      if (!p) continue;
       const ya = this.yAxes.get(layer.yAxis)!;
-      const px = pxX(region, this.scaleX.norm(p.x));
-      const py = pxY(region, ya.scale.norm(p.y));
+      const project = (x: number, y: number): [number, number] => [
+        pxX(region, this.scaleX.norm(x)),
+        pxY(region, ya.scale.norm(y)),
+      ];
+      const p = layer.pick(this.pickMode, cursor.x, cursor.y, project);
+      if (!p) continue;
+      const [px, py] = project(p.x, p.y);
       drawMarker(this.axisCtx, px, py, layer.colorCss);
       rows.push({ layer, x: p.x, y: p.y });
     }
 
-    if (rows.length === 0) {
-      this.tooltip.style.display = "none";
-      return;
-    }
-    this.updateTooltip(rows, cursor, dataX);
+    // Always show at least the x readout, even with no series under the cursor.
+    this.updateTooltip(rows, cursor, dataX, dataY);
+
+    // In hover mode, the pinned info box tracks the point under the cursor.
+    if (this.pointInfo === "hover") this.selected = this.pickPoint(cursor.x, cursor.y);
   }
 
   private updateTooltip(
     rows: Array<{ layer: Pickable; x: number; y: number }>,
     cursor: { x: number; y: number },
     dataX: number,
+    dataY: number,
   ): void {
     const tip = this.tooltip;
     // Rebuild content with safe DOM APIs (no innerHTML).
     tip.replaceChildren();
-    const xfmt = this.axisX.config.format ?? defaultFormat;
-    const header = document.createElement("div");
-    header.style.opacity = "0.7";
-    header.style.marginBottom = "3px";
-    header.textContent = `x = ${xfmt(dataX)}`;
-    tip.appendChild(header);
+    if (this.hoverReadout) {
+      // Custom header: one line per row returned (e.g. lon/lat on a map).
+      for (const line of this.hoverReadout(dataX, dataY)) {
+        const el = document.createElement("div");
+        el.style.opacity = "0.7";
+        el.style.marginBottom = "3px";
+        el.textContent = `${line.label} ${line.value}`;
+        tip.appendChild(el);
+      }
+    } else {
+      const xfmt = this.axisX.config.format ?? defaultFormat;
+      const header = document.createElement("div");
+      header.style.opacity = "0.7";
+      header.style.marginBottom = "3px";
+      header.textContent = `x = ${xfmt(dataX)}`;
+      tip.appendChild(header);
+    }
 
     for (const r of rows) {
       const yfmt = this.yAxes.get(r.layer.yAxis)!.axis.config.format ?? defaultFormat;
@@ -809,6 +987,8 @@ export class Plot {
     let lastY = 0;
     let startX = 0;
     let startY = 0;
+    let downX = 0;
+    let downY = 0;
 
     el.addEventListener("pointerdown", (e) => {
       el.setPointerCapture(e.pointerId);
@@ -816,6 +996,8 @@ export class Plot {
       const rect = el.getBoundingClientRect();
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
+      downX = px;
+      downY = py;
       const zone = this.zoneAt(px, py);
 
       if (zone.type === "x") {
@@ -829,16 +1011,19 @@ export class Plot {
         lastX = e.clientX;
         lastY = e.clientY;
         el.style.cursor = "grabbing";
+        if (this.crosshair) this.setPress(px, py);
       } else {
         selecting = true;
         startX = px;
         startY = py;
+        if (this.crosshair) this.setPress(px, py);
       }
     });
 
     el.addEventListener("pointermove", (e) => {
       const rect = el.getBoundingClientRect();
       const region = plotRegion(this.layout());
+      if (this.pressPx) this.setPress(e.clientX - rect.left, e.clientY - rect.top);
       if (axisDrag === "x") {
         this.panX(e.clientX - lastX, region);
         lastX = e.clientX;
@@ -877,6 +1062,16 @@ export class Plot {
 
     const end = (e: PointerEvent) => {
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      if (this.pressPx) {
+        this.pressPx = null;
+        this.requestRender();
+      }
+      const rect = el.getBoundingClientRect();
+      const upPx = e.clientX - rect.left;
+      const upPy = e.clientY - rect.top;
+      // A press-and-release that barely moved, in the plot body, is a click.
+      const isClick =
+        e.type === "pointerup" && !axisDrag && Math.hypot(upPx - downX, upPy - downY) < 4;
       if (axisDrag) {
         axisDrag = null;
       } else if (panning) {
@@ -884,10 +1079,10 @@ export class Plot {
         this.updateCursor();
       } else if (selecting) {
         selecting = false;
-        const rect = el.getBoundingClientRect();
-        this.applySelection(startX, startY, e.clientX - rect.left, e.clientY - rect.top);
+        if (!isClick) this.applySelection(startX, startY, upPx, upPy);
         this.selectionDiv.style.display = "none";
       }
+      if (isClick) this.handleClick(upPx, upPy);
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
@@ -898,6 +1093,179 @@ export class Plot {
     if (!px && !had) return;
     this.hoverPx = px;
     this.requestRender();
+  }
+
+  /** Update the press-crosshair position and redraw. */
+  private setPress(x: number, y: number): void {
+    this.pressPx = { x, y };
+    this.requestRender();
+  }
+
+  /** Nearest point (2D, within a small radius) under the cursor, or null. */
+  private pickPoint(
+    cursorPx: number,
+    cursorPy: number,
+  ): { layer: Pickable; x: number; y: number; index: number } | null {
+    const region = plotRegion(this.layout());
+    let hit: { layer: Pickable; x: number; y: number; index: number } | null = null;
+    let hitDist = Infinity;
+    for (const layer of this.layers) {
+      if (!isPickable(layer)) continue;
+      const ya = this.yAxes.get(layer.yAxis)!;
+      const project = (x: number, y: number): [number, number] => [
+        pxX(region, this.scaleX.norm(x)),
+        pxY(region, ya.scale.norm(y)),
+      ];
+      const p = layer.pick("xy", cursorPx, cursorPy, project);
+      if (!p) continue;
+      const [ppx, ppy] = project(p.x, p.y);
+      const d = Math.hypot(ppx - cursorPx, ppy - cursorPy);
+      if (d < hitDist) {
+        hitDist = d;
+        hit = { layer, x: p.x, y: p.y, index: p.index };
+      }
+    }
+    return hit && hitDist <= 14 ? hit : null;
+  }
+
+  /** Click handler: in `pointInfo:"click"` mode, pin the point under the cursor. */
+  private handleClick(cursorPx: number, cursorPy: number): void {
+    if (this.pointInfo !== "click") return;
+    this.selected = this.pickPoint(cursorPx, cursorPy);
+    this.requestRender();
+  }
+
+  /** Draw the pinned point's marker and position its info box (or hide it). */
+  private updateInfoBox(region: ReturnType<typeof plotRegion>): void {
+    const box = this.infoBox;
+    if (!this.selected) {
+      box.style.display = "none";
+      return;
+    }
+    const { layer, x, y, index } = this.selected;
+    const ya = this.yAxes.get(layer.yAxis)!;
+    const px = pxX(region, this.scaleX.norm(x));
+    const py = pxY(region, ya.scale.norm(y));
+    // Hide when the point has been panned/zoomed out of the plot region.
+    if (
+      px < region.left || px > region.left + region.width ||
+      py < region.top || py > region.top + region.height
+    ) {
+      box.style.display = "none";
+      return;
+    }
+    drawMarker(this.axisCtx, px, py, layer.colorCss);
+
+    box.replaceChildren();
+    // User-supplied detail for this point, if the layer provides it.
+    const info = layer.infoAt ? layer.infoAt(index) : null;
+    const title = document.createElement("div");
+    title.style.fontWeight = "600";
+    title.style.marginBottom = "2px";
+    title.textContent = info && info.length ? info[0]! : layer.name;
+    box.appendChild(title);
+    if (info && info.length > 1) {
+      for (let i = 1; i < info.length; i++) {
+        const row = document.createElement("div");
+        row.textContent = info[i]!;
+        box.appendChild(row);
+      }
+    } else {
+      const lines = this.hoverReadout
+        ? this.hoverReadout(x, y)
+        : [
+            { label: "x", value: (this.axisX.config.format ?? defaultFormat)(x) },
+            { label: "y", value: (ya.axis.config.format ?? defaultFormat)(y) },
+          ];
+      for (const ln of lines) {
+        const row = document.createElement("div");
+        row.textContent = `${ln.label} ${ln.value}`;
+        box.appendChild(row);
+      }
+    }
+    box.style.display = "block";
+    const cw = this.container.clientWidth;
+    const tw = box.offsetWidth;
+    const th = box.offsetHeight;
+    let left = px + 12;
+    if (left + tw > cw) left = px - tw - 12;
+    let top = py + 12;
+    if (top + th > this.container.clientHeight) top = py - th - 12;
+    box.style.left = `${Math.max(0, left)}px`;
+    box.style.top = `${Math.max(0, top)}px`;
+  }
+
+  /** Data-space x extent across all layers, or null if empty. */
+  private layerBoundsX(): Range | null {
+    let lo = Infinity;
+    let hi = -Infinity;
+    let any = false;
+    for (const l of this.layers) {
+      const b = l.bounds();
+      if (!b) continue;
+      any = true;
+      lo = Math.min(lo, b.x[0]);
+      hi = Math.max(hi, b.x[1]);
+    }
+    return any ? [lo, hi] : null;
+  }
+
+  /** Data-space y extent across the layers bound to axis `id`, or null. */
+  private layerBoundsY(id: string): Range | null {
+    let lo = Infinity;
+    let hi = -Infinity;
+    let any = false;
+    for (const l of this.layers) {
+      if (l.yAxis !== id) continue;
+      const b = l.bounds();
+      if (!b) continue;
+      any = true;
+      lo = Math.min(lo, b.y[0]);
+      hi = Math.max(hi, b.y[1]);
+    }
+    return any ? [lo, hi] : null;
+  }
+
+  /** Keep the view inside the data bounds (used when `boundedPan`). */
+  private clampView(): void {
+    if (!this.scaleX.log) {
+      const bx = this.layerBoundsX();
+      if (bx) this.scaleX.domain = clampAxis(this.scaleX.domain, bx);
+    }
+    for (const ya of this.yAxes.values()) {
+      if (ya.scale.log) continue;
+      const by = this.layerBoundsY(ya.id);
+      if (by) ya.scale.domain = clampAxis(ya.scale.domain, by);
+    }
+  }
+
+  /**
+   * Expand the looser axis so both axes share the same data-units-per-pixel,
+   * preventing distortion (maps set `equalAspect`). Linear axes only; balances
+   * the primary y against x, and is idempotent once balanced.
+   */
+  private applyAspect(region: ReturnType<typeof plotRegion>): void {
+    if (this.scaleX.log) return;
+    const primary = this.primaryY();
+    if (primary.scale.log) return;
+    const w = region.width;
+    const h = region.height;
+    if (w <= 0 || h <= 0) return;
+    const [xlo, xhi] = this.scaleX.domain;
+    const [ylo, yhi] = primary.scale.domain;
+    const uppX = (xhi - xlo) / w;
+    const uppY = (yhi - ylo) / h;
+    if (uppX <= 0 || uppY <= 0) return;
+    if (Math.abs(uppX - uppY) <= 1e-9 * Math.max(uppX, uppY)) return; // already balanced
+    if (uppX > uppY) {
+      const target = uppX * h;
+      const cy = (ylo + yhi) / 2;
+      primary.scale.domain = [cy - target / 2, cy + target / 2];
+    } else {
+      const target = uppY * w;
+      const cx = (xlo + xhi) / 2;
+      this.scaleX.domain = [cx - target / 2, cx + target / 2];
+    }
   }
 
   private drawSelection(x0: number, y0: number, x1: number, y1: number): void {

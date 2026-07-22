@@ -7,5 +7,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   target: "es2020",
-  external: ["vue", "@photonviz/core"],
+  external: ["vue", "@photonviz/core", "@photonviz/map"],
 });

@@ -37,6 +37,7 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 - 🔬 **Scientific** — log & time scales, custom ticks, multiple Y axes, error-free float precision for timestamps.
 - 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic React / Vue / Svelte wrappers.
 - 📈 **Batteries included** — line, scatter, bar, area, step, histogram, box, violin, heatmap, contour, hexbin, spectrogram, polar, and **3D**.
+- 🗺️ **Maps** — [`@photonviz/map`](./packages/map) renders a Web Mercator vector basemap **from scratch** (MVT + PMTiles + GeoJSON), works **fully offline**, no Mapbox / MapLibre / Leaflet.
 - 🌊 **Streaming-ready** — `setData()` re-uploads GPU buffers for real-time dashboards.
 - 🖼️ **Many charts, one context** — a single shared WebGL2 context backs every chart, so a page can hold dozens without exhausting the browser's context limit.
 
@@ -54,6 +55,8 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 npm i @photonviz/core
 # framework bindings (optional)
 npm i @photonviz/react     # or @photonviz/vue, @photonviz/svelte
+# vector maps (optional)
+npm i @photonviz/map
 ```
 
 ## Quick start (vanilla core)
@@ -164,6 +167,47 @@ p.addPointCloud({ x, y, z, size, colorBy });                       // 3D scatter
 // drag to orbit · wheel to zoom · data auto-normalized into a unit cube
 ```
 
+## Maps — `@photonviz/map`
+
+A Web Mercator vector basemap rendered **from scratch** on the same WebGL2 context
+— MVT decoding, ear-clipping triangulation, thick lines with miter joins, tile
+math and rendering are all in this package. No Mapbox / MapLibre / Leaflet.
+
+<p align="center">
+  <img src="./assets/map.png" alt="Photon vector world map — Natural Earth countries triangulated and drawn on WebGL2, no map library" width="100%" />
+</p>
+
+```ts
+import { Plot } from "@photonviz/core";
+import { addMap, pmtilesSource, protomapsStyle, lonLatToWorld } from "@photonviz/map";
+
+const plot = new Plot(el, { equalAspect: true, boundedPan: true }); // plots in world coords
+const map = addMap(plot, {
+  source: pmtilesSource({ blob: file }),   // a local .pmtiles file → fully offline
+  style: protomapsStyle("dark"),
+});
+
+// overlay your own data (project lon/lat → world), and pick features on click
+plot.addScatter({ x: [lonLatToWorld(28.98, 41.01)[0]], y: [lonLatToWorld(28.98, 41.01)[1]] });
+const hit = map.pickFeature(worldX, worldY);   // { layer, properties } | null
+```
+
+- **Tile sources** — any XYZ `.pbf` endpoint (`xyzVectorSource`) or a single
+  **PMTiles** archive from a URL, a local **`File`/`Blob`** (offline), or in-memory
+  `data` (`pmtilesSource`). The whole planet lives in one range-served file.
+- **GeoJSON** — `addGeoJson(plot, { geojson })` renders a whole map from one file
+  (admin boundaries, etc.) — no tiles, no server, no key.
+- **Batteries-included world** — `import { worldCountries } from "@photonviz/map/world"`
+  ships a Natural Earth 10m basemap **embedded in the library** (opt-in subpath, so
+  the main entry stays tiny).
+- **Offline** — the local-file path reads byte ranges via `Blob.slice()`; bundle a
+  region `.pmtiles` for a fully offline desktop/mobile map.
+- **Interactive** — `equalAspect` (no distortion), `boundedPan`, feature picking,
+  thick roads/borders, styled by tile-layer + properties.
+
+Wrapped for every framework too: `<Map>` / `<GeoJson>` (React, Vue) and
+`{ type: "map" }` / `{ type: "geojson" }` series (Svelte).
+
 ## Custom ticks
 
 Scientific axes want *meaningful* positions, not "auto-pretty" ones:
@@ -206,9 +250,14 @@ function frame() {
 | Package | Description |
 | --- | --- |
 | [`@photonviz/core`](./packages/core) | WebGL2 rendering core, zero dependencies |
+| [`@photonviz/map`](./packages/map) | Web Mercator vector basemap (MVT / PMTiles / GeoJSON), zero dependencies |
 | [`@photonviz/react`](./packages/react) | React components + `usePlot` hook |
 | [`@photonviz/vue`](./packages/vue) | Vue components (provide/inject) |
 | [`@photonviz/svelte`](./packages/svelte) | Svelte `use:plot` action |
+
+Every chart type, `PolarPlot`, `Plot3D`, and the map layers are wrapped in all
+three frameworks. Runnable examples: [`examples/react`](./examples/react),
+[`examples/vue`](./examples/vue), [`examples/svelte`](./examples/svelte).
 
 ## Development
 
@@ -218,7 +267,12 @@ pnpm test        # unit tests (vitest)
 pnpm typecheck   # strict tsc across packages
 pnpm build       # build all packages (tsup)
 pnpm example     # live gallery (vite)
+pnpm example:react   # React example  (also :vue, :svelte)
 ```
+
+The vanilla gallery also has dedicated pages: `/map.html` (vector tiles),
+`/geojson.html` (GeoJSON world), and `/pmtiles-offline.html` (pick a local
+`.pmtiles` → fully offline map).
 
 ## Contributing
 
@@ -231,9 +285,11 @@ are labeled [`good first issue`](https://github.com/coredumpdev/photon/labels/go
 - [x] 2D core, thick lines, log/time scales, hover/tooltip, multiple Y axes
 - [x] Statistical (histogram, box/violin, heatmap), contour, hexbin, spectrogram
 - [x] 3D (surface, point cloud), polar, streaming, shared context
-- [x] React / Vue / Svelte bindings
+- [x] React / Vue / Svelte bindings (every chart type, polar, 3D, and maps)
 - [x] 3D axes/ticks & lighting controls
 - [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation
+- [x] Vector maps — `@photonviz/map` (MVT + PMTiles + GeoJSON, offline, feature picking)
+- [ ] Map text labels (glyph atlas + collision)
 - [ ] WebGPU backend exploration
 
 ## License

@@ -2,7 +2,7 @@
  * Capture the live gallery for the README.
  *
  * Prereqs: the example server running (`pnpm example`), plus:
- *   npm i -D playwright   # uses your installed Chrome via channel:"chrome"
+ *   npm i -D playwright && npx playwright install chromium   # bundled chromium (swiftshader WebGL2)
  *   (ffmpeg on PATH for the GIF step)
  *
  * Usage:
@@ -20,7 +20,6 @@ const VIDEO = "/tmp/photon-video";
 mkdirSync(VIDEO, { recursive: true });
 
 const browser = await chromium.launch({
-  channel: "chrome",
   headless: true,
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
@@ -31,7 +30,7 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 await page.goto(URL, { waitUntil: "load" });
-await page.waitForTimeout(2500);
+await page.waitForTimeout(6000); // headless swiftshader needs time to render
 await page.screenshot({ path: `${OUT}/gallery-full.png`, fullPage: true });
 await page.screenshot({ path: `${OUT}/streaming-still.png` });
 await page.waitForTimeout(5000); // record streaming for the GIF

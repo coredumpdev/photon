@@ -6,6 +6,7 @@ import type { Color, Range } from "../types.js";
 import { decimateIndices } from "./line-util.js";
 import { GpuDecimator } from "./gpu-decimate.js";
 import type { DrawState, Layer } from "./layer.js";
+import { pickNearest, type PickMode, type Picked } from "./pick.js";
 
 /** Above this point count, decimation runs on the GPU (below, CPU is cheaper). */
 const GPU_DECIMATE_MIN = 200_000;
@@ -381,14 +382,13 @@ export class LineLayer implements Layer {
     return { x: this.xBounds, y: this.yBounds };
   }
 
-  nearestByX(x: number): { x: number; y: number; index: number } | null {
-    if (this.count === 0) return null;
-    let best = 0, bestDist = Infinity;
-    for (let i = 0; i < this.count; i++) {
-      const d = Math.abs(this.xs[i]! - x);
-      if (d < bestDist) { bestDist = d; best = i; }
-    }
-    return { x: this.xs[best]!, y: this.ys[best]!, index: best };
+  pick(
+    mode: PickMode,
+    cursorPx: number,
+    cursorPy: number,
+    project: (x: number, y: number) => [number, number],
+  ): Picked | null {
+    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project);
   }
 
   /** Replace the series data and re-upload the GPU buffer (for streaming). */

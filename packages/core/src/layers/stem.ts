@@ -3,6 +3,7 @@ import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Color, Range } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
+import { pickNearest, type PickMode, type Picked } from "./pick.js";
 
 export interface StemOptions {
   x: ArrayLike<number>;
@@ -190,14 +191,13 @@ export class StemLayer implements Layer {
     return { x: this.xBounds, y: this.yBounds };
   }
 
-  nearestByX(x: number): { x: number; y: number; index: number } | null {
-    if (this.count === 0) return null;
-    let best = 0, bestDist = Infinity;
-    for (let i = 0; i < this.count; i++) {
-      const d = Math.abs(this.xs[i]! - x);
-      if (d < bestDist) { bestDist = d; best = i; }
-    }
-    return { x: this.xs[best]!, y: this.ys[best]!, index: best };
+  pick(
+    mode: PickMode,
+    cursorPx: number,
+    cursorPy: number,
+    project: (x: number, y: number) => [number, number],
+  ): Picked | null {
+    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project);
   }
 
   draw(state: DrawState): void {

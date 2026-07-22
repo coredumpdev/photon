@@ -4,6 +4,7 @@ import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Color, Range } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
+import { pickNearest, type PickMode, type Picked } from "./pick.js";
 
 export interface ScatterOptions {
   x: ArrayLike<number>;
@@ -13,6 +14,12 @@ export interface ScatterOptions {
   size?: number;
   name?: string;
   yAxis?: string;
+  /**
+   * Optional per-point text shown when a point is clicked (one entry per point,
+   * parallel to `x`/`y`). Lets you attach your own info instead of the default
+   * coordinate readout.
+   */
+  labels?: ArrayLike<string>;
   /** Color each point by a value through a colormap. */
   colorBy?: {
     values: ArrayLike<number>;
@@ -80,6 +87,7 @@ export class ScatterLayer implements Layer {
   private size: number;
   private color: Color;
   private useVertexColor: boolean;
+  private labels?: ArrayLike<string>;
   private xRef = 0;
   private yRef = 0;
   private xs: Float64Array;
@@ -98,6 +106,7 @@ export class ScatterLayer implements Layer {
     this.name = opts.name ?? this.id;
     this.yAxis = opts.yAxis ?? "y";
     this.useVertexColor = opts.colorBy != null;
+    this.labels = opts.labels;
 
     const n = Math.min(opts.x.length, opts.y.length);
     this.count = n;
@@ -178,14 +187,22 @@ export class ScatterLayer implements Layer {
     return { x: this.xBounds, y: this.yBounds };
   }
 
-  nearestByX(x: number): { x: number; y: number; index: number } | null {
-    if (this.count === 0) return null;
-    let best = 0, bestDist = Infinity;
-    for (let i = 0; i < this.count; i++) {
-      const d = Math.abs(this.xs[i]! - x);
-      if (d < bestDist) { bestDist = d; best = i; }
-    }
-    return { x: this.xs[best]!, y: this.ys[best]!, index: best };
+  pick(
+    mode: PickMode,
+    cursorPx: number,
+    cursorPy: number,
+    project: (x: number, y: number) => [number, number],
+  ): Picked | null {
+    // Only a hit when the cursor is within the marker (+ a couple px of slack),
+    // so a far-away point never highlights.
+    const gatePx = this.size / 2 + 4;
+    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project, gatePx);
+  }
+
+  /** User-supplied text for a point, shown when it is clicked. */
+  infoAt(index: number): string[] | null {
+    const label = this.labels?.[index];
+    return label != null ? [label] : null;
   }
 
   /** Replace point positions and re-upload (for streaming). Keeps uniform color. */

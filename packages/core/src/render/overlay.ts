@@ -210,6 +210,35 @@ export function drawCrosshair(
   ctx.restore();
 }
 
+/** Draw both a vertical and a horizontal dashed guide line through (px, py). */
+export function drawCrosshairXY(
+  ctx: CanvasRenderingContext2D,
+  region: PlotRegion,
+  px: number,
+  py: number,
+  theme: Theme,
+): void {
+  const left = region.left;
+  const right = region.left + region.width;
+  const top = region.top;
+  const bottom = region.top + region.height;
+  if (px < left || px > right || py < top || py > bottom) return;
+  ctx.save();
+  ctx.strokeStyle = theme.text;
+  ctx.globalAlpha = 0.4;
+  ctx.setLineDash([3, 3]);
+  ctx.lineWidth = 1;
+  const x = Math.round(px) + 0.5;
+  const y = Math.round(py) + 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x, top);
+  ctx.lineTo(x, bottom);
+  ctx.moveTo(left, y);
+  ctx.lineTo(right, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Draw a filled marker (hover point highlight). */
 export function drawMarker(
   ctx: CanvasRenderingContext2D,

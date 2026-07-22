@@ -20,7 +20,7 @@ function panel(title: string, subtitle = ""): HTMLElement {
   const badge = document.createElement("div");
   badge.className = "fps";
   badge.style.cssText =
-    "position:absolute;top:6px;right:8px;z-index:5;padding:2px 7px;border-radius:6px;" +
+    "position:absolute;top:6px;left:8px;z-index:5;padding:2px 7px;border-radius:6px;" +
     "font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#e2e8f0;" +
     "background:rgba(14,21,38,.7);border:1px solid #1e293b;backdrop-filter:blur(3px);" +
     "pointer-events:none;font-variant-numeric:tabular-nums;";
@@ -74,7 +74,7 @@ function gaussian(m: number, sd: number): number {
 
 // Oscilloscope — a single signal scrolling right-to-left.
 {
-  const p = new Plot(panel("Oscilloscope", "live · scrolling"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Oscilloscope", "live · scrolling"), { theme: "dark" });
   const N = 600;
   const x = Float64Array.from({ length: N }, (_, i) => i);
   const y = Float64Array.from({ length: N }, (_, i) => Math.sin(i * 0.08) * 1.6 + Math.sin(i * 0.021) * 0.7);
@@ -92,7 +92,7 @@ function gaussian(m: number, sd: number): number {
 
 // Three live signals.
 {
-  const p = new Plot(panel("Signals", "live · 3 channels"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Signals", "live · 3 channels"), { theme: "dark" });
   const N = 500;
   const x = Float64Array.from({ length: N }, (_, i) => i);
   const ys = [new Float64Array(N), new Float64Array(N), new Float64Array(N)];
@@ -114,7 +114,7 @@ function gaussian(m: number, sd: number): number {
 
 // Live scatter cloud (random walk).
 {
-  const p = new Plot(panel("Scatter", "live · drifting cloud"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Scatter", "live · drifting cloud"), { theme: "dark" });
   const M = 700;
   const x = new Float64Array(M), y = new Float64Array(M);
   for (let i = 0; i < M; i++) { x[i] = gaussian(0, 1); y[i] = gaussian(0, 1); }
@@ -132,7 +132,7 @@ function gaussian(m: number, sd: number): number {
 
 // Live bars.
 {
-  const p = new Plot(panel("Bars", "live · fluctuating"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Bars", "live · fluctuating"), { theme: "dark" });
   const K = 9;
   const cats = Float64Array.from({ length: K }, (_, i) => i);
   const y = Float64Array.from({ length: K }, () => 40 + rand() * 30);
@@ -149,7 +149,7 @@ function gaussian(m: number, sd: number): number {
 
 // Streaming area.
 {
-  const p = new Plot(panel("Area", "live · streaming"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Area", "live · streaming"), { theme: "dark" });
   const N = 400;
   const x = Float64Array.from({ length: N }, (_, i) => i);
   const y = Float64Array.from({ length: N }, (_, i) => 2 + Math.sin(i * 0.06) + Math.sin(i * 0.017) * 0.7);
@@ -172,7 +172,8 @@ function gaussian(m: number, sd: number): number {
   const B = 14;
   const bt = Float64Array.from({ length: B }, () => rand() * 360);
   const br = Float64Array.from({ length: B }, () => 0.2 + rand() * 0.75);
-  pp.addScatter({ theta: bt, r: br, color: "#f472b6", size: 6 });
+  const blipLabels = Array.from({ length: B }, (_, i) => `Contact ${i + 1}`);
+  pp.addScatter({ theta: bt, r: br, color: "#f472b6", size: 6, labels: blipLabels });
   let ang = 0;
   updaters.push(() => {
     ang = (ang + 2.5) % 360;
@@ -196,7 +197,7 @@ function gaussian(m: number, sd: number): number {
 
 // Live dual-Y.
 {
-  const p = new Plot(panel("Dual Y", "live · two scales"), { theme: "dark", toolbar: false, axes: { y: { title: "amp" } } });
+  const p = new Plot(panel("Dual Y", "live · two scales"), { theme: "dark", axes: { y: { title: "amp" } } });
   p.addYAxis("t", { side: "right", color: "#f472b6", title: "temp" });
   const N = 400;
   const x = Float64Array.from({ length: N }, (_, i) => i);
@@ -272,7 +273,7 @@ function gaussian(m: number, sd: number): number {
 
 // Line joins (miter / bevel / round on sharp corners).
 {
-  const p = new Plot(panel("Line joins", "miter · bevel · round"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Line joins", "miter · bevel · round"), { theme: "dark" });
   const xs: number[] = [];
   const zig: number[] = [];
   for (let i = 0; i <= 12; i++) { xs.push(i); zig.push(i % 2 === 0 ? 0 : 1); } // sharp zigzag
@@ -353,7 +354,7 @@ function gaussian(m: number, sd: number): number {
 
 // Step line — a digital/staircase signal.
 {
-  const p = new Plot(panel("Step line", "staircase · step:after"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Step line", "staircase · step:after"), { theme: "dark" });
   const N = 24;
   const x = Float64Array.from({ length: N }, (_, i) => i);
   const y = Float64Array.from({ length: N }, () => Math.round(rand() * 3));
@@ -363,7 +364,7 @@ function gaussian(m: number, sd: number): number {
 
 // Butt vs miter — the join fix, side by side on sharp corners.
 {
-  const p = new Plot(panel("Butt vs miter", "gaps vs filled joins"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Butt vs miter", "gaps vs filled joins"), { theme: "dark" });
   const xs: number[] = [], zig: number[] = [];
   for (let i = 0; i <= 12; i++) { xs.push(i); zig.push(i % 2 === 0 ? 0 : 1); }
   p.addLine({ x: xs, y: zig.map((v) => v + 2.4), color: "#94a3b8", width: 9, join: "butt", name: "butt" });
@@ -394,7 +395,7 @@ function gaussian(m: number, sd: number): number {
 
 // Stem plot — a discrete, sampled signal.
 {
-  const p = new Plot(panel("Stem plot", "discrete signal"), { theme: "dark", toolbar: false });
+  const p = new Plot(panel("Stem plot", "discrete signal"), { theme: "dark" });
   const N = 30;
   const x = Float64Array.from({ length: N }, (_, i) => i);
   const y = Float64Array.from({ length: N }, (_, i) => Math.exp(-i / 12) * Math.cos(i / 2));

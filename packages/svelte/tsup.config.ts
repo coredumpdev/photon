@@ -7,5 +7,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   target: "es2020",
-  external: ["@photonviz/core"],
+  external: ["@photonviz/core", "@photonviz/map"],
 });
