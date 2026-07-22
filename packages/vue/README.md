@@ -1,6 +1,18 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/banner.png" alt="Photon" width="100%" />
+</p>
+
 # @photonviz/vue
 
 **Vue 3 bindings for [Photon](https://github.com/coredumpdev/photon) — GPU-accelerated WebGL2 charts.**
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/gallery-full.png" alt="Photon chart gallery" width="100%" />
+</p>
 
 Declarative components over [`@photonviz/core`](https://www.npmjs.com/package/@photonviz/core) using provide/inject: a `<Plot>` container with chart children that stream via `setData` on reactive data changes.
 

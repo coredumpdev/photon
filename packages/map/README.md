@@ -1,6 +1,14 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/banner.png" alt="Photon" width="100%" />
+</p>
+
 # @photonviz/map
 
 **A Web Mercator vector basemap for [Photon](https://github.com/coredumpdev/photon), rendered from scratch on WebGL2.**
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/map.png" alt="Photon vector world map, rendered from scratch on WebGL2" width="100%" />
+</p>
 
 MVT decoding, ear-clipping triangulation, thick miter-join lines, tile math and
 rendering are all in this package — **no Mapbox / MapLibre / Leaflet**. Plots in

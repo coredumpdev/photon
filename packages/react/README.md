@@ -1,6 +1,18 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/banner.png" alt="Photon" width="100%" />
+</p>
+
 # @photonviz/react
 
 **React bindings for [Photon](https://github.com/coredumpdev/photon) — GPU-accelerated WebGL2 charts.**
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/gallery-full.png" alt="Photon chart gallery" width="100%" />
+</p>
 
 Declarative components over [`@photonviz/core`](https://www.npmjs.com/package/@photonviz/core): a `<Plot>` container with chart children that register on mount and stream via `setData` when you pass new data.
 

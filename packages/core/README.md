@@ -1,6 +1,18 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/banner.png" alt="Photon" width="100%" />
+</p>
+
 # @photonviz/core
 
 **GPU-accelerated scientific plotting for the web — WebGL2, zero dependencies.**
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/gallery-full.png" alt="Photon chart gallery" width="100%" />
+</p>
 
 The framework-agnostic core of [Photon](https://github.com/coredumpdev/photon).
 Renders geometry on the GPU (instanced WebGL2 + min/max decimation) and draws
