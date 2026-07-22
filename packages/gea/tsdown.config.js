@@ -1,8 +1,10 @@
-import { geaPlugin } from "@geajs/vite-plugin";
-import { defineConfig } from "tsdown";
+import { geaPlugin } from "@geajs/vite-plugin"
+import { defineConfig } from "tsdown"
 
-// Mirrors @geajs/ui's build: the gea compiler plugin transforms the .tsx
-// `template()` JSX; each component is its own entry (default-exported).
+// Plain-JS config (no TS config-loader) so `tsdown` builds on Node 20 too, where
+// loading a .ts config would require `unrun`. Mirrors @geajs/ui's build: the gea
+// compiler plugin transforms the .tsx `template()` JSX; each component is its own
+// (default-exported) entry.
 export default defineConfig({
   entry: {
     index: "src/index.ts",
@@ -11,7 +13,7 @@ export default defineConfig({
     plot3d: "src/plot3d.tsx",
     series: "src/series.ts",
   },
-  plugins: [geaPlugin() as never],
+  plugins: [geaPlugin()],
   format: "esm",
   outDir: "dist",
   clean: true,
