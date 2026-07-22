@@ -31,7 +31,8 @@
   "devDependencies": {
     "@geajs/core": "^1.4.0",
     "@geajs/vite-plugin": "^1.4.1",
-    "tsdown": "^0.22.0"
+    "tsdown": "^0.22.0",
+    "unrun": "^0.3.1"
   },
   "keywords": [
     "gea",

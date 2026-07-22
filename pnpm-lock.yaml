@@ -192,7 +192,10 @@ importers:
         version: 1.4.1(vite@8.1.5(esbuild@0.27.7))
       tsdown:
         specifier: ^0.22.0
-        version: 0.22.13(@volar/typescript@2.4.15)(typescript@5.9.3)
+        version: 0.22.13(@volar/typescript@2.4.15)(typescript@5.9.3)(unrun@0.3.1)
+      unrun:
+        specifier: ^0.3.1
+        version: 0.3.1
 
   packages/map:
     dependencies:
@@ -2324,6 +2327,16 @@ packages:
   unconfig-core@7.5.0:
     resolution: {integrity: sha512-Su3FauozOGP44ZmKdHy2oE6LPjk51M/TRRjHv2HNCWiDvfvCoxC2lno6jevMA91MYAdCdwP05QnWdWpSbncX/w==}
 
+  unrun@0.3.1:
+    resolution: {integrity: sha512-onIck/oNnCaytwths1ZVp1LK2Gq2hPoyFhiHebObuUXqR3S0uHuLLaBK8K6mRRgV7Ptip8AnNvaUsgzwWwBZuA==}
+    engines: {node: ^22.13.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      synckit: ^0.11.11
+    peerDependenciesMeta:
+      synckit:
+        optional: true
+
   update-browserslist-db@1.2.3:
     resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
     hasBin: true
@@ -4267,7 +4280,7 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  tsdown@0.22.13(@volar/typescript@2.4.15)(typescript@5.9.3):
+  tsdown@0.22.13(@volar/typescript@2.4.15)(typescript@5.9.3)(unrun@0.3.1):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0
@@ -4286,6 +4299,7 @@ snapshots:
       verkit: 0.1.2
     optionalDependencies:
       typescript: 5.9.3
+      unrun: 0.3.1
     transitivePeerDependencies:
       - '@typescript/native-preview'
       - '@volar/typescript'
@@ -4331,6 +4345,10 @@ snapshots:
     dependencies:
       '@quansync/fs': 1.0.0
       quansync: 1.0.0
+
+  unrun@0.3.1:
+    dependencies:
+      rolldown: 1.2.0
 
   update-browserslist-db@1.2.3(browserslist@4.28.7):
     dependencies:
