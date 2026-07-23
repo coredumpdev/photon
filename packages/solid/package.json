@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/solid",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Solid.js bindings for Photon — WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",

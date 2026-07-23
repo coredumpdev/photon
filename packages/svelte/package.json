@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/svelte",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Svelte bindings (action) for Photon \u2014 WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.js",
