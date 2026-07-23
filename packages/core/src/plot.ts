@@ -932,6 +932,12 @@ export class Plot {
     }
   }
 
+  /** Translate a whole drawing by a data-space delta (drag the body). */
+  private translateDrawing(a: Annotation, dx: number, dy: number): void {
+    const pts = this.drawingHandlePts(a);
+    for (let i = 0; i < pts.length; i++) this.setDrawingHandle(a, i, pts[i]!.x + dx, pts[i]!.y + dy);
+  }
+
   /** Cursor→drawing distance in px (segment for line/ray, edges for box/fib, the line for span). */
   private drawingBodyDist(a: Annotation, px: number, py: number, region: ReturnType<typeof plotRegion>): number {
     const s = this.drawingYScale(a);
@@ -1851,6 +1857,8 @@ export class Plot {
     let drawStart = { x: 0, y: 0 };
     /** Non-null while dragging a drawing's handle. */
     let handleDrag: { index: number; handle: number } | null = null;
+    /** Non-null while dragging a whole drawing by its body. */
+    let bodyDrag: { index: number; last: { x: number; y: number } } | null = null;
     /** Non-null while dragging an axis strip: `"x"` or a y-axis id. */
     let axisDrag: "x" | { y: string } | null = null;
     let lastX = 0;
@@ -1885,10 +1893,12 @@ export class Plot {
         this.pendingDrawing = this.buildDrawing(this.drawTool, drawStart, drawStart);
         this.requestRender();
       } else if (drawHit.index >= 0) {
-        // Select the drawing; grab a handle if the cursor is on one.
+        // Select the drawing; grab a handle to reshape, or the body to move it.
         this.selectedDrawing = drawHit.index;
         el.focus({ preventScroll: true });
-        if (drawHit.handle >= 0) { handleDrag = drawHit; el.style.cursor = "grabbing"; }
+        if (drawHit.handle >= 0) handleDrag = drawHit;
+        else bodyDrag = { index: drawHit.index, last: this.dataAtPx(px, py) };
+        el.style.cursor = "grabbing";
         this.requestRender();
       } else if (this.mode === "pan") {
         this.selectedDrawing = -1;
@@ -1921,6 +1931,11 @@ export class Plot {
       } else if (handleDrag) {
         const c = this.dataAtPx(e.clientX - rect.left, e.clientY - rect.top);
         this.setDrawingHandle(this.drawings[handleDrag.index]!, handleDrag.handle, c.x, c.y);
+        this.requestRender();
+      } else if (bodyDrag) {
+        const c = this.dataAtPx(e.clientX - rect.left, e.clientY - rect.top);
+        this.translateDrawing(this.drawings[bodyDrag.index]!, c.x - bodyDrag.last.x, c.y - bodyDrag.last.y);
+        bodyDrag.last = c;
         this.requestRender();
       } else if (panning) {
         this.panX(e.clientX - lastX, region);
@@ -1978,6 +1993,10 @@ export class Plot {
         axisDrag = null;
       } else if (handleDrag) {
         handleDrag = null;
+        this.updateCursor();
+        this.requestRender();
+      } else if (bodyDrag) {
+        bodyDrag = null;
         this.updateCursor();
         this.requestRender();
       } else if (drawing) {
