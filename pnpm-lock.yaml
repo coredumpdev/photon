@@ -257,6 +257,15 @@ importers:
         specifier: ^3.5.13
         version: 3.5.40(typescript@5.9.3)
 
+  packages/wc:
+    dependencies:
+      '@photonviz/core':
+        specifier: workspace:*
+        version: link:../core
+      '@photonviz/map':
+        specifier: workspace:*
+        version: link:../map
+
 packages:
 
   '@acemir/cssom@0.9.31':

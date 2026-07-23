@@ -124,6 +124,11 @@ export type {
 } from "./finance/transforms.js";
 export { addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth } from "./finance/charts.js";
 
+// --- Data: CSV parsing + LTTB downsampling -----------------------------------
+export { parseCSV } from "./data/csv.js";
+export type { Table, CSVOptions } from "./data/csv.js";
+export { lttb } from "./data/downsample.js";
+
 // --- Charts: hierarchy / flow / composition diagrams -------------------------
 export * from "./charts/treemap.js";
 export * from "./charts/funnel.js";

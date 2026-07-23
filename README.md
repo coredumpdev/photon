@@ -353,6 +353,7 @@ function frame() {
 | [`@photonviz/svelte`](./packages/svelte) | Svelte `use:plot` action |
 | [`@photonviz/solid`](./packages/solid) | Solid.js components (JSX-free source) |
 | [`@photonviz/gea`](./packages/gea) | [Gea](https://github.com/dashersw/gea) components (config-driven) |
+| [`@photonviz/wc`](./packages/wc) | Framework-agnostic Web Components (`<photon-plot>` / `<photon-plot3d>` / `<photon-polar>`) |
 
 Every chart type, `PolarPlot`, `Plot3D`, and the map layers are wrapped in all
 five frameworks. Runnable examples: [`examples/react`](./examples/react),

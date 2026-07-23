@@ -1,0 +1,53 @@
+{
+  "name": "@photonviz/wc",
+  "version": "0.3.1",
+  "description": "Web Components (custom elements) for Photon — WebGL2 scientific plotting in plain HTML, Angular, or any framework",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "./dist/index.js"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@photonviz/core": "workspace:*",
+    "@photonviz/map": "workspace:*"
+  },
+  "keywords": [
+    "web-components",
+    "custom-elements",
+    "webgl2",
+    "plot",
+    "chart",
+    "photon",
+    "visualization",
+    "html",
+    "angular"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coredumpdev/photon.git",
+    "directory": "packages/wc"
+  },
+  "homepage": "https://github.com/coredumpdev/photon#readme",
+  "author": "Muzaffer Tolga Yakar <muzaffertolgayakar@gmail.com>",
+  "bugs": "https://github.com/coredumpdev/photon/issues",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

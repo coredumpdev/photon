@@ -186,6 +186,8 @@ export interface PlotOptions {
   showToolbar?: boolean;
   /** Add drawing tools (trendline / horizontal / ray / Fibonacci / rectangle) to the toolbar. Default false. */
   drawingTools?: boolean;
+  /** Accessible label for the chart (sets `role="img"` + `aria-label`). Auto-summarized if omitted. */
+  ariaLabel?: string;
   /** Initial interaction mode. Default `"pan"`. */
   mode?: InteractionMode;
   /** Enable hover crosshair + tooltip. Default true. */
@@ -315,6 +317,7 @@ function clampAxis(domain: Range, bounds: Range): Range {
  */
 export class Plot {
   private container: HTMLElement;
+  private ariaLabel?: string;
   private gridCanvas: HTMLCanvasElement;
   private dataCanvas: HTMLCanvasElement;
   private axisCanvas: HTMLCanvasElement;
@@ -388,6 +391,8 @@ export class Plot {
     if (getComputedStyle(container).position === "static") {
       container.style.position = "relative";
     }
+    this.ariaLabel = options.ariaLabel;
+    container.setAttribute("role", "img");
 
     this.gridCanvas = this.makeCanvas(0);
     this.dataCanvas = this.makeCanvas(1);
@@ -434,6 +439,7 @@ export class Plot {
     this.borderFill = options.border;
     this.title =
       typeof options.title === "string" ? { text: options.title } : (options.title ?? null);
+    this.updateAria();
     this.legend = options.legend === true ? {} : (options.legend || null);
     this.mode = options.mode ?? "pan";
     this.hoverEnabled = options.hover !== false;
@@ -607,8 +613,31 @@ export class Plot {
     }
     this.layers.push(layer);
     this.autoscale();
+    this.updateAria();
     this.requestRender();
     return layer;
+  }
+
+  // --- Accessibility --------------------------------------------------------
+
+  /** Set the chart's accessible label (`aria-label`). Pass `undefined` to auto-summarize. */
+  setAriaLabel(text: string | undefined): void {
+    this.ariaLabel = text;
+    this.updateAria();
+  }
+
+  /** A one-line text summary of the chart (title + series), for a11y / tooltips. */
+  describe(): string {
+    const names = this.legendEntries().map((e) => e.name).filter((n) => !/^(line|scatter|bar|area)-\d+$/.test(n));
+    const title = this.title?.text ? `${this.title.text}. ` : "";
+    const nl = this.layers.length;
+    if (nl === 0) return `${title}Empty chart`.trim();
+    const series = names.length ? ` — ${names.join(", ")}` : "";
+    return `${title}Chart with ${nl} series${series}`.trim();
+  }
+
+  private updateAria(): void {
+    this.container.setAttribute("aria-label", this.ariaLabel ?? this.describe());
   }
 
   /**
