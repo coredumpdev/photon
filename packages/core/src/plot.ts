@@ -1022,8 +1022,13 @@ export class Plot {
     menu.appendChild(del);
     document.body.appendChild(menu);
     this.drawMenu = menu;
-    // Dismiss on any outside interaction.
-    const dismiss = () => { this.hideDrawMenu(); window.removeEventListener("pointerdown", dismiss, true); window.removeEventListener("blur", dismiss); };
+    // Dismiss on an interaction OUTSIDE the menu (clicks inside must reach the items).
+    const dismiss = (ev?: Event) => {
+      if (ev && ev.target instanceof Node && menu.contains(ev.target)) return;
+      window.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("blur", dismiss);
+      this.hideDrawMenu();
+    };
     setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
     window.addEventListener("blur", dismiss);
     this.requestRender();
@@ -1856,6 +1861,7 @@ export class Plot {
     let downY = 0;
 
     el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // right/middle click → let contextmenu handle it
       el.setPointerCapture(e.pointerId);
       this.hoverPx = null;
       const rect = el.getBoundingClientRect();
@@ -1943,7 +1949,7 @@ export class Plot {
           const hit = !this.drawTool && this.drawings.length ? this.hitDrawing(px, py) : { index: -1, handle: -1 };
           if (hit.index >= 0) {
             if (this.hoverDrawing !== hit.index) { this.hoverDrawing = hit.index; this.requestRender(); }
-            el.style.cursor = hit.handle >= 0 ? "grab" : "move";
+            el.style.cursor = hit.handle >= 0 ? "grab" : "pointer";
             this.setHover(null);
           } else {
             if (this.hoverDrawing !== -1) { this.hoverDrawing = -1; this.requestRender(); }
