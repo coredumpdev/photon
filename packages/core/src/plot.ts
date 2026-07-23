@@ -1026,7 +1026,8 @@ export class Plot {
     const del = item("🗑  Delete", () => this.removeDrawing(index));
     del.style.color = "#f87171";
     menu.appendChild(del);
-    document.body.appendChild(menu);
+    // In fullscreen only the fullscreen element renders, so attach the menu there.
+    (document.fullscreenElement ?? document.body).appendChild(menu);
     this.drawMenu = menu;
     // Dismiss on an interaction OUTSIDE the menu (clicks inside must reach the items).
     const dismiss = (ev?: Event) => {
