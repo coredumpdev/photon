@@ -40,6 +40,7 @@ import {
   type PlotTitleOptions,
   type Theme,
 } from "./render/overlay.js";
+import { canvasToBlob, copyCanvasToClipboard, downloadCanvas, type ExportOptions } from "./render/export.js";
 import type { PickMode } from "./layers/pick.js";
 import { LinearScale, makeScale, type Scale, type ScaleType } from "./scales/scale.js";
 import { createToolbar } from "./ui/toolbar.js";
@@ -488,6 +489,7 @@ export class Plot {
           getMode: () => this.mode,
           home: () => this.home(),
           onModeChange: (cb) => this.modeChangeCbs.push(cb),
+          download: () => void this.downloadImage(),
         },
         this.isDark,
       );
@@ -974,6 +976,47 @@ export class Plot {
     }
     this.autoscale();
     this.requestRender();
+  }
+
+  // --- Export ---------------------------------------------------------------
+
+  /**
+   * Composite this plot's layers (grid → data → axes/labels) into a single 2D
+   * canvas at device resolution. `background` fills behind the plot (default the
+   * theme's page color; pass `"transparent"` to keep alpha).
+   */
+  private compositeCanvas(background?: string): HTMLCanvasElement {
+    this.render(); // ensure the blitted data canvas holds this plot's latest frame
+    const w = this.dataCanvas.width, h = this.dataCanvas.height;
+    const out = document.createElement("canvas");
+    out.width = w; out.height = h;
+    const ctx = out.getContext("2d")!;
+    const bg = background ?? (this.isDark ? "#0b1220" : "#ffffff");
+    if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
+    ctx.drawImage(this.gridCanvas, 0, 0);
+    ctx.drawImage(this.dataCanvas, 0, 0);
+    ctx.drawImage(this.axisCanvas, 0, 0);
+    return out;
+  }
+
+  /** Export the current view as a data URL (default PNG). */
+  toDataURL(type = "image/png", opts: ExportOptions = {}): string {
+    return this.compositeCanvas(opts.background).toDataURL(type, opts.quality);
+  }
+
+  /** Export the current view as a `Blob` (default PNG). */
+  toBlob(type = "image/png", opts: ExportOptions = {}): Promise<Blob | null> {
+    return canvasToBlob(this.compositeCanvas(opts.background), type, opts.quality);
+  }
+
+  /** Download the current view as an image (PNG by default). */
+  downloadImage(filename = "chart.png", type = "image/png", opts: ExportOptions = {}): Promise<void> {
+    return downloadCanvas(this.compositeCanvas(opts.background), filename, type, opts.quality);
+  }
+
+  /** Copy the current view to the clipboard as a PNG. Throws if the browser can't. */
+  copyToClipboard(opts: ExportOptions = {}): Promise<void> {
+    return copyCanvasToClipboard(this.compositeCanvas(opts.background));
   }
 
   /** Re-fit auto axes to the data: x over all series, each y axis over its own series. */

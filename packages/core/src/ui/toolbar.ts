@@ -6,6 +6,8 @@ export interface ToolbarHost {
   getMode(): InteractionMode;
   home(): void;
   onModeChange(cb: (mode: InteractionMode) => void): void;
+  /** Optional: download the current view as a PNG. Adds a toolbar button when present. */
+  download?(): void;
 }
 
 export interface ToolbarTheme {
@@ -42,6 +44,7 @@ const ICONS = {
   box: `<rect x="2.5" y="2.5" width="11" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.4 2"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/>`,
   boxX: `<path d="M1.5 8h13M3.5 5.5 1.5 8l2 2.5M12.5 5.5 14.5 8l-2 2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="4.5" y="3" width="7" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.8"/>`,
   boxY: `<path d="M8 1.5v13M5.5 3.5 8 1.5l2.5 2M5.5 12.5 8 14.5l2.5-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="4.5" width="10" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.8"/>`,
+  download: `<path d="M8 1.8v8.4M4.8 7l3.2 3.2L11.2 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 11.5v1.7A1 1 0 0 0 3.5 14.2h9a1 1 0 0 0 1-1V11.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
 };
 
 interface Btn {
@@ -83,6 +86,9 @@ export function createToolbar(
     { key: "box-x", title: "Zoom X only", icon: ICONS.boxX, mode: "box-x" },
     { key: "box-y", title: "Zoom Y only", icon: ICONS.boxY, mode: "box-y" },
   ];
+  if (host.download) {
+    buttons.push({ key: "download", title: "Download PNG", icon: ICONS.download, action: () => host.download!() });
+  }
 
   const modeButtons = new Map<InteractionMode, HTMLButtonElement>();
 

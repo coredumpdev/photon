@@ -4,6 +4,7 @@ import type { AxisFrame } from "../gl/transform.js";
 import { LineLayer } from "../layers/line.js";
 import { ScatterLayer } from "../layers/scatter.js";
 import { darkTheme, lightTheme, type Theme } from "../render/overlay.js";
+import { canvasToBlob, copyCanvasToClipboard, downloadCanvas, type ExportOptions } from "../render/export.js";
 import type { Color, RenderType } from "../types.js";
 
 export interface PolarOptions {
@@ -282,6 +283,43 @@ export class PolarPlot {
     this.rotation = rad;
     this.retransform();
     this.requestRender();
+  }
+
+  // --- Export ---------------------------------------------------------------
+
+  /** Composite grid → data → overlay into one canvas at device resolution. */
+  private compositeCanvas(background?: string): HTMLCanvasElement {
+    this.render();
+    const w = this.dataCanvas.width, h = this.dataCanvas.height;
+    const out = document.createElement("canvas");
+    out.width = w; out.height = h;
+    const ctx = out.getContext("2d")!;
+    const bg = background ?? (this.isDark ? "#0b1220" : "#ffffff");
+    if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
+    ctx.drawImage(this.gridCanvas, 0, 0);
+    ctx.drawImage(this.dataCanvas, 0, 0);
+    ctx.drawImage(this.overlayCanvas, 0, 0);
+    return out;
+  }
+
+  /** Export the current view as a data URL (default PNG). */
+  toDataURL(type = "image/png", opts: ExportOptions = {}): string {
+    return this.compositeCanvas(opts.background).toDataURL(type, opts.quality);
+  }
+
+  /** Export the current view as a `Blob` (default PNG). */
+  toBlob(type = "image/png", opts: ExportOptions = {}): Promise<Blob | null> {
+    return canvasToBlob(this.compositeCanvas(opts.background), type, opts.quality);
+  }
+
+  /** Download the current view as an image (PNG by default). */
+  downloadImage(filename = "chart.png", type = "image/png", opts: ExportOptions = {}): Promise<void> {
+    return downloadCanvas(this.compositeCanvas(opts.background), filename, type, opts.quality);
+  }
+
+  /** Copy the current view to the clipboard as a PNG. */
+  copyToClipboard(opts: ExportOptions = {}): Promise<void> {
+    return copyCanvasToClipboard(this.compositeCanvas(opts.background));
   }
 
   destroy(): void {

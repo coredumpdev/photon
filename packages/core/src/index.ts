@@ -129,6 +129,8 @@ export type { ColormapName, RGB } from "./color/colormap.js";
 
 // Rendering
 export { lightTheme, darkTheme, resolveAxisStyle } from "./render/overlay.js";
+export { canvasToBlob, downloadCanvas, copyCanvasToClipboard } from "./render/export.js";
+export type { ExportOptions } from "./render/export.js";
 export type { Theme, Layout, ResolvedAxisStyle, PlotTitleOptions } from "./render/overlay.js";
 export { parseColor, toColorCss } from "./gl/context.js";
 export type { AxisFrame } from "./gl/transform.js";

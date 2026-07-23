@@ -2,6 +2,7 @@ import { autoTicks, defaultFormat } from "../axes/ticks.js";
 import { colormap } from "../color/colormap.js";
 import { createProgram, uniformLocations } from "../gl/program.js";
 import { begin3D, getSharedGL, sizeShared } from "../gl/shared.js";
+import { canvasToBlob, copyCanvasToClipboard, downloadCanvas, type ExportOptions } from "../render/export.js";
 import type { Range } from "../types.js";
 import { Bar3DLayer, type Bar3DOptions } from "./bar3d.js";
 import { Contour3DLayer, type Contour3DOptions } from "./contour3d.js";
@@ -408,6 +409,40 @@ export class Plot3D {
   refresh(): void {
     this.recompute();
     this.requestRender();
+  }
+
+  // --- Export ---------------------------------------------------------------
+
+  /** Copy the current 3D frame (already composited on one canvas) into a fresh canvas. */
+  private compositeCanvas(background?: string): HTMLCanvasElement {
+    this.render();
+    const w = this.canvas.width, h = this.canvas.height;
+    const out = document.createElement("canvas");
+    out.width = w; out.height = h;
+    const ctx = out.getContext("2d")!;
+    if (background && background !== "transparent") { ctx.fillStyle = background; ctx.fillRect(0, 0, w, h); }
+    ctx.drawImage(this.canvas, 0, 0);
+    return out;
+  }
+
+  /** Export the current view as a data URL (default PNG). */
+  toDataURL(type = "image/png", opts: ExportOptions = {}): string {
+    return this.compositeCanvas(opts.background).toDataURL(type, opts.quality);
+  }
+
+  /** Export the current view as a `Blob` (default PNG). */
+  toBlob(type = "image/png", opts: ExportOptions = {}): Promise<Blob | null> {
+    return canvasToBlob(this.compositeCanvas(opts.background), type, opts.quality);
+  }
+
+  /** Download the current view as an image (PNG by default). */
+  downloadImage(filename = "chart.png", type = "image/png", opts: ExportOptions = {}): Promise<void> {
+    return downloadCanvas(this.compositeCanvas(opts.background), filename, type, opts.quality);
+  }
+
+  /** Copy the current view to the clipboard as a PNG. */
+  copyToClipboard(opts: ExportOptions = {}): Promise<void> {
+    return copyCanvasToClipboard(this.compositeCanvas(opts.background));
   }
 
   destroy(): void {
