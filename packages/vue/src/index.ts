@@ -735,6 +735,7 @@ export const Depth = defineComponent({
 export {
   sma, ema, wma, rollingStd, bollinger, rsi, macd, vwap, trueRange, atr,
   firstFinite, heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth,
+  stochastic, keltner, obv, ichimoku, adx, superTrend, fibRetracements,
 } from "@photonviz/core";
 
 // ---------------------------------------------------------------------------
