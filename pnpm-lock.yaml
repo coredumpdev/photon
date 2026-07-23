@@ -49,6 +49,22 @@ importers:
         specifier: ^8.0.0
         version: 8.1.5(esbuild@0.27.7)
 
+  examples/playground:
+    dependencies:
+      '@photonviz/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@photonviz/map':
+        specifier: workspace:*
+        version: link:../../packages/map
+    devDependencies:
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+      vite:
+        specifier: ^6
+        version: 6.4.3(lightningcss@1.33.0)
+
   examples/react:
     dependencies:
       '@photonviz/core':
@@ -172,6 +188,25 @@ importers:
       vue-tsc:
         specifier: ^2
         version: 2.2.12(typescript@5.9.3)
+
+  examples/wc:
+    dependencies:
+      '@photonviz/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@photonviz/map':
+        specifier: workspace:*
+        version: link:../../packages/map
+      '@photonviz/wc':
+        specifier: workspace:*
+        version: link:../../packages/wc
+    devDependencies:
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+      vite:
+        specifier: ^6
+        version: 6.4.3(lightningcss@1.33.0)
 
   packages/core: {}
 

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Photon — playground</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #0b1020; color: #cbd5e1;
+        display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+      }
+
+      header { padding: 10px 16px; border-bottom: 1px solid #1e293b; flex: 0 0 auto; }
+      header h1 { margin: 0; font-size: 16px; }
+      header h1 b { color: #60a5fa; }
+      header p { margin: 3px 0 0; font-size: 12px; color: #94a3b8; }
+
+      .split { flex: 1 1 auto; display: flex; min-height: 0; }
+      .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+      .pane.left { flex: 0 0 44%; border-right: 1px solid #1e293b; }
+      .pane.right { flex: 1 1 56%; }
+
+      .toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #1e293b; flex: 0 0 auto; }
+      .toolbar label { font-size: 12px; color: #94a3b8; }
+      select {
+        appearance: none; font: 600 13px system-ui, sans-serif; color: #e2e8f0;
+        background: #0e1526; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+      }
+      button#run {
+        appearance: none; cursor: pointer; font: 700 13px system-ui, sans-serif; color: #06210f;
+        background: #34d399; border: none; border-radius: 8px; padding: 7px 16px; margin-left: auto;
+      }
+      button#run:hover { background: #6ee7b7; }
+
+      textarea#code {
+        flex: 1 1 auto; width: 100%; min-height: 0; resize: none; border: none; outline: none;
+        background: #0a0e1c; color: #e2e8f0; padding: 12px 14px;
+        font: 13px/1.55 ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+        tab-size: 2; white-space: pre; overflow: auto;
+      }
+
+      #preview { flex: 1 1 auto; min-height: 0; position: relative; background: #0b1020; }
+      #preview > div { position: absolute; inset: 0; }
+
+      .status {
+        flex: 0 0 auto; padding: 7px 14px; font: 500 12.5px ui-monospace, Menlo, monospace;
+        border-top: 1px solid #1e293b; background: #0e1526; color: #94a3b8;
+        white-space: pre-wrap; word-break: break-word; max-height: 30%; overflow: auto;
+      }
+      .status.ok { color: #34d399; }
+      .status.err { color: #f87171; }
+
+      @media (max-width: 820px) {
+        body { overflow: auto; }
+        .split { flex-direction: column; }
+        .pane.left { flex: 0 0 auto; border-right: none; border-bottom: 1px solid #1e293b; }
+        textarea#code { min-height: 300px; }
+        .pane.right { flex: 0 0 auto; }
+        #preview { min-height: 360px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1><b>Photon</b> — code playground</h1>
+      <p>Edit the snippet, hit <b>Run ▶</b> (auto-runs on load and while typing). Your code gets <code>container</code>, <code>photon</code>, and <code>map</code>.</p>
+    </header>
+
+    <div class="split">
+      <div class="pane left">
+        <div class="toolbar">
+          <label for="preset">Preset</label>
+          <select id="preset"></select>
+          <button id="run">Run ▶</button>
+        </div>
+        <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      </div>
+
+      <div class="pane right">
+        <div id="preview"></div>
+        <div class="status" id="status">ready</div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

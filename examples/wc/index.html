@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Photon — Web Components</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0b1220; color: #e2e8f0;
+        font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+      header { padding: 20px 22px 6px; }
+      header h1 { margin: 0; font-size: 20px; }
+      header p { margin: 6px 0 0; color: #94a3b8; }
+      header code { background: #141d33; padding: 1px 6px; border-radius: 5px; color: #cbd5e1; }
+      .grid { display: grid; gap: 14px; padding: 16px 22px 40px;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+      .card { border: 1px solid #1e293b; border-radius: 10px; background: #0e1526; overflow: hidden; }
+      .card h3 { margin: 0; padding: 9px 12px; font-size: 13px; font-weight: 600; color: #cbd5e1;
+        border-bottom: 1px solid #1e293b; }
+      photon-plot, photon-plot3d, photon-polar { display: block; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1><b>Photon</b> — Web Components</h1>
+      <p>Framework-free custom elements. Register on import, then set data as a JS property:
+        <code>el.series = [{ type: "line", x, y }]</code>.</p>
+    </header>
+
+    <div class="grid">
+      <div class="card"><h3>Line</h3><photon-plot id="line" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Candlestick</h3><photon-plot id="candle" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Heikin-Ashi</h3><photon-plot id="ha" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Bars</h3><photon-plot id="bars" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Pie</h3><photon-plot id="pie" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Polar</h3><photon-polar id="polar" theme="dark" height="240px"></photon-polar></div>
+      <div class="card"><h3>3D surface</h3><photon-plot3d id="surf" height="240px"></photon-plot3d></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

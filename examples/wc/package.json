@@ -1,0 +1,18 @@
+{
+  "name": "@photonviz/example-wc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@photonviz/core": "workspace:*",
+    "@photonviz/map": "workspace:*",
+    "@photonviz/wc": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^6",
+    "typescript": "^5.7"
+  }
+}
