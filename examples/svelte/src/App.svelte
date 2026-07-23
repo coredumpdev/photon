@@ -1327,6 +1327,57 @@
   :global(.chart) {
     height: 260px;
   }
+  /* Per-chart fullscreen button — top-right, revealed on panel hover. */
+  :global(.fs-btn) {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 7;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: rgba(20, 29, 51, 0.7);
+    color: #94a3b8;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.12s, background 0.12s;
+  }
+  :global(.card:hover .fs-btn),
+  :global(.card:fullscreen .fs-btn) {
+    opacity: 1;
+  }
+  :global(.fs-btn:hover) {
+    color: #e2e8f0;
+    background: rgba(30, 41, 59, 0.95);
+  }
+  /* Fullscreen a single panel: fill the viewport, chart flexes to fill. */
+  :global(.card:fullscreen) {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 14px;
+    box-sizing: border-box;
+    background: #0b1220;
+    display: flex;
+    flex-direction: column;
+  }
+  :global(.card:fullscreen .chartwrap) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  :global(.card:fullscreen .chart) {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
   /* FPS badge — pinned top-left of the chart (Dynamic tab only). */
   :global(.fps) {
     position: absolute;

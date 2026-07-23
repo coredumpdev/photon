@@ -39,6 +39,16 @@
         background: rgba(14,21,38,.7); border: 1px solid #1e293b; backdrop-filter: blur(3px);
         pointer-events: none; font-variant-numeric: tabular-nums;
       }
+      /* Per-chart fullscreen button (top-right, shown on hover). */
+      .fs-btn { position: absolute; top: 6px; right: 6px; z-index: 7; width: 24px; height: 24px; padding: 0;
+        cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;
+        border: 1px solid #334155; background: rgba(20,29,51,.7); color: #94a3b8; opacity: 0; transition: opacity .15s, color .12s, background .12s; }
+      .panel:hover .fs-btn, .panel:fullscreen .fs-btn { opacity: 1; }
+      .fs-btn:hover { color: #e2e8f0; background: rgba(30,41,59,.95); }
+      .panel:fullscreen { width: 100vw; height: 100vh; margin: 0; padding: 14px; box-sizing: border-box;
+        background: #0b1220; display: flex; flex-direction: column; }
+      .panel:fullscreen .chart { flex: 1 1 auto; height: auto; min-height: 0; }
+
       /* Map caption pinned bottom-right (attribution / hint). */
       .cap { position: absolute; right: 6px; bottom: 6px; z-index: 5; padding: 2px 7px; border-radius: 6px;
         font: 500 10.5px system-ui, sans-serif; color: #cbd5e1; background: rgba(14,21,38,.72); border: 1px solid #1e293b;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { Plot as CorePlot, linkX } from "@photonviz/core";
+  import FsButton from "./FsButton.svelte";
 
   /** Deterministic RNG (isolated instance so it doesn't perturb the page). */
   let seed = 1337;
@@ -137,6 +138,7 @@
 </script>
 
 <section class="card wide">
+  <FsButton />
   <h2>Linked finance<span> — candlesticks + volume · ordinal-time · linkX</span></h2>
   <div class="finance">
     <div class="chartwrap">

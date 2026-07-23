@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Photon · React — chart gallery</title>
+    <style>
+      /* Per-chart fullscreen button (top-right, shown on hover). */
+      .pv-fs-btn {
+        position: absolute; top: 6px; right: 6px; z-index: 7; width: 24px; height: 24px; padding: 0;
+        cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;
+        border: 1px solid #334155; background: rgba(20, 29, 51, 0.7); color: #94a3b8; opacity: 0;
+        transition: opacity 0.15s, color 0.12s, background 0.12s;
+      }
+      .pv-panel:hover .pv-fs-btn,
+      .pv-panel:fullscreen .pv-fs-btn { opacity: 1; }
+      .pv-fs-btn:hover { color: #e2e8f0; background: rgba(30, 41, 59, 0.95); }
+      /* Fullscreen: panel fills the viewport; chart area flexes to fill. */
+      .pv-panel:fullscreen {
+        width: 100vw; height: 100vh; margin: 0; padding: 14px; box-sizing: border-box;
+        background: #0b1220 !important; display: flex; flex-direction: column;
+      }
+      .pv-panel:fullscreen .pv-chart { flex: 1 1 auto; height: auto !important; min-height: 0; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

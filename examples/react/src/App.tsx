@@ -279,13 +279,26 @@ function PanelShell({
   fps?: boolean;
   children: ReactNode;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Per-chart fullscreen toggle (top-right). The plot resizes via ResizeObserver.
+  const toggleFs = () => {
+    const el = panelRef.current;
+    if (!el) return;
+    if (document.fullscreenElement === el) document.exitFullscreen();
+    else el.requestFullscreen().catch(() => {});
+  };
   return (
-    <div style={S.panel}>
+    <div ref={panelRef} className="pv-panel" style={S.panel}>
+      <button type="button" className="pv-fs-btn" title="Fullscreen" aria-label="Toggle fullscreen" onClick={toggleFs}>
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       <h2 style={S.panelH}>
         {title}
         {subtitle ? <span style={S.panelSub}> — {subtitle}</span> : null}
       </h2>
-      <div style={S.chartBox}>
+      <div className="pv-chart" style={S.chartBox}>
         {fps ? <FpsBadge /> : null}
         {children}
       </div>

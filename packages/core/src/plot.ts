@@ -152,11 +152,11 @@ export interface GraphInput extends Omit<GraphOptions, "x" | "y"> {
 export type Annotation =
   | { type: "span"; dim: Dim; value: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
   | { type: "band"; dim: Dim; from: number; to: number; color?: string; yAxis?: string }
-  | { type: "box"; x: Range; y: Range; color?: string; border?: string; yAxis?: string }
+  | { type: "box"; x: Range; y: Range; color?: string; border?: string; label?: string; yAxis?: string }
   | { type: "label"; x: number; y: number; text: string; color?: string; font?: string; align?: "left" | "center" | "right"; yAxis?: string }
-  | { type: "line"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
-  | { type: "ray"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
-  | { type: "fib"; x0: number; x1: number; high: number; low: number; ratios?: number[]; color?: string; fill?: boolean; yAxis?: string };
+  | { type: "line"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; label?: string; yAxis?: string }
+  | { type: "ray"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; label?: string; yAxis?: string }
+  | { type: "fib"; x0: number; x1: number; high: number; low: number; ratios?: number[]; color?: string; fill?: boolean; label?: string; yAxis?: string };
 
 /** An interactive drawing tool: click-drag on the plot to place the shape. */
 export type DrawTool = "trendline" | "hline" | "ray" | "fib" | "rect";
@@ -257,6 +257,14 @@ interface Pickable {
   /** Optional user-supplied detail lines for a point index (click info). */
   infoAt?(index: number): string[] | null;
 }
+/** Distance from point (px,py) to the segment (ax,ay)-(bx,by), in pixels. */
+function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
 function isPickable(layer: Layer): layer is Layer & Pickable {
   return typeof (layer as Partial<Pickable>).pick === "function";
 }
@@ -351,6 +359,10 @@ export class Plot {
   private drawings: Annotation[] = [];
   private pendingDrawing: Annotation | null = null;
   private drawToolCbs: Array<(t: DrawTool | null) => void> = [];
+  // Selection / editing of existing drawings.
+  private hoverDrawing = -1;
+  private selectedDrawing = -1;
+  private drawMenu: HTMLDivElement | null = null;
   private tooltip: HTMLDivElement;
   /** A point clicked to pin its details, until another click clears it. */
   private selected: { layer: Pickable; x: number; y: number; index: number } | null = null;
@@ -888,6 +900,145 @@ export class Plot {
     }
   }
 
+  private drawingYScale(a: Annotation): Scale {
+    const id = "yAxis" in a ? a.yAxis : undefined;
+    return (this.yAxes.get(id ?? "y") ?? this.primaryY()).scale;
+  }
+
+  /** Editable handle points (data space) for a drawing; `[]` if it has none. */
+  private drawingHandlePts(a: Annotation): Array<{ x: number; y: number }> {
+    switch (a.type) {
+      case "line": case "ray": return [{ x: a.x0, y: a.y0 }, { x: a.x1, y: a.y1 }];
+      case "fib": return [{ x: a.x0, y: a.high }, { x: a.x1, y: a.low }];
+      case "box": return [{ x: a.x[0], y: a.y[0] }, { x: a.x[1], y: a.y[1] }];
+      case "span": return a.dim === "y"
+        ? [{ x: (this.scaleX.domain[0] + this.scaleX.domain[1]) / 2, y: a.value }]
+        : [{ x: a.value, y: (this.primaryY().scale.domain[0] + this.primaryY().scale.domain[1]) / 2 }];
+      default: return [];
+    }
+  }
+
+  /** Move handle `i` of a drawing to a new data-space point (all editable types). */
+  private setDrawingHandle(a: Annotation, i: number, x: number, y: number): void {
+    switch (a.type) {
+      case "line": case "ray": if (i === 0) { a.x0 = x; a.y0 = y; } else { a.x1 = x; a.y1 = y; } break;
+      case "fib": if (i === 0) { a.x0 = x; a.high = y; } else { a.x1 = x; a.low = y; } break;
+      case "box": {
+        const m = a as unknown as { x: [number, number]; y: [number, number] };
+        if (i === 0) { m.x = [x, a.x[1]]; m.y = [y, a.y[1]]; } else { m.x = [a.x[0], x]; m.y = [a.y[0], y]; }
+        break;
+      }
+      case "span": (a as { value: number }).value = a.dim === "y" ? y : x; break;
+    }
+  }
+
+  /** Cursor→drawing distance in px (segment for line/ray, edges for box/fib, the line for span). */
+  private drawingBodyDist(a: Annotation, px: number, py: number, region: ReturnType<typeof plotRegion>): number {
+    const s = this.drawingYScale(a);
+    const X = (x: number) => pxX(region, this.scaleX.norm(x));
+    const Y = (y: number) => pxY(region, s.norm(y));
+    if (a.type === "line" || a.type === "ray") return segDist(px, py, X(a.x0), Y(a.y0), X(a.x1), Y(a.y1));
+    if (a.type === "span") return a.dim === "y" ? Math.abs(py - Y(a.value)) : Math.abs(px - X(a.value));
+    if (a.type === "box" || a.type === "fib") {
+      const [x0, x1] = a.type === "box" ? [X(a.x[0]), X(a.x[1])] : [X(a.x0), X(a.x1)];
+      const [y0, y1] = a.type === "box" ? [Y(a.y[0]), Y(a.y[1])] : [Y(a.high), Y(a.low)];
+      const inX = px >= Math.min(x0, x1) - 4 && px <= Math.max(x0, x1) + 4;
+      const inY = py >= Math.min(y0, y1) - 4 && py <= Math.max(y0, y1) + 4;
+      if (inX && inY) return 0; // anywhere inside/near the box counts as a hit
+    }
+    return Infinity;
+  }
+
+  /** Topmost drawing under the cursor and its handle (handle −1 = body, index −1 = none). */
+  private hitDrawing(px: number, py: number): { index: number; handle: number } {
+    if (this.drawings.length === 0) return { index: -1, handle: -1 };
+    const region = plotRegion(this.layout());
+    for (let di = this.drawings.length - 1; di >= 0; di--) {
+      const a = this.drawings[di]!;
+      const s = this.drawingYScale(a);
+      const pts = this.drawingHandlePts(a);
+      for (let hi = 0; hi < pts.length; hi++) {
+        const hx = pxX(region, this.scaleX.norm(pts[hi]!.x)), hy = pxY(region, s.norm(pts[hi]!.y));
+        if (Math.hypot(hx - px, hy - py) <= 8) return { index: di, handle: hi };
+      }
+    }
+    for (let di = this.drawings.length - 1; di >= 0; di--) {
+      if (this.drawingBodyDist(this.drawings[di]!, px, py, region) <= 6) return { index: di, handle: -1 };
+    }
+    return { index: -1, handle: -1 };
+  }
+
+  private removeDrawing(index: number): void {
+    if (index < 0 || index >= this.drawings.length) return;
+    this.drawings.splice(index, 1);
+    if (this.selectedDrawing === index) this.selectedDrawing = -1;
+    else if (this.selectedDrawing > index) this.selectedDrawing--;
+    this.hoverDrawing = -1;
+    this.hideDrawMenu();
+    this.requestRender();
+  }
+
+  private hideDrawMenu(): void {
+    if (this.drawMenu) { this.drawMenu.remove(); this.drawMenu = null; }
+  }
+
+  /** Right-click context menu for a drawing: rename, recolor, delete. */
+  private showDrawMenu(clientX: number, clientY: number, index: number): void {
+    this.hideDrawMenu();
+    const a = this.drawings[index];
+    if (!a) return;
+    this.selectedDrawing = index;
+    const menu = document.createElement("div");
+    Object.assign(menu.style, {
+      position: "fixed", left: `${clientX}px`, top: `${clientY}px`, zIndex: "1000",
+      minWidth: "150px", padding: "4px", borderRadius: "8px",
+      background: this.isDark ? "rgba(15,23,42,0.98)" : "rgba(255,255,255,0.99)",
+      color: this.isDark ? "#e2e8f0" : "#1e293b",
+      border: `1px solid ${this.isDark ? "rgba(148,163,184,0.3)" : "rgba(100,116,139,0.3)"}`,
+      boxShadow: "0 6px 20px rgba(0,0,0,0.35)", font: "13px system-ui, sans-serif", userSelect: "none",
+    } as CSSStyleDeclaration);
+    const item = (label: string, onClick: () => void): HTMLDivElement => {
+      const row = document.createElement("div");
+      row.textContent = label;
+      Object.assign(row.style, { padding: "6px 10px", borderRadius: "5px", cursor: "pointer" } as CSSStyleDeclaration);
+      row.addEventListener("mouseenter", () => { row.style.background = this.isDark ? "rgba(148,163,184,0.15)" : "rgba(100,116,139,0.12)"; });
+      row.addEventListener("mouseleave", () => { row.style.background = "transparent"; });
+      row.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); onClick(); });
+      return row;
+    };
+    menu.appendChild(item("✎  Rename…", () => { this.hideDrawMenu(); this.renameDrawing(index); }));
+    // Color swatches.
+    const colorRow = document.createElement("div");
+    Object.assign(colorRow.style, { display: "flex", gap: "6px", padding: "6px 10px" } as CSSStyleDeclaration);
+    for (const c of ["#f59e0b", "#60a5fa", "#34d399", "#f472b6", "#e2e8f0"]) {
+      const sw = document.createElement("span");
+      Object.assign(sw.style, { width: "16px", height: "16px", borderRadius: "4px", background: c, cursor: "pointer", border: "1px solid rgba(0,0,0,0.2)" } as CSSStyleDeclaration);
+      sw.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); (a as { color?: string }).color = c; this.hideDrawMenu(); this.requestRender(); });
+      colorRow.appendChild(sw);
+    }
+    menu.appendChild(colorRow);
+    const del = item("🗑  Delete", () => this.removeDrawing(index));
+    del.style.color = "#f87171";
+    menu.appendChild(del);
+    document.body.appendChild(menu);
+    this.drawMenu = menu;
+    // Dismiss on any outside interaction.
+    const dismiss = () => { this.hideDrawMenu(); window.removeEventListener("pointerdown", dismiss, true); window.removeEventListener("blur", dismiss); };
+    setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
+    window.addEventListener("blur", dismiss);
+    this.requestRender();
+  }
+
+  /** Prompt for a label on a drawing (double-click / context menu). */
+  private renameDrawing(index: number): void {
+    const a = this.drawings[index];
+    if (!a || (a.type !== "line" && a.type !== "ray" && a.type !== "box" && a.type !== "fib")) return;
+    const next = window.prompt("Label", a.label ?? "");
+    if (next === null) return;
+    a.label = next || undefined;
+    this.requestRender();
+  }
+
   /** Compute an STFT of `signal` and render it as a heatmap (time × frequency). */
   addHeatmapSpectrogram(
     signal: ArrayLike<number>,
@@ -1138,6 +1289,7 @@ export class Plot {
   destroy(): void {
     this.resizeObserver.disconnect();
     this.toolbarHandle?.destroy();
+    this.hideDrawMenu();
     this.selectionDiv.remove();
     this.tooltip.remove();
     this.infoBox.remove();
@@ -1427,6 +1579,11 @@ export class Plot {
         const rw = Math.abs(x1 - x0), rh = Math.abs(y1 - y0);
         if (a.color) { ctx.fillStyle = a.color; ctx.fillRect(rx, ry, rw, rh); }
         if (a.border) { ctx.strokeStyle = a.border; ctx.lineWidth = 1; ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh); }
+        if (a.label) {
+          ctx.fillStyle = a.border ?? a.color ?? this.theme.text;
+          ctx.font = this.theme.font; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+          ctx.fillText(a.label, rx + 4, ry - 3);
+        }
       } else if (a.type === "label") {
         const s = yScaleOf(a.yAxis);
         ctx.fillStyle = a.color ?? this.theme.text;
@@ -1447,6 +1604,12 @@ export class Plot {
           X1 = X0 + dx * f; Y1 = Y0 + dy * f;
         }
         ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X1, Y1); ctx.stroke();
+        if (a.label) {
+          ctx.setLineDash([]);
+          ctx.fillStyle = a.color ?? this.theme.text;
+          ctx.font = this.theme.font; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+          ctx.fillText(a.label, px(a.x1) + 7, py(s, a.y1) - 4);
+        }
       } else {
         // Fibonacci retracement levels between `high` and `low` across [x0, x1].
         const s = yScaleOf(a.yAxis);
@@ -1468,6 +1631,25 @@ export class Plot {
           ctx.beginPath(); ctx.moveTo(fx0, y); ctx.lineTo(fx1, y); ctx.stroke();
           ctx.fillText(`${(ratios[i]! * 100).toFixed(1)}% · ${(a.high - span * ratios[i]!).toFixed(2)}`, fx0 + 4, y - 2);
         }
+        if (a.label) ctx.fillText(a.label, fx0 + 4, Math.min(...ys) - 4);
+      }
+    }
+
+    // Editable-handle chrome for the hovered / selected drawing.
+    const active = this.selectedDrawing >= 0 ? this.selectedDrawing : this.hoverDrawing;
+    if (active >= 0 && active < this.drawings.length) {
+      const a = this.drawings[active]!;
+      const s = yScaleOf(a.yAxis);
+      ctx.setLineDash([]);
+      for (const pt of this.drawingHandlePts(a)) {
+        const hx = px(pt.x), hy = py(s, pt.y);
+        ctx.beginPath();
+        ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = this.selectedDrawing === active ? "#f59e0b" : (this.isDark ? "#e2e8f0" : "#fff");
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = this.isDark ? "#0b1220" : "#334155";
+        ctx.stroke();
       }
     }
     ctx.restore();
@@ -1642,6 +1824,7 @@ export class Plot {
   private attachInteraction(): void {
     const el = this.axisCanvas;
     el.style.touchAction = "none";
+    el.style.outline = "none";
 
     el.addEventListener(
       "wheel",
@@ -1661,6 +1844,8 @@ export class Plot {
     let selecting = false;
     let drawing = false;
     let drawStart = { x: 0, y: 0 };
+    /** Non-null while dragging a drawing's handle. */
+    let handleDrag: { index: number; handle: number } | null = null;
     /** Non-null while dragging an axis strip: `"x"` or a y-axis id. */
     let axisDrag: "x" | { y: string } | null = null;
     let lastX = 0;
@@ -1679,6 +1864,8 @@ export class Plot {
       downX = px;
       downY = py;
       const zone = this.zoneAt(px, py);
+      const drawHit = !this.drawTool && zone.type === "plot" && this.drawings.length
+        ? this.hitDrawing(px, py) : { index: -1, handle: -1 };
 
       if (zone.type === "x") {
         axisDrag = "x";
@@ -1691,13 +1878,21 @@ export class Plot {
         drawStart = this.dataAtPx(px, py);
         this.pendingDrawing = this.buildDrawing(this.drawTool, drawStart, drawStart);
         this.requestRender();
+      } else if (drawHit.index >= 0) {
+        // Select the drawing; grab a handle if the cursor is on one.
+        this.selectedDrawing = drawHit.index;
+        el.focus({ preventScroll: true });
+        if (drawHit.handle >= 0) { handleDrag = drawHit; el.style.cursor = "grabbing"; }
+        this.requestRender();
       } else if (this.mode === "pan") {
+        this.selectedDrawing = -1;
         panning = true;
         lastX = e.clientX;
         lastY = e.clientY;
         el.style.cursor = "grabbing";
         if (this.crosshair) this.setPress(px, py);
       } else {
+        this.selectedDrawing = -1;
         selecting = true;
         startX = px;
         startY = py;
@@ -1716,6 +1911,10 @@ export class Plot {
       } else if (axisDrag && typeof axisDrag === "object") {
         this.panY(axisDrag.y, e.clientY - lastY, region);
         lastY = e.clientY;
+        this.requestRender();
+      } else if (handleDrag) {
+        const c = this.dataAtPx(e.clientX - rect.left, e.clientY - rect.top);
+        this.setDrawingHandle(this.drawings[handleDrag.index]!, handleDrag.handle, c.x, c.y);
         this.requestRender();
       } else if (panning) {
         this.panX(e.clientX - lastX, region);
@@ -1741,13 +1940,21 @@ export class Plot {
           el.style.cursor = "ns-resize";
           this.setHover(null);
         } else {
-          this.updateCursor();
-          if (this.hoverEnabled) this.setHover({ x: px, y: py });
+          const hit = !this.drawTool && this.drawings.length ? this.hitDrawing(px, py) : { index: -1, handle: -1 };
+          if (hit.index >= 0) {
+            if (this.hoverDrawing !== hit.index) { this.hoverDrawing = hit.index; this.requestRender(); }
+            el.style.cursor = hit.handle >= 0 ? "grab" : "move";
+            this.setHover(null);
+          } else {
+            if (this.hoverDrawing !== -1) { this.hoverDrawing = -1; this.requestRender(); }
+            this.updateCursor();
+            if (this.hoverEnabled) this.setHover({ x: px, y: py });
+          }
         }
       }
     });
 
-    el.addEventListener("pointerleave", () => this.setHover(null));
+    el.addEventListener("pointerleave", () => { this.setHover(null); if (this.hoverDrawing !== -1) { this.hoverDrawing = -1; this.requestRender(); } });
 
     const end = (e: PointerEvent) => {
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
@@ -1763,6 +1970,10 @@ export class Plot {
         e.type === "pointerup" && !axisDrag && Math.hypot(upPx - downX, upPy - downY) < 4;
       if (axisDrag) {
         axisDrag = null;
+      } else if (handleDrag) {
+        handleDrag = null;
+        this.updateCursor();
+        this.requestRender();
       } else if (drawing) {
         drawing = false;
         const moved = Math.hypot(upPx - downX, upPy - downY);
@@ -1778,11 +1989,34 @@ export class Plot {
         if (!isClick) this.applySelection(startX, startY, upPx, upPy);
         this.selectionDiv.style.display = "none";
       }
-      // A drawing tool owns clicks in the plot body — don't also pin a point.
-      if (isClick && this.drawTool === null) this.handleClick(upPx, upPy);
+      // A drawing tool / a selected drawing owns clicks in the plot body — don't also pin a point.
+      if (isClick && this.drawTool === null && this.selectedDrawing < 0) this.handleClick(upPx, upPy);
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
+
+    // Double-click a drawing to (re)label it.
+    el.addEventListener("dblclick", (e) => {
+      const rect = el.getBoundingClientRect();
+      const hit = this.hitDrawing(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit.index >= 0) { e.preventDefault(); this.selectedDrawing = hit.index; this.renameDrawing(hit.index); }
+    });
+
+    // Right-click a drawing for a context menu (rename / recolor / delete).
+    el.addEventListener("contextmenu", (e) => {
+      const rect = el.getBoundingClientRect();
+      const hit = this.hitDrawing(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit.index >= 0) { e.preventDefault(); this.showDrawMenu(e.clientX, e.clientY, hit.index); }
+    });
+
+    // Delete / Backspace removes the selected drawing (when the plot has focus).
+    el.tabIndex = el.tabIndex >= 0 ? el.tabIndex : 0;
+    el.addEventListener("keydown", (e) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && this.selectedDrawing >= 0) {
+        e.preventDefault();
+        this.removeDrawing(this.selectedDrawing);
+      }
+    });
   }
 
   private setHover(px: { x: number; y: number } | null): void {

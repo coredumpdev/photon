@@ -7,6 +7,7 @@
     type PolarConfig,
     type Plot3DConfig,
   } from "@photonviz/svelte";
+  import FsButton from "./FsButton.svelte";
 
   export let title: string;
   export let subtitle = "";
@@ -20,6 +21,7 @@
 </script>
 
 <section class="card">
+  <FsButton />
   <h2>{title}{#if subtitle}<span> — {subtitle}</span>{/if}</h2>
   {#if kind === "plot"}
     <div class="chart" use:plot={plotCfg}></div>

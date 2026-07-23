@@ -128,14 +128,32 @@ function FpsBadge(): JSX.Element {
   return <div class="fps">{fps() || "—"} fps</div>;
 }
 
-/** Panel: title bar + fixed-height chart area. `fps` adds an FPS badge (top-left). */
+/** Panel: title bar + fixed-height chart area. `fps` adds an FPS badge (top-left).
+ * A per-chart fullscreen toggle sits top-right (Photon resizes via ResizeObserver). */
 function Panel(props: { title: string; subtitle?: string; fps?: boolean; children: JSX.Element }): JSX.Element {
+  let root!: HTMLDivElement;
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement === root) document.exitFullscreen();
+    else root.requestFullscreen().catch(() => { /* ignore */ });
+  };
   return (
-    <div class="panel">
+    <div class="panel" ref={root}>
       <h2>
         {props.title}
         {props.subtitle ? <span> — {props.subtitle}</span> : null}
       </h2>
+      <button class="fs-btn" type="button" title="Fullscreen" aria-label="Toggle fullscreen" onClick={toggleFullscreen}>
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
       <div class="chart">
         {props.fps ? <FpsBadge /> : null}
         {props.children}

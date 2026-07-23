@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Plot as CorePlot, type PlotOptions } from "@photonviz/core";
+  import FsButton from "./FsButton.svelte";
 
   export let title: string;
   export let subtitle = "";
@@ -17,6 +18,7 @@
 </script>
 
 <section class="card">
+  <FsButton />
   <h2>{title}{#if subtitle}<span> — {subtitle}</span>{/if}</h2>
   <div class="chart" use:chart></div>
 </section>

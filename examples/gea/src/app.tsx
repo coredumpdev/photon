@@ -42,6 +42,29 @@ const FIN_SIG = finTrim(FIN_MACD.signal);
 let finLinked: any = {};
 
 // ============================================================================
+// Per-chart fullscreen button (top-right, shown on panel hover). Its root IS the
+// <button>; the SVG icon is set as innerHTML (no JSX-namespace surprises) and the
+// target panel is found via closest(".panel"). Photon resizes via ResizeObserver.
+// ============================================================================
+class FsButton extends Component {
+  onAfterRender(): void {
+    if (this.el) this.el.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  toggle(): void {
+    const panel = this.el?.closest(".panel") as HTMLElement | null;
+    if (!panel) return;
+    if (document.fullscreenElement === panel) document.exitFullscreen();
+    else panel.requestFullscreen().catch(() => { /* ignore */ });
+  }
+
+  template() {
+    return <button class="fs-btn" type="button" title="Fullscreen" aria-label="Toggle fullscreen" click={() => this.toggle()}></button>;
+  }
+}
+
+// ============================================================================
 // Static tab — one panel per chart via the config-driven Gea components. Single
 // wrapper series render declaratively (`series`); composite charts the wrapper
 // can't express as one series carry an imperative `setup` run through onReady.
@@ -52,6 +75,7 @@ class StaticTab extends Component {
       <div class="grid">
         {S.plots2D.map((c) => (
           <div class="panel" key={`s2-${c.title}`}>
+            <FsButton />
             <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
             <div class="chart">
               <Plot
@@ -66,12 +90,14 @@ class StaticTab extends Component {
         ))}
         {S.polars.map((c) => (
           <div class="panel" key={`sp-${c.title}`}>
+            <FsButton />
             <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
             <div class="chart"><PolarPlot options={c.options} series={c.series} /></div>
           </div>
         ))}
         {S.plots3D.map((c) => (
           <div class="panel" key={`s3-${c.title}`}>
+            <FsButton />
             <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
             <div class="chart">
               <Plot3D options={c.options} layers={c.layers} onReady={c.setup ? (p) => c.setup!(p) : undefined} />
@@ -205,6 +231,7 @@ class DynamicTab extends Component {
       <div class="grid">
         {D.plots2D.map((c) => (
           <div class="panel" key={`d2-${c.title}`}>
+            <FsButton />
             <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
             <div class="chart">
               <div class="fps">{this.fps} fps</div>
@@ -214,6 +241,7 @@ class DynamicTab extends Component {
         ))}
         {D.polars.map((c) => (
           <div class="panel" key={`dp-${c.title}`}>
+            <FsButton />
             <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
             <div class="chart">
               <div class="fps">{this.fps} fps</div>
@@ -223,6 +251,7 @@ class DynamicTab extends Component {
         ))}
         {D.plots3D.map((c) => (
           <div class="panel" key={`d3-${c.title}`}>
+            <FsButton />
             <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
             <div class="chart">
               <div class="fps">{this.fps} fps</div>
@@ -233,6 +262,7 @@ class DynamicTab extends Component {
 
         {/* Linked finance dashboard — price + volume joined via linkX. */}
         <div class="panel" key="fin-price">
+          <FsButton />
           <h2>Linked finance · price<span> — candlesticks · ordinal-time</span></h2>
           <div class="chart">
             <div class="fps">{this.fps} fps</div>
@@ -240,6 +270,7 @@ class DynamicTab extends Component {
           </div>
         </div>
         <div class="panel" key="fin-vol">
+          <FsButton />
           <h2>Linked finance · volume<span> — linkX-ed pane</span></h2>
           <div class="chart">
             <div class="fps">{this.fps} fps</div>
@@ -342,6 +373,7 @@ class MapsTab extends Component {
     return (
       <div class="grid">
         <div class="panel">
+          <FsButton />
           <h2>GeoJSON world<span> — offline · Natural Earth 10m</span></h2>
           <div class="chart" click={(e: MouseEvent) => this.onGeoClick(e)}>
             <Plot options={GEO_OPTS} onReady={(p) => this.onGeo(p)} />
@@ -350,6 +382,7 @@ class MapsTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Vector basemap<span> — addMap · MVT · city overlay</span></h2>
           <div class="chart">
             <Plot options={BASEMAP_OPTS} onReady={(p) => this.onBasemap(p)} />
@@ -358,6 +391,7 @@ class MapsTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>PMTiles (offline)<span> — pick a local .pmtiles file</span></h2>
           <div class="chart" click={(e: MouseEvent) => this.onPmClick(e)}>
             <Plot options={PM_OPTS} onReady={(p) => this.onPm(p)} />
@@ -401,6 +435,7 @@ class FinanceTab extends Component {
     return (
       <div class="grid">
         <div class="panel">
+          <FsButton />
           <h2>Heikin-Ashi<span> — smoothed candles</span></h2>
           <div class="chart">
             <Plot options={FIN_ORD} series={[{ type: "heikinAshi", x: FIN.idx, open: FIN.o, high: FIN.h, low: FIN.l, close: FIN.c }]} />
@@ -408,6 +443,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Renko<span> — brickSize 2 · wickless</span></h2>
           <div class="chart">
             <Plot options={FIN_PLAIN} series={[{ type: "renko", close: FIN.c, brickSize: 2 }]} />
@@ -415,6 +451,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Bollinger Bands<span> — 20 · 2σ</span></h2>
           <div class="chart">
             <Plot options={FIN_ORD} series={[{ type: "candlestick", x: FIN.idx, open: FIN.o, high: FIN.h, low: FIN.l, close: FIN.c }]} onReady={(p) => this.onBollinger(p)} />
@@ -422,6 +459,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Volume profile<span> — volume by price · POC</span></h2>
           <div class="chart">
             <Plot options={FIN_PLAIN} series={[{ type: "volumeProfile", price: FIN.c, volume: FIN.vol, bins: 24, color: "#3b82f6", pocColor: "#f59e0b" }]} />
@@ -429,6 +467,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Depth chart<span> — cumulative order book</span></h2>
           <div class="chart">
             <Plot options={FIN_PLAIN} onReady={(p) => this.onDepth(p)} />
@@ -436,6 +475,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Linked · price<span> — candles · drag to pan</span></h2>
           <div class="chart">
             <Plot options={FIN_ORD} series={[{ type: "candlestick", x: FIN.idx, open: FIN.o, high: FIN.h, low: FIN.l, close: FIN.c }]} onReady={(p) => this.onLinkPrice(p)} />
@@ -443,6 +483,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Linked · RSI(14)<span> — 70 / 30 guides</span></h2>
           <div class="chart">
             <Plot
@@ -458,6 +499,7 @@ class FinanceTab extends Component {
         </div>
 
         <div class="panel">
+          <FsButton />
           <h2>Linked · MACD<span> — 12/26/9</span></h2>
           <div class="chart">
             <Plot

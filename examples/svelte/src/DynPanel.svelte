@@ -1,5 +1,6 @@
 <script lang="ts">
   import { live, type LiveHandle } from "./live";
+  import FsButton from "./FsButton.svelte";
 
   export let title: string;
   export let subtitle = "";
@@ -10,6 +11,7 @@
 </script>
 
 <section class="card">
+  <FsButton />
   <h2>{title}{#if subtitle}<span> — {subtitle}</span>{/if}</h2>
   <!-- Badge is a sibling overlay (not a child of the chart div) so the plot's
        canvas never clobbers it. Anchored top-left of the chart. -->
