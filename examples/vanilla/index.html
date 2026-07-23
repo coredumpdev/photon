@@ -39,24 +39,18 @@
         font: 500 10.5px system-ui, sans-serif; color: #cbd5e1; background: rgba(14,21,38,.72); border: 1px solid #1e293b;
         pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .panel input[type=file] { position: absolute; left: 8px; bottom: 8px; z-index: 6; font-size: 11px; color: #cbd5e1; max-width: 60%; }
+      /* Per-chart fullscreen button (top-right, shown on hover). */
+      .fs-btn { position: absolute; top: 6px; right: 6px; z-index: 7; width: 24px; height: 24px; padding: 0;
+        cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;
+        border: 1px solid #334155; background: rgba(20,29,51,.7); color: #94a3b8; opacity: 0; transition: opacity .15s, color .12s, background .12s; }
+      .panel:hover .fs-btn, .panel:fullscreen .fs-btn { opacity: 1; }
+      .fs-btn:hover { color: #e2e8f0; background: rgba(30,41,59,.95); }
+      .panel:fullscreen { width: 100vw; height: 100vh; margin: 0; padding: 14px; box-sizing: border-box;
+        background: #0b1220; display: flex; flex-direction: column; }
+      .panel:fullscreen .chart { flex: 1 1 auto; height: auto; min-height: 0; }
     </style>
   </head>
   <body>
-    <button id="fullscreen-btn" title="Toggle fullscreen" aria-label="Toggle fullscreen"
-      style="position:fixed;top:12px;right:14px;z-index:50;width:34px;height:34px;padding:0;cursor:pointer;
-             border-radius:8px;border:1px solid #334155;background:rgba(20,29,51,.85);color:#cbd5e1;
-             backdrop-filter:blur(4px);display:inline-flex;align-items:center;justify-content:center;">
-      <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-    <script>
-      (function () {
-        var b = document.getElementById("fullscreen-btn");
-        b.addEventListener("click", function () {
-          if (document.fullscreenElement) document.exitFullscreen();
-          else document.documentElement.requestFullscreen().catch(function () {});
-        });
-      })();
-    </script>
     <header>
       <h1><b>Photon</b> — WebGL2 chart gallery</h1>
       <p>Three tabs, one shared WebGL2 context. <b>Static</b>: the full chart catalog (hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit). <b>Dynamic</b>: the same catalog streaming live at 60fps, each panel with an FPS badge. <b>Maps</b>: offline vector basemaps.</p>

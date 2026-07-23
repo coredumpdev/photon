@@ -37,6 +37,19 @@ function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false)
   el.appendChild(chart);
   grid.appendChild(el);
 
+  // Per-chart fullscreen toggle (top-right). The plot resizes via ResizeObserver.
+  const fs = document.createElement("button");
+  fs.className = "fs-btn";
+  fs.type = "button";
+  fs.title = "Fullscreen";
+  fs.setAttribute("aria-label", "Toggle fullscreen");
+  fs.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  fs.addEventListener("click", () => {
+    if (document.fullscreenElement === el) document.exitFullscreen();
+    else el.requestFullscreen().catch(() => { /* ignore */ });
+  });
+  el.appendChild(fs);
+
   if (showFps) {
     const badge = document.createElement("div");
     badge.className = "fps";
