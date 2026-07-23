@@ -257,6 +257,14 @@ interface Pickable {
   /** Optional user-supplied detail lines for a point index (click info). */
   infoAt?(index: number): string[] | null;
 }
+/** `#rrggbb` → `rgba(r,g,b,a)` (for translucent fills). Non-hex passes through. */
+function hexToRgba(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 /** Distance from point (px,py) to the segment (ax,ay)-(bx,by), in pixels. */
 function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax, dy = by - ay;
@@ -1019,7 +1027,11 @@ export class Plot {
     for (const c of ["#f59e0b", "#60a5fa", "#34d399", "#f472b6", "#e2e8f0"]) {
       const sw = document.createElement("span");
       Object.assign(sw.style, { width: "16px", height: "16px", borderRadius: "4px", background: c, cursor: "pointer", border: "1px solid rgba(0,0,0,0.2)" } as CSSStyleDeclaration);
-      sw.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); (a as { color?: string }).color = c; this.hideDrawMenu(); this.requestRender(); });
+      sw.addEventListener("mousedown", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        this.recolorDrawing(a, c);
+        this.hideDrawMenu(); this.requestRender();
+      });
       colorRow.appendChild(sw);
     }
     menu.appendChild(colorRow);
@@ -1046,6 +1058,16 @@ export class Plot {
     document.addEventListener("fullscreenchange", dismiss);
     document.addEventListener("scroll", dismiss, true);
     this.requestRender();
+  }
+
+  /** Recolor a drawing: a box keeps its translucent fill + opaque border; others take the color directly. */
+  private recolorDrawing(a: Annotation, color: string): void {
+    if (a.type === "box") {
+      (a as { border?: string }).border = color;
+      (a as { color?: string }).color = hexToRgba(color, 0.12);
+    } else {
+      (a as { color?: string }).color = color;
+    }
   }
 
   /** Prompt for a label on a drawing (double-click / context menu). */
@@ -1659,8 +1681,8 @@ export class Plot {
     if (active >= 0 && active < this.drawings.length) {
       const a = this.drawings[active]!;
       const s = yScaleOf(a.yAxis);
-      // Handles follow the drawing's current color (so recoloring updates them too).
-      const col = (a as { color?: string }).color ?? this.theme.axis;
+      // Handles follow the drawing's current color (border first, so box handles stay opaque).
+      const col = (a as { border?: string }).border ?? (a as { color?: string }).color ?? this.theme.axis;
       const selected = this.selectedDrawing === active;
       ctx.setLineDash([]);
       for (const pt of this.drawingHandlePts(a)) {
