@@ -53,15 +53,19 @@ plot.addLine({ x: xs, y: ys, color: "#60a5fa", width: 2, name: "signal" });
 | Heatmap | `plot.addHeatmap({ values, cols, rows, extent, colormap })` |
 | Contour | `plot.addContour({ values, cols, rows, extent, levels })` |
 | Hexbin | `plot.addHexbin({ x, y, radius, colormap })` |
-| Error bar / Stem / Quiver / Candlestick | `plot.addErrorBar` · `addStem` · `addQuiver` · `addCandlestick` |
+| Error bar / Stem / Quiver | `plot.addErrorBar` · `addStem` · `addQuiver` |
+| Candlestick / OHLC | `plot.addCandlestick({ x, open, high, low, close })` · `addOhlc(...)` — live via `updateLast` / `appendCandle` |
+| Pie / Patches / Graph / Image | `plot.addPie` · `addPatches` · `addGraph` · `addImage` |
+| **Finance** | `addHeikinAshi` · `addRenko` · `addBollinger` · `addVolumeProfile` · `addDepth` + indicators `sma`/`ema`/`rsi`/`macd`/`vwap`/`atr` |
 
 **Polar** — `new PolarPlot(el)` with `addLine` / `addScatter` (drag to rotate, wheel to zoom).
-**3D** — `new Plot3D(el)` with `addSurface` / `addPointCloud` (orbit camera).
+**3D** — `new Plot3D(el)` with `addSurface` / `addPointCloud` / `addLine3D` / `addBar3D` / `addQuiver3D` / `addContour3D` / `addIsosurface` / `addVolume` (orbit camera).
 
 ## Features
 
-- **Scales** — linear, log (decade ticks + GPU log transform), time (large epoch timestamps via per-layer reference offsets).
-- **Streaming** — line/scatter/bar/area expose `setData()` to re-upload GPU buffers each frame.
+- **Scales** — linear, log (decade ticks + GPU log transform), time, categorical, and `ordinal-time` (finance/session axis that collapses market gaps).
+- **Streaming** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
+- **Linked panes** — `linkX([a, b, …])` syncs pan/zoom + crosshair across plots (price + volume + RSI/MACD dashboards).
 - **Interaction** — wheel-zoom, pan, box/X/Y zoom, hover crosshair + tooltips, multiple Y axes, custom ticks.
 - **Many charts, one context** — a single shared WebGL2 context backs every plot, so a page can hold dozens.
 

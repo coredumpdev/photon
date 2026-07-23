@@ -47,9 +47,11 @@ export default class Chart extends Component {
 `Plot` (Cartesian) · `PolarPlot` · `Plot3D`
 
 Each takes `options`, an optional `class`/`style`, `onReady`, and:
-- **`Plot`** — `yAxes` + a `series` array of `{ type, ...options }` (line, scatter, bar, area, heatmap, box, hexbin, contour, errorbar, stem, quiver, candlestick, **pie**, **patches**, map, geojson).
+- **`Plot`** — `yAxes` + a `series` array of `{ type, ...options }` (line, scatter, bar, area, heatmap, box, hexbin, contour, errorbar, stem, quiver, candlestick, **ohlc**, pie, patches, image, graph, **heikinAshi**, **renko**, **volumeProfile**, map, geojson).
 - **`PolarPlot`** — `series` of `{ type: "line" | "scatter", ... }`.
-- **`Plot3D`** — `layers` of `{ type: "surface" | "pointcloud", ... }`.
+- **`Plot3D`** — `layers` of `{ type: "surface" | "pointcloud" | "line3d" | "bar3d" | "quiver3d" | "contour3d" | "isosurface" | "volume", ... }`.
+
+Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `vwap`, `atr`, …) are re-exported for imperative use via `onReady(plot)`. Series options accept `renderType`; use the `ordinal-time` x scale for gap-free session charts.
 
 ## License
 

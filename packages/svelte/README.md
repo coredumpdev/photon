@@ -41,11 +41,13 @@ npm i @photonviz/core @photonviz/svelte
 
 The `plot` action's `series` is a discriminated union by `type`:
 
-`line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `map` · `geojson`
+`line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `ohlc` · `pie` · `patches` · `image` · `graph` · `map` · `geojson`
+
+**Finance** series — `heikinAshi` · `renko` · `volumeProfile`. Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `vwap`, `atr`, …) are re-exported for imperative use on a core `Plot`. Every series options object accepts `renderType`; use the `ordinal-time` x scale for gap-free session charts.
 
 Separate actions:
 - **`polarPlot`** — polar `line` / `scatter` series.
-- **`plot3d`** — `surface` / `pointcloud` layers.
+- **`plot3d`** — `surface` / `pointcloud` / `line3d` / `bar3d` / `quiver3d` / `contour3d` / `isosurface` / `volume` layers.
 
 Maps use [`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map) sources (e.g. `xyzVectorSource`) in `{ type: "map" }` series.
 
