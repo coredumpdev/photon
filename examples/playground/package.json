@@ -9,7 +9,10 @@
   },
   "dependencies": {
     "@photonviz/core": "workspace:*",
-    "@photonviz/map": "workspace:*"
+    "@photonviz/map": "workspace:*",
+    "codemirror": "^6",
+    "@codemirror/lang-javascript": "^6",
+    "@codemirror/theme-one-dark": "^6"
   },
   "devDependencies": {
     "vite": "^6",

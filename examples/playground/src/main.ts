@@ -1,5 +1,8 @@
 import * as photon from "@photonviz/core";
 import * as photonMap from "@photonviz/map";
+import { EditorView, basicSetup } from "codemirror";
+import { javascript } from "@codemirror/lang-javascript";
+import { oneDark } from "@codemirror/theme-one-dark";
 
 // ---------------------------------------------------------------------------
 // Presets — each is a self-contained snippet run with (container, photon, map).
@@ -129,7 +132,7 @@ const $ = <T extends HTMLElement>(sel: string): T => {
   return el;
 };
 
-const codeEl = $<HTMLTextAreaElement>("#code");
+const editorEl = $<HTMLDivElement>("#editor");
 const previewEl = $<HTMLDivElement>("#preview");
 const statusEl = $<HTMLDivElement>("#status");
 const presetEl = $<HTMLSelectElement>("#preset");
@@ -172,39 +175,47 @@ function run(code: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Wiring: debounced auto-run on edit, run button, preset switch, persistence.
+// CodeMirror 6 editor. Doc changes → persist + debounced auto-run.
 // ---------------------------------------------------------------------------
 let debounce: number | undefined;
 function scheduleRun(): void {
   window.clearTimeout(debounce);
-  debounce = window.setTimeout(() => run(codeEl.value), 600);
+  debounce = window.setTimeout(() => run(getCode()), 600);
 }
 
-codeEl.addEventListener("input", () => {
-  localStorage.setItem(STORAGE_KEY, codeEl.value);
-  scheduleRun();
+const view = new EditorView({
+  parent: editorEl,
+  extensions: [
+    basicSetup,
+    javascript({ typescript: true }),
+    oneDark,
+    EditorView.lineWrapping,
+    EditorView.updateListener.of((u) => {
+      if (!u.docChanged) return;
+      localStorage.setItem(STORAGE_KEY, getCode());
+      scheduleRun();
+    }),
+  ],
 });
 
-// Insert a real tab instead of moving focus.
-codeEl.addEventListener("keydown", (e) => {
-  if (e.key !== "Tab") return;
-  e.preventDefault();
-  const start = codeEl.selectionStart, end = codeEl.selectionEnd;
-  codeEl.value = codeEl.value.slice(0, start) + "  " + codeEl.value.slice(end);
-  codeEl.selectionStart = codeEl.selectionEnd = start + 2;
-});
+const getCode = (): string => view.state.doc.toString();
+const setCode = (text: string): void => {
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+};
 
-runBtn.addEventListener("click", () => run(codeEl.value));
+// ---------------------------------------------------------------------------
+// Wiring: run button, preset switch, persistence.
+// ---------------------------------------------------------------------------
+runBtn.addEventListener("click", () => run(getCode()));
 
 presetEl.addEventListener("change", () => {
   const code = PRESETS[presetEl.value] ?? "";
-  codeEl.value = code;
-  localStorage.setItem(STORAGE_KEY, code);
+  setCode(code); // updateListener persists this
   run(code);
 });
 
 // Initial load: restore saved edits, else the default preset.
 const saved = localStorage.getItem(STORAGE_KEY);
 presetEl.value = DEFAULT_PRESET;
-codeEl.value = saved ?? PRESETS[DEFAULT_PRESET];
-run(codeEl.value);
+setCode(saved ?? PRESETS[DEFAULT_PRESET]);
+run(getCode());
