@@ -43,7 +43,9 @@ The `plot` action's `series` is a discriminated union by `type`:
 
 `line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `ohlc` · `pie` · `patches` · `image` · `graph` · `map` · `geojson`
 
-**Finance** series — `heikinAshi` · `renko` · `volumeProfile`. Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `vwap`, `atr`, …) are re-exported for imperative use on a core `Plot`. Every series options object accepts `renderType`; use the `ordinal-time` x scale for gap-free session charts.
+**Finance** series — `heikinAshi` · `renko` · `volumeProfile`. Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `wma`, `vwap`, `atr`, `stochastic`, `keltner`, `obv`, `ichimoku`, `adx`, `superTrend`, `fibRetracements`) are re-exported for imperative use on a core `Plot`. Every series options object accepts `renderType`; use the `ordinal-time` x scale for gap-free session charts.
+
+The toolbar includes a one-click download-PNG button; the underlying core `Plot` also exposes image export (`downloadImage()` / `toDataURL()` / `toBlob()` / `copyToClipboard()`).
 
 Separate actions:
 - **`polarPlot`** — polar `line` / `scatter` series.

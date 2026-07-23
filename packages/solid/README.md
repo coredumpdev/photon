@@ -48,12 +48,12 @@ export function Chart(props: { x: Float64Array; y: Float64Array }) {
 
 **Polar** — `PolarPlot` with `PolarLine` / `PolarScatter`.
 **3D** — `Plot3D` with `Surface` / `PointCloud` / `Line3D` / `Bar3D` / `Quiver3D` / `Contour3D` / `Isosurface` / `Volume`.
-**Finance** — `HeikinAshi` / `Renko` / `Bollinger` / `VolumeProfile` / `Depth`, plus re-exported indicators (`rsi`, `macd`, `sma`, `ema`, `vwap`, `atr`, …).
+**Finance** — `HeikinAshi` / `Renko` / `Bollinger` / `VolumeProfile` / `Depth`, plus re-exported indicators (`rsi`, `macd`, `sma`, `ema`, `wma`, `vwap`, `atr`, `stochastic`, `keltner`, `obv`, `ichimoku`, `adx`, `superTrend`, `fibRetracements`).
 **Maps** ([`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map)) — `Map` / `GeoJson`.
 
 Every layer accepts `renderType="static" | "dynamic"`; pass new typed arrays to stream.
 
-Imperative escape hatch: pass `onReady={(plot) => …}` to `<Plot>` (or `usePlot()` from inside a child) to reach the underlying core `Plot`.
+Imperative escape hatch: pass `onReady={(plot) => …}` to `<Plot>` (or `usePlot()` from inside a child) to reach the underlying core `Plot` — including image export (`plot.downloadImage()` / `toDataURL()` / `toBlob()` / `copyToClipboard()`); the toolbar also has a one-click download-PNG button.
 
 ## License
 

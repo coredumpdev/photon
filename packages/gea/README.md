@@ -51,7 +51,9 @@ Each takes `options`, an optional `class`/`style`, `onReady`, and:
 - **`PolarPlot`** — `series` of `{ type: "line" | "scatter", ... }`.
 - **`Plot3D`** — `layers` of `{ type: "surface" | "pointcloud" | "line3d" | "bar3d" | "quiver3d" | "contour3d" | "isosurface" | "volume", ... }`.
 
-Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `vwap`, `atr`, …) are re-exported for imperative use via `onReady(plot)`. Series options accept `renderType`; use the `ordinal-time` x scale for gap-free session charts.
+Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `wma`, `vwap`, `atr`, `stochastic`, `keltner`, `obv`, `ichimoku`, `adx`, `superTrend`, `fibRetracements`) are re-exported for imperative use via `onReady(plot)`. Series options accept `renderType`; use the `ordinal-time` x scale for gap-free session charts.
+
+The toolbar includes a one-click download-PNG button; via `onReady(plot)` the core `Plot` also exposes image export (`downloadImage()` / `toDataURL()` / `toBlob()` / `copyToClipboard()`).
 
 ## License
 

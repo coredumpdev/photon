@@ -36,9 +36,13 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 - ⚡ **Fast** — instanced WebGL2 rendering + min/max decimation (GPU above 200k pts); millions of points stay interactive. LUT-backed colormaps, benchmarked (`pnpm bench`).
 - 🔬 **Scientific** — linear/log/time **and categorical** scales, custom ticks, multiple Y axes, error-free float precision for timestamps.
 - 📈 **Batteries included** — line, step, scatter (marker glyphs), bar (grouped/stacked/horizontal), area (+ stacked), histogram, box, violin, heatmap, contour, hexbin, spectrogram, **candlestick/OHLC**, **pie/donut**, **patches/polygons**, **graph/network**, **image**, **annotations** (span/band/box/label), polar, and a full **3D** suite.
-- 💹 **Finance** — Heikin-Ashi, Renko, Bollinger, volume profile, depth, plus indicators (SMA/EMA/RSI/MACD/VWAP/ATR), a gap-collapsing `ordinal-time` axis, and `linkX` linked panes.
+- 💹 **Finance** — Heikin-Ashi, Renko, Bollinger, volume profile, depth, a deep indicator set (SMA/EMA/WMA/RSI/MACD/VWAP/ATR + Stochastic/Keltner/OBV/Ichimoku/ADX/SuperTrend/Fibonacci), a gap-collapsing `ordinal-time` axis, and `linkX` linked panes.
+- 📊 **Diagrams** — treemap, funnel, sunburst, gauge, sankey, chord, and parallel-coordinates builders — hierarchy, flow, and composition charts on the same GPU pipeline.
+- ✏️ **Interactive drawing tools** — opt-in trendline / horizontal / ray / Fibonacci / rectangle tools; drawings are editable (drag handles, relabel, recolor, delete) — great for annotating price charts.
+- 🖼️ **Image export** — every plot has `toDataURL()` / `toBlob()` / `downloadImage()` / `copyToClipboard()`, plus a one-click download-PNG button on the toolbar.
 - 🎨 **Fully styleable** — Bokeh-like flat props: `background`, `title`, `legend`, and per-axis line/tick/label/grid color, font & label rotation.
-- 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers.
+- ♿ **Accessible** — plots expose `role="img"` with an auto-summarized `aria-label` (override via `ariaLabel` / `setAriaLabel()` / `describe()`).
+- 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers, plus framework-free **Web Components** (`@photonviz/wc`).
 - 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.
 - 🗺️ **Maps** — [`@photonviz/map`](./packages/map) renders a Web Mercator vector basemap **from scratch** (MVT + PMTiles + GeoJSON), works **fully offline**, no Mapbox / MapLibre / Leaflet.
 - 🌊 **Streaming-ready** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
@@ -189,8 +193,9 @@ export default class Chart extends Component {
 | Patches | `plot.addPatches({ patches, colormap? })` | Filled polygons (earcut), choropleth |
 | Graph | `plot.addGraph({ edges, nodes? })` | Node-link; auto force layout |
 | Candlestick / OHLC | `plot.addCandlestick({ x, open, high, low, close })` · `plot.addOhlc(...)` | Up/down candles or bars; live via `updateLast` / `appendCandle` |
-| Annotations | `plot.addAnnotation({ type: "span" \| "band" \| "box" \| "label", … })` | Canvas2D overlay |
+| Annotations | `plot.addAnnotation({ type: "span" \| "band" \| "box" \| "label" \| "line" \| "ray" \| "fib", …, label? })` | Canvas2D overlay; drawing-tool shapes are editable |
 | Spectrogram | `plot.addHeatmapSpectrogram(signal, { fftSize, hop, sampleRate })` | STFT → heatmap |
+| Diagrams | `plot.addTreemap` · `addFunnel` · `addSunburst` · `addGauge` · `addSankey` · `addChord` · `addParallelCoordinates` | Hierarchy / flow / composition; pure `*Layout` fns exported too |
 
 Colormaps: `viridis`, `plasma`, `coolwarm`, `grayscale`.
 
@@ -213,6 +218,7 @@ addDepth(plot, { bids, asks });                       // cumulative order book
 
 // Indicators are pure arrays → overlay a line, or drop into a linked sub-pane:
 const r = rsi(close, 14), m = macd(close);            // + sma · ema · wma · vwap · atr · bollinger
+// …plus stochastic · keltner · obv · ichimoku · adx · superTrend · fibRetracements
 linkX([pricePlot, rsiPlot, macdPlot]);                // synced pan/zoom + crosshair
 ```
 
@@ -220,6 +226,34 @@ The **`ordinal-time`** x-axis plots bars at integer indices and collapses market
 gaps (weekends, overnight) while still labelling calendar dates:
 `scales: { x: { type: "ordinal-time", times } }`. Transforms `renko`, `heikinAshi`,
 `volumeProfile`, `lineBreak`, `pointAndFigure`, `depth` are exported directly too.
+
+### Drawing tools
+
+Opt in with `new Plot(el, { drawingTools: true })` to add a toolbar tool group —
+**trendline / horizontal line / ray / Fibonacci / rectangle** (+ clear). Draw by
+click-drag; existing drawings are **editable**: hover shows endpoint handles, drag
+a handle to reshape or the body to move, double-click to label, right-click for a
+context menu (rename / recolor / delete), and the **Delete** key removes the
+selected one. Drive it in code with `setDrawTool` / `getDrawTool` / `addDrawing` /
+`clearDrawings`; the shapes are just `line` / `ray` / `fib` annotations.
+
+### Data adapters
+
+`parseCSV(text)` returns a `Table` with `.column(name)` / `.numeric(name)`; `lttb(x, y, threshold)`
+downsamples long line series (Largest-Triangle-Three-Buckets) so a million-point CSV
+still draws crisply.
+
+### Image export
+
+Every plot (`Plot`, `Plot3D`, `PolarPlot`) can `toDataURL()`, `toBlob()`,
+`downloadImage()`, and `copyToClipboard()`; the toolbar has a download-PNG button
+(next to reset-view on `Plot3D`). Shared helpers `canvasToBlob` / `downloadCanvas` /
+`copyCanvasToClipboard` are exported for custom canvases.
+
+### Accessibility
+
+Plots render as `role="img"` with an auto-summarized `aria-label`. Set your own with
+the `ariaLabel` option or `setAriaLabel()`, or read the generated summary via `describe()`.
 
 ### Styling & config — Bokeh-like flat props
 
@@ -395,7 +429,13 @@ are labeled [`good first issue`](https://github.com/coredumpdev/photon/labels/go
 - [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation, LUT colormaps
 - [x] Vector maps — `@photonviz/map` (MVT + PMTiles + GeoJSON, offline, feature picking)
 - [x] Candlestick/OHLC, `setData`/`renderType` streaming on every layer, linked panes (`linkX`)
-- [x] Finance — Heikin-Ashi, Renko, Bollinger, volume profile, depth + indicators (SMA/EMA/RSI/MACD/VWAP/ATR), `ordinal-time` axis
+- [x] Finance — Heikin-Ashi, Renko, Bollinger, volume profile, depth + indicators (SMA/EMA/WMA/RSI/MACD/VWAP/ATR/Stochastic/Keltner/OBV/Ichimoku/ADX/SuperTrend/Fib), `ordinal-time` axis
+- [x] Image export — `toDataURL`/`toBlob`/`downloadImage`/`copyToClipboard` + toolbar download-PNG
+- [x] Interactive drawing tools — trendline/horizontal/ray/Fibonacci/rectangle, editable annotations
+- [x] Diagram charts — treemap, funnel, sunburst, gauge, sankey, chord, parallel coordinates
+- [x] Data adapters — `parseCSV` → `Table`, `lttb` downsampling
+- [x] Accessibility — `role="img"` + auto `aria-label` (`ariaLabel`/`setAriaLabel`/`describe`)
+- [x] Framework-free **Web Components** — `@photonviz/wc` (`<photon-plot>` / `<photon-plot3d>` / `<photon-polar>`)
 - [ ] Map text labels (glyph atlas + collision)
 - [ ] WebGPU backend exploration
 

@@ -46,10 +46,12 @@ Pass a new typed-array reference to stream — the layer updates via `setData` u
 
 **Polar** — `PolarPlot` with `PolarLine` / `PolarScatter`.
 **3D** — `Plot3D` with `Surface` / `PointCloud` / `Line3D` / `Bar3D` / `Quiver3D` / `Contour3D` / `Isosurface` / `Volume`.
-**Finance** — `HeikinAshi` / `Renko` / `Bollinger` / `VolumeProfile` / `Depth`, plus re-exported indicators (`rsi`, `macd`, `sma`, `ema`, `vwap`, `atr`, …).
+**Finance** — `HeikinAshi` / `Renko` / `Bollinger` / `VolumeProfile` / `Depth`, plus re-exported indicators (`rsi`, `macd`, `sma`, `ema`, `wma`, `vwap`, `atr`, `stochastic`, `keltner`, `obv`, `ichimoku`, `adx`, `superTrend`, `fibRetracements`).
 **Maps** ([`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map)) — `Map` / `GeoJson`.
 
 Every layer accepts `:render-type="'static' | 'dynamic'"`; pass new typed arrays to stream.
+
+The toolbar includes a one-click download-PNG button; the underlying core `Plot` also exposes image export (`downloadImage()` / `toDataURL()` / `toBlob()` / `copyToClipboard()`).
 
 ## License
 

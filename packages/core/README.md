@@ -23,7 +23,7 @@ axes, ticks, and labels on a crisp Canvas2D overlay — so you get both **scale*
 npm i @photonviz/core
 ```
 
-> Framework bindings: [`@photonviz/react`](https://www.npmjs.com/package/@photonviz/react) · [`@photonviz/vue`](https://www.npmjs.com/package/@photonviz/vue) · [`@photonviz/svelte`](https://www.npmjs.com/package/@photonviz/svelte)
+> Framework bindings: [`@photonviz/react`](https://www.npmjs.com/package/@photonviz/react) · [`@photonviz/vue`](https://www.npmjs.com/package/@photonviz/vue) · [`@photonviz/svelte`](https://www.npmjs.com/package/@photonviz/svelte) · [`@photonviz/solid`](https://www.npmjs.com/package/@photonviz/solid) · [`@photonviz/gea`](https://www.npmjs.com/package/@photonviz/gea) · framework-free [`@photonviz/wc`](https://www.npmjs.com/package/@photonviz/wc) Web Components
 > Vector maps: [`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map)
 
 ## Quick start
@@ -56,7 +56,8 @@ plot.addLine({ x: xs, y: ys, color: "#60a5fa", width: 2, name: "signal" });
 | Error bar / Stem / Quiver | `plot.addErrorBar` · `addStem` · `addQuiver` |
 | Candlestick / OHLC | `plot.addCandlestick({ x, open, high, low, close })` · `addOhlc(...)` — live via `updateLast` / `appendCandle` |
 | Pie / Patches / Graph / Image | `plot.addPie` · `addPatches` · `addGraph` · `addImage` |
-| **Finance** | `addHeikinAshi` · `addRenko` · `addBollinger` · `addVolumeProfile` · `addDepth` + indicators `sma`/`ema`/`rsi`/`macd`/`vwap`/`atr` |
+| **Finance** | `addHeikinAshi` · `addRenko` · `addBollinger` · `addVolumeProfile` · `addDepth` + indicators `sma`/`ema`/`wma`/`rsi`/`macd`/`vwap`/`atr`/`stochastic`/`keltner`/`obv`/`ichimoku`/`adx`/`superTrend`/`fibRetracements` |
+| **Diagrams** | `plot.addTreemap` · `addFunnel` · `addSunburst` · `addGauge` · `addSankey` · `addChord` · `addParallelCoordinates` — pure `*Layout` fns exported too |
 
 **Polar** — `new PolarPlot(el)` with `addLine` / `addScatter` (drag to rotate, wheel to zoom).
 **3D** — `new Plot3D(el)` with `addSurface` / `addPointCloud` / `addLine3D` / `addBar3D` / `addQuiver3D` / `addContour3D` / `addIsosurface` / `addVolume` (orbit camera).
@@ -67,6 +68,10 @@ plot.addLine({ x: xs, y: ys, color: "#60a5fa", width: 2, name: "signal" });
 - **Streaming** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
 - **Linked panes** — `linkX([a, b, …])` syncs pan/zoom + crosshair across plots (price + volume + RSI/MACD dashboards).
 - **Interaction** — wheel-zoom, pan, box/X/Y zoom, hover crosshair + tooltips, multiple Y axes, custom ticks.
+- **Drawing tools** — `new Plot(el, { drawingTools: true })` adds trendline / horizontal / ray / Fibonacci / rectangle tools; drawings are editable (drag handles, relabel, recolor, delete). API: `setDrawTool`/`getDrawTool`/`addDrawing`/`clearDrawings`.
+- **Image export** — every plot has `toDataURL()` / `toBlob()` / `downloadImage()` / `copyToClipboard()` + a toolbar download-PNG button; helpers `canvasToBlob` / `downloadCanvas` / `copyCanvasToClipboard` exported.
+- **Data adapters** — `parseCSV(text)` → a `Table` (`.column()` / `.numeric()`), and `lttb(x, y, threshold)` for downsampling long line series.
+- **Accessibility** — plots render as `role="img"` with an auto-summarized `aria-label`; override via `ariaLabel` / `setAriaLabel()` / `describe()`.
 - **Many charts, one context** — a single shared WebGL2 context backs every plot, so a page can hold dozens.
 
 ## License
