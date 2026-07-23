@@ -1792,7 +1792,9 @@ export class Plot {
         tip.appendChild(el);
       }
     } else {
-      const xfmt = this.axisX.config.format ?? defaultFormat;
+      // Format the hovered x with the axis' own scale (dates on time/ordinal-time,
+      // factor labels on categorical, …) unless a custom axis format is set.
+      const xfmt = this.axisX.config.format ?? ((v: number) => this.scaleX.formatTick(v));
       const header = document.createElement("div");
       header.style.opacity = "0.7";
       header.style.marginBottom = "3px";
