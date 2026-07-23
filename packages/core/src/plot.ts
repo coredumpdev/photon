@@ -158,6 +158,9 @@ export type Annotation =
   | { type: "ray"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
   | { type: "fib"; x0: number; x1: number; high: number; low: number; ratios?: number[]; color?: string; fill?: boolean; yAxis?: string };
 
+/** An interactive drawing tool: click-drag on the plot to place the shape. */
+export type DrawTool = "trendline" | "hline" | "ray" | "fib" | "rect";
+
 /** One line of the hover tooltip header, produced by {@link PlotOptions.hoverReadout}. */
 export interface HoverReadoutRow {
   label: string;
@@ -181,6 +184,8 @@ export interface PlotOptions {
   interactive?: boolean;
   /** Show the built-in toolbar (home + pan/box/X/Y zoom modes). Default true. */
   showToolbar?: boolean;
+  /** Add drawing tools (trendline / horizontal / ray / Fibonacci / rectangle) to the toolbar. Default false. */
+  drawingTools?: boolean;
   /** Initial interaction mode. Default `"pan"`. */
   mode?: InteractionMode;
   /** Enable hover crosshair + tooltip. Default true. */
@@ -341,6 +346,11 @@ export class Plot {
   private lastEmittedX: Range | null = null;
   private lastEmittedCursor: number | null = NaN as unknown as null;
   private linkedCursorX: number | null = null;
+  // Interactive drawing tools (see setDrawTool / drawingTools option).
+  private drawTool: DrawTool | null = null;
+  private drawings: Annotation[] = [];
+  private pendingDrawing: Annotation | null = null;
+  private drawToolCbs: Array<(t: DrawTool | null) => void> = [];
   private tooltip: HTMLDivElement;
   /** A point clicked to pin its details, until another click clears it. */
   private selected: { layer: Pickable; x: number; y: number; index: number } | null = null;
@@ -496,6 +506,14 @@ export class Plot {
           home: () => this.home(),
           onModeChange: (cb) => this.modeChangeCbs.push(cb),
           download: () => void this.downloadImage(),
+          drawTools: options.drawingTools
+            ? {
+                set: (t) => this.setDrawTool(t as DrawTool | null),
+                get: () => this.drawTool,
+                clear: () => this.clearDrawings(),
+                onChange: (cb) => this.onDrawToolChange((t) => cb(t)),
+              }
+            : undefined,
         },
         this.isDark,
       );
@@ -806,6 +824,68 @@ export class Plot {
     if (this.annotations.length === 0) return;
     this.annotations = [];
     this.requestRender();
+  }
+
+  // --- Interactive drawing ---------------------------------------------------
+
+  /** Activate a drawing tool (click-drag on the plot to place), or `null` to stop drawing. */
+  setDrawTool(tool: DrawTool | null): void {
+    if (this.drawTool === tool) return;
+    this.drawTool = tool;
+    this.pendingDrawing = null;
+    this.updateCursor();
+    for (const cb of this.drawToolCbs) cb(tool);
+    this.requestRender();
+  }
+
+  /** The active drawing tool, or `null`. */
+  getDrawTool(): DrawTool | null {
+    return this.drawTool;
+  }
+
+  /** Subscribe to draw-tool changes (used by the toolbar). Returns an unsubscribe fn. */
+  onDrawToolChange(cb: (t: DrawTool | null) => void): () => void {
+    this.drawToolCbs.push(cb);
+    return () => { this.drawToolCbs = this.drawToolCbs.filter((f) => f !== cb); };
+  }
+
+  /** Add a drawing programmatically (same shapes the tools produce). */
+  addDrawing(a: Annotation): void {
+    this.drawings.push(a);
+    this.requestRender();
+  }
+
+  /** All user drawings (trendlines, fib levels, …). */
+  getDrawings(): Annotation[] {
+    return [...this.drawings];
+  }
+
+  /** Remove every user drawing. */
+  clearDrawings(): void {
+    if (this.drawings.length === 0 && !this.pendingDrawing) return;
+    this.drawings = [];
+    this.pendingDrawing = null;
+    this.requestRender();
+  }
+
+  /** Canvas-space pixel → data coordinates on the x + primary y scale. */
+  private dataAtPx(px: number, py: number): { x: number; y: number } {
+    const region = plotRegion(this.layout());
+    const nx = (px - region.left) / region.width;
+    const ny = 1 - (py - region.top) / region.height;
+    return { x: this.scaleX.invert(nx), y: this.primaryY().scale.invert(ny) };
+  }
+
+  /** Build the annotation for a draw tool from its start + current data points. */
+  private buildDrawing(tool: DrawTool, s: { x: number; y: number }, c: { x: number; y: number }): Annotation {
+    const col = "#f59e0b";
+    switch (tool) {
+      case "trendline": return { type: "line", x0: s.x, y0: s.y, x1: c.x, y1: c.y, color: col, width: 1.5 };
+      case "ray": return { type: "ray", x0: s.x, y0: s.y, x1: c.x, y1: c.y, color: col, width: 1.5 };
+      case "hline": return { type: "span", dim: "y", value: c.y, color: col, width: 1.5 };
+      case "rect": return { type: "box", x: [s.x, c.x], y: [s.y, c.y], color: "rgba(245,158,11,0.08)", border: col };
+      case "fib": return { type: "fib", x0: s.x, x1: c.x, high: Math.max(s.y, c.y), low: Math.min(s.y, c.y), fill: true, color: "#94a3b8" };
+    }
   }
 
   /** Compute an STFT of `signal` and render it as a heatmap (time × frequency). */
@@ -1203,7 +1283,7 @@ export class Plot {
     if (this.title) drawTitle(this.axisCtx, region, this.title, this.isDark);
 
     // Annotations (span/band/box/label) above the data, clipped to the region.
-    if (this.annotations.length) this.renderAnnotations(region);
+    if (this.annotations.length || this.drawings.length || this.pendingDrawing) this.renderAnnotations(region);
 
     // Both-axis guide lines while the pointer is pressed.
     if (this.crosshair && this.pressPx) {
@@ -1311,7 +1391,10 @@ export class Plot {
     ctx.beginPath();
     ctx.rect(left, top, right - left, bottom - top);
     ctx.clip();
-    for (const a of this.annotations) {
+    const items = this.pendingDrawing
+      ? [...this.annotations, ...this.drawings, this.pendingDrawing]
+      : this.drawings.length ? [...this.annotations, ...this.drawings] : this.annotations;
+    for (const a of items) {
       ctx.setLineDash([]);
       if (a.type === "span") {
         ctx.strokeStyle = a.color ?? this.theme.axis;
@@ -1502,7 +1585,7 @@ export class Plot {
   // ---- Interaction ----------------------------------------------------------
 
   private updateCursor(): void {
-    this.axisCanvas.style.cursor = this.mode === "pan" ? "grab" : "crosshair";
+    this.axisCanvas.style.cursor = this.drawTool ? "crosshair" : this.mode === "pan" ? "grab" : "crosshair";
   }
 
   private axisLock(): { x: boolean; y: boolean } {
@@ -1576,6 +1659,8 @@ export class Plot {
 
     let panning = false;
     let selecting = false;
+    let drawing = false;
+    let drawStart = { x: 0, y: 0 };
     /** Non-null while dragging an axis strip: `"x"` or a y-axis id. */
     let axisDrag: "x" | { y: string } | null = null;
     let lastX = 0;
@@ -1601,6 +1686,11 @@ export class Plot {
       } else if (zone.type === "y") {
         axisDrag = { y: zone.id };
         lastY = e.clientY;
+      } else if (this.drawTool) {
+        drawing = true;
+        drawStart = this.dataAtPx(px, py);
+        this.pendingDrawing = this.buildDrawing(this.drawTool, drawStart, drawStart);
+        this.requestRender();
       } else if (this.mode === "pan") {
         panning = true;
         lastX = e.clientX;
@@ -1632,6 +1722,10 @@ export class Plot {
         this.panY(null, e.clientY - lastY, region);
         lastX = e.clientX;
         lastY = e.clientY;
+        this.requestRender();
+      } else if (drawing && this.drawTool) {
+        const c = this.dataAtPx(e.clientX - rect.left, e.clientY - rect.top);
+        this.pendingDrawing = this.buildDrawing(this.drawTool, drawStart, c);
         this.requestRender();
       } else if (selecting) {
         this.drawSelection(startX, startY, e.clientX - rect.left, e.clientY - rect.top);
@@ -1669,6 +1763,13 @@ export class Plot {
         e.type === "pointerup" && !axisDrag && Math.hypot(upPx - downX, upPy - downY) < 4;
       if (axisDrag) {
         axisDrag = null;
+      } else if (drawing) {
+        drawing = false;
+        const moved = Math.hypot(upPx - downX, upPy - downY);
+        // Commit unless it was a stray click for a drag-only tool.
+        if (this.pendingDrawing && (this.drawTool === "hline" || moved >= 3)) this.drawings.push(this.pendingDrawing);
+        this.pendingDrawing = null;
+        this.requestRender();
       } else if (panning) {
         panning = false;
         this.updateCursor();
@@ -1677,7 +1778,8 @@ export class Plot {
         if (!isClick) this.applySelection(startX, startY, upPx, upPy);
         this.selectionDiv.style.display = "none";
       }
-      if (isClick) this.handleClick(upPx, upPy);
+      // A drawing tool owns clicks in the plot body — don't also pin a point.
+      if (isClick && this.drawTool === null) this.handleClick(upPx, upPy);
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);

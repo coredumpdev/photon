@@ -2,6 +2,7 @@ import {
   Plot, Plot3D, PolarPlot, linkX,
   rsi, macd, firstFinite, addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth,
   ichimoku, keltner, stochastic, adx, superTrend, fibRetracements,
+  addTreemap, addFunnel, addSunburst, addGauge, addSankey, addChord, addParallelCoordinates,
 } from "@photonviz/core";
 import {
   addMap, addGeoJson, xyzVectorSource, pmtilesSource, protomapsStyle,
@@ -1224,7 +1225,7 @@ function buildFinance(grid: HTMLElement): void {
 
   // Heikin-Ashi — smoothed candles on the gap-collapsing session axis.
   const ha = new Plot(panel(grid, "Heikin-Ashi", "smoothed candles"), {
-    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
+    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: true, drawingTools: true,
   });
   addHeikinAshi(ha, { x: idx, open: o, high: h, low: l, close: c });
   ha.render();
@@ -1236,7 +1237,7 @@ function buildFinance(grid: HTMLElement): void {
 
   // Bollinger Bands over the candles.
   const bb = new Plot(panel(grid, "Bollinger Bands", "20 · 2σ"), {
-    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
+    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: true, drawingTools: true,
   });
   bb.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
   addBollinger(bb, { x: idx, close: c, period: 20, k: 2, bandColor: "rgba(167,139,250,0.14)" });
@@ -1285,7 +1286,7 @@ function buildFinance(grid: HTMLElement): void {
   linkX([priceP, rsiP, macdP]);
 
   // --- Advanced indicators & drawing tools ---
-  const ordOpts = () => ({ theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times } }, showToolbar: false });
+  const ordOpts = () => ({ theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times } }, showToolbar: true, drawingTools: true });
 
   // Ichimoku — cloud (spanA/spanB fill) + Tenkan/Kijun.
   const ich = ichimoku(h, l, 9, 26, 52);
@@ -1314,7 +1315,7 @@ function buildFinance(grid: HTMLElement): void {
   stP.render();
 
   // Drawing tools — a trendline + Fibonacci retracement (data-space, pans/zooms).
-  const drP = new Plot(panel(grid, "Drawing tools", "trendline · Fibonacci"), ordOpts());
+  const drP = new Plot(panel(grid, "Drawing tools", "pick a tool ↑ then drag · trendline / Fib / rect"), ordOpts());
   drP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
   drP.addAnnotation({ type: "line", x0: 5, y0: l[5]!, x1: N - 6, y1: h[N - 6]!, color: "#f59e0b", width: 1.5, dash: [6, 4] });
   let fHi = -Infinity, fLo = Infinity;
@@ -1390,9 +1391,66 @@ function buildLiveCandles(grid: HTMLElement): void {
   }
 }
 
+// ============================ DIAGRAM PANELS ===============================
+// Hierarchy / flow / composition charts built on the charts module (patches/line).
+function buildDiagrams(grid: HTMLElement): void {
+  // Treemap
+  const tmItems = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"].map((label) => ({ label, value: 10 + rand() * 90 }));
+  const tm = new Plot(panel(grid, "Treemap", "squarified"), { theme: "dark", showToolbar: false });
+  addTreemap(tm, { items: tmItems });
+  tm.render();
+
+  // Funnel
+  const fnItems = [["Visits", 1000], ["Signups", 620], ["Trials", 380], ["Paid", 190], ["Renewed", 90]] as const;
+  const fn = new Plot(panel(grid, "Funnel", "conversion"), { theme: "dark", showToolbar: false });
+  addFunnel(fn, { items: fnItems.map(([label, value]) => ({ label, value })) });
+  fn.render();
+
+  // Sunburst
+  const sbRoot = {
+    name: "root", children: [
+      { name: "A", children: [{ name: "A1", value: 20 }, { name: "A2", value: 15 }] },
+      { name: "B", children: [{ name: "B1", value: 25 }, { name: "B2", value: 10 }, { name: "B3", value: 12 }] },
+      { name: "C", value: 30 },
+    ],
+  };
+  const sb = new Plot(panel(grid, "Sunburst", "hierarchy"), { theme: "dark", showToolbar: false, equalAspect: true });
+  addSunburst(sb, { root: sbRoot });
+  sb.render();
+
+  // Gauge
+  const gg = new Plot(panel(grid, "Gauge", "value 72 / 100"), { theme: "dark", showToolbar: false, equalAspect: true });
+  addGauge(gg, { value: 72, min: 0, max: 100, thresholds: [{ value: 55, color: "#f59e0b" }, { value: 80, color: "#ef4444" }] });
+  gg.render();
+
+  // Sankey
+  const skNodes = ["Coal", "Gas", "Solar", "Grid", "Homes", "Industry", "Export"].map((name) => ({ name }));
+  const skLinks = [
+    { source: 0, target: 3, value: 30 }, { source: 1, target: 3, value: 20 }, { source: 2, target: 3, value: 15 },
+    { source: 3, target: 4, value: 25 }, { source: 3, target: 5, value: 28 }, { source: 3, target: 6, value: 12 },
+  ];
+  const sk = new Plot(panel(grid, "Sankey", "energy flow"), { theme: "dark", showToolbar: false });
+  addSankey(sk, { nodes: skNodes, links: skLinks });
+  sk.render();
+
+  // Chord
+  const chMatrix = [[0, 8, 3, 5], [8, 0, 6, 2], [3, 6, 0, 7], [5, 2, 7, 0]];
+  const ch = new Plot(panel(grid, "Chord", "flow matrix"), { theme: "dark", showToolbar: false, equalAspect: true });
+  addChord(ch, { matrix: chMatrix, labels: ["North", "South", "East", "West"] });
+  ch.render();
+
+  // Parallel coordinates
+  const pcDims = ["mpg", "cyl", "hp", "weight", "accel"];
+  const pcRows: number[][] = [];
+  for (let i = 0; i < 40; i++) pcRows.push(pcDims.map(() => rand()));
+  const pc = new Plot(panel(grid, "Parallel coordinates", "40 rows · 5 dims"), { theme: "dark", showToolbar: false });
+  addParallelCoordinates(pc, { dimensions: pcDims, rows: pcRows });
+  pc.render();
+}
+
 const built = { static: false, dynamic: false, maps: false, finance: false };
 
-function buildStatic(): void { reseed(); for (const b of CHARTS) b(gridStatic, false); }
+function buildStatic(): void { reseed(); for (const b of CHARTS) b(gridStatic, false); buildDiagrams(gridStatic); }
 function buildDynamic(): void { reseed(); for (const b of CHARTS) b(gridDynamic, true); buildLinkedFinance(gridDynamic); }
 
 type TabName = "static" | "dynamic" | "finance" | "maps";

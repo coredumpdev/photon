@@ -34,6 +34,8 @@ export interface Plot3DOptions {
   hover?: boolean;
   /** Show a reset-view (home) button. Default true. */
   resetButton?: boolean;
+  /** Show a download-PNG button. Default true. */
+  downloadButton?: boolean;
   /** Draw grid lines on the back walls of the cube. Default true. */
   gridPlanes?: boolean;
   /** Auto-orbit the camera: `true` for a default speed, or radians/frame. Default off. */
@@ -113,6 +115,7 @@ export class Plot3D {
   private colorbarDiv: HTMLDivElement;
   private tooltip: HTMLDivElement;
   private resetBtn: HTMLButtonElement | null = null;
+  private downloadBtn: HTMLButtonElement | null = null;
   private hoverEnabled: boolean;
   /** Screen position (device px) of the picked point, for the highlight ring. */
   private hoverHit: { sx: number; sy: number } | null = null;
@@ -189,6 +192,24 @@ export class Plot3D {
       btn.addEventListener("click", () => this.resetView());
       container.appendChild(btn);
       this.resetBtn = btn;
+    }
+
+    // Download-PNG button (next to reset).
+    if (options.downloadButton !== false) {
+      const dl = document.createElement("button");
+      dl.type = "button";
+      dl.title = "Download PNG";
+      dl.textContent = "⤓";
+      Object.assign(dl.style, {
+        position: "absolute", bottom: "8px", left: options.resetButton !== false ? "40px" : "8px", zIndex: "6",
+        width: "26px", height: "26px", padding: "0", cursor: "pointer",
+        borderRadius: "6px", font: "16px system-ui, sans-serif", lineHeight: "24px",
+        background: "rgba(15,23,42,0.8)", color: "#cbd5e1",
+        border: "1px solid rgba(148,163,184,0.25)",
+      } as CSSStyleDeclaration);
+      dl.addEventListener("click", () => void this.downloadImage());
+      container.appendChild(dl);
+      this.downloadBtn = dl;
     }
 
     this.lineProgram = createProgram(this.gl, LINE_VERT, LINE_FRAG);
@@ -461,6 +482,7 @@ export class Plot3D {
     this.colorbarDiv.remove();
     this.tooltip.remove();
     this.resetBtn?.remove();
+    this.downloadBtn?.remove();
     this.container.removeChild(this.canvas);
   }
 

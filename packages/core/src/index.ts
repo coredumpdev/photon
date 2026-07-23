@@ -12,6 +12,7 @@ export type {
   StackedAreaOptions,
   GraphInput,
   Annotation,
+  DrawTool,
 } from "./plot.js";
 
 export { createToolbar } from "./ui/toolbar.js";
@@ -122,6 +123,15 @@ export type {
   Ohlc, OhlcArrays, Brick, PfColumn, VolumeProfile, DepthCurves,
 } from "./finance/transforms.js";
 export { addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth } from "./finance/charts.js";
+
+// --- Charts: hierarchy / flow / composition diagrams -------------------------
+export * from "./charts/treemap.js";
+export * from "./charts/funnel.js";
+export * from "./charts/sunburst.js";
+export * from "./charts/gauge.js";
+export * from "./charts/sankey.js";
+export * from "./charts/chord.js";
+export * from "./charts/parallel.js";
 export type {
   HeikinAshiOptions, RenkoOptions, VolumeProfileOptions, BollingerOptions, BollingerHandle,
   DepthOptions, DepthHandle, OhlcInput,
