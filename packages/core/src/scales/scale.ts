@@ -221,19 +221,31 @@ export class OrdinalTimeScale implements Scale {
     const i0 = Math.max(0, Math.ceil(this.domain[0] - 1e-9));
     const i1 = Math.min(n - 1, Math.floor(this.domain[1] + 1e-9));
     if (i1 < i0) return [];
-    // Calendar levels coarse→fine: a boundary key (marks a new period) + a label.
+
+    // Calendar levels coarse→fine. Each `key` labels a bar's period; ticks land on
+    // the FIRST bar of every period — so gridlines snap to real calendar dates
+    // (month starts, Mondays, …) and stay put when you pan (no drift).
+    const DAY = 86_400_000;
     const dayKey = (d: Date) => d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
+    const weekKey = (d: Date) => {
+      const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const dow = (m.getDay() + 6) % 7; // Monday = 0
+      return Math.floor((m.getTime() - dow * DAY) / DAY);
+    };
+    const dayMonth = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    const monthLabel = (d: Date) => (d.getMonth() === 0 ? `${d.getFullYear()}` : MONTHS[d.getMonth()]!);
     const levels = [
       { key: (d: Date) => d.getFullYear(), label: (d: Date) => `${d.getFullYear()}` },
-      {
-        key: (d: Date) => d.getFullYear() * 12 + d.getMonth(),
-        label: (d: Date) => (d.getMonth() === 0 ? `${d.getFullYear()}` : MONTHS[d.getMonth()]!),
-      },
-      { key: dayKey, label: (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}` },
-      { key: (d: Date) => dayKey(d) * 100 + d.getHours(), label: hhmm },
-      { key: (d: Date) => (dayKey(d) * 100 + d.getHours()) * 100 + d.getMinutes(), label: hhmm },
+      { key: (d: Date) => d.getFullYear() * 4 + Math.floor(d.getMonth() / 3), label: monthLabel },
+      { key: (d: Date) => d.getFullYear() * 12 + d.getMonth(), label: monthLabel },
+      { key: weekKey, label: dayMonth },
+      { key: dayKey, label: dayMonth },
+      { key: (d: Date) => dayKey(d) * 4 + Math.floor(d.getHours() / 6), label: hhmm },
+      { key: (d: Date) => dayKey(d) * 24 + d.getHours(), label: hhmm },
+      { key: (d: Date) => (dayKey(d) * 24 + d.getHours()) * 4 + Math.floor(d.getMinutes() / 15), label: hhmm },
+      { key: (d: Date) => (dayKey(d) * 24 + d.getHours()) * 60 + d.getMinutes(), label: hhmm },
     ];
-    const boundaries = (lvl: (typeof levels)[number]): number[] => {
+    const periodStarts = (lvl: (typeof levels)[number]): number[] => {
       const out: number[] = [];
       let prev = i0 > 0 ? lvl.key(new Date(this.times[i0 - 1]!)) : NaN;
       for (let i = i0; i <= i1; i++) {
@@ -242,32 +254,29 @@ export class OrdinalTimeScale implements Scale {
       }
       return out;
     };
-    // Finest level with any boundaries; stop once one yields at least `target`
-    // (enough to subsample down — finer would only be denser).
-    let best: { lvl: (typeof levels)[number]; b: number[] } | null = null;
+    // Pick the level whose tick count is closest to `target` (penalize over-dense + too-sparse).
+    let chosen: { lvl: (typeof levels)[number]; b: number[] } | null = null;
+    let bestScore = Infinity;
     for (const lvl of levels) {
-      const b = boundaries(lvl);
+      const b = periodStarts(lvl);
       if (b.length === 0) continue;
-      best = { lvl, b };
-      if (b.length >= target) break;
+      const over = b.length > target * 1.5 ? (b.length - target * 1.5) * 3 : 0;
+      const sparse = b.length < 2 ? 100 : 0;
+      const score = Math.abs(b.length - target) + over + sparse;
+      if (score < bestScore) { bestScore = score; chosen = { lvl, b }; }
     }
-    let idxs: number[];
-    let label: (d: Date) => string;
-    if (best) {
-      idxs = best.b;
-      label = best.lvl.label;
-      if (idxs.length > target * 1.5) {
-        const stride = Math.ceil(idxs.length / target);
-        idxs = idxs.filter((_, k) => k % stride === 0);
-      }
-    } else {
-      // No calendar change in view (e.g. a handful of same-minute bars): space evenly.
-      idxs = [];
+    if (!chosen) {
+      // No calendar change across the view (a few same-minute bars): space evenly.
+      const out: Tick[] = [];
       const step = Math.max(1, Math.floor((i1 - i0) / Math.max(1, target - 1)));
-      for (let i = i0; i <= i1; i += step) idxs.push(i);
-      label = (d) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${hhmm(d)}`;
+      for (let i = i0; i <= i1; i += step) {
+        const d = new Date(this.times[i]!);
+        out.push({ value: i, label: `${dayMonth(d)} ${hhmm(d)}` });
+      }
+      return out;
     }
-    return idxs.map((i) => ({ value: i, label: label(new Date(this.times[i]!)) }));
+    const c = chosen;
+    return c.b.map((i) => ({ value: i, label: c.lvl.label(new Date(this.times[i]!)) }));
   }
   formatTick(value: number): string {
     const d = new Date(this.timeAt(value));
