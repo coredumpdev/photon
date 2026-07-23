@@ -213,4 +213,159 @@ export function firstFinite(values: ArrayLike<number>): number {
   return -1;
 }
 
+// Rolling highest/lowest over a trailing window (NaN warm-up).
+function rollingHigh(v: ArrayLike<number>, period: number): Float64Array {
+  const n = v.length, out = new Float64Array(n).fill(NaN);
+  for (let i = period - 1; i < n; i++) { let m = -Infinity; for (let k = 0; k < period; k++) m = Math.max(m, v[i - k]!); out[i] = m; }
+  return out;
+}
+function rollingLow(v: ArrayLike<number>, period: number): Float64Array {
+  const n = v.length, out = new Float64Array(n).fill(NaN);
+  for (let i = period - 1; i < n; i++) { let m = Infinity; for (let k = 0; k < period; k++) m = Math.min(m, v[i - k]!); out[i] = m; }
+  return out;
+}
+
+export interface Stochastic { k: Float64Array; d: Float64Array; }
+
+/** Stochastic oscillator: %K over `kPeriod`, %D = SMA(%K, dPeriod). Values 0..100. */
+export function stochastic(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>, kPeriod = 14, dPeriod = 3,
+): Stochastic {
+  const n = Math.min(high.length, low.length, close.length);
+  const hh = rollingHigh(high, kPeriod), ll = rollingLow(low, kPeriod);
+  const k = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    if (!Number.isNaN(hh[i]!)) { const rng = hh[i]! - ll[i]!; k[i] = rng === 0 ? 50 : (100 * (close[i]! - ll[i]!)) / rng; }
+  }
+  return { k, d: sma(k, dPeriod) };
+}
+
+export interface Channel { middle: Float64Array; upper: Float64Array; lower: Float64Array; }
+
+/** Keltner Channels: EMA(period) ± mult·ATR(atrPeriod). */
+export function keltner(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>, period = 20, mult = 2, atrPeriod = 10,
+): Channel {
+  const middle = ema(close, period);
+  const a = atr(high, low, close, atrPeriod);
+  const n = close.length, upper = new Float64Array(n).fill(NaN), lower = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) if (!Number.isNaN(middle[i]!) && !Number.isNaN(a[i]!)) { upper[i] = middle[i]! + mult * a[i]!; lower[i] = middle[i]! - mult * a[i]!; }
+  return { middle, upper, lower };
+}
+
+/** On-Balance Volume — a running signed volume total (no warm-up). */
+export function obv(close: ArrayLike<number>, volume: ArrayLike<number>): Float64Array {
+  const n = Math.min(close.length, volume.length), out = new Float64Array(n);
+  for (let i = 1; i < n; i++) {
+    const d = close[i]! - close[i - 1]!;
+    out[i] = out[i - 1]! + (d > 0 ? volume[i]! : d < 0 ? -volume[i]! : 0);
+  }
+  return out;
+}
+
+export interface Ichimoku {
+  conversion: Float64Array; // Tenkan-sen
+  base: Float64Array;       // Kijun-sen
+  spanA: Float64Array;      // Senkou A (unshifted)
+  spanB: Float64Array;      // Senkou B (unshifted)
+}
+
+/**
+ * Ichimoku lines (conversion/base/spanA/spanB). Spans are returned **unshifted**
+ * (traditional charts project the cloud forward by `basePeriod` bars).
+ */
+export function ichimoku(
+  high: ArrayLike<number>, low: ArrayLike<number>, convPeriod = 9, basePeriod = 26, spanBPeriod = 52,
+): Ichimoku {
+  const n = Math.min(high.length, low.length);
+  const mid = (p: number) => { const hi = rollingHigh(high, p), lo = rollingLow(low, p), o = new Float64Array(n).fill(NaN); for (let i = 0; i < n; i++) if (!Number.isNaN(hi[i]!)) o[i] = (hi[i]! + lo[i]!) / 2; return o; };
+  const conversion = mid(convPeriod), base = mid(basePeriod), spanB = mid(spanBPeriod);
+  const spanA = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) if (!Number.isNaN(conversion[i]!) && !Number.isNaN(base[i]!)) spanA[i] = (conversion[i]! + base[i]!) / 2;
+  return { conversion, base, spanA, spanB };
+}
+
+export interface Adx { adx: Float64Array; plusDI: Float64Array; minusDI: Float64Array; }
+
+/** Wilder's ADX (+DI / −DI / ADX) over `period` (default 14). */
+export function adx(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>, period = 14,
+): Adx {
+  const n = Math.min(high.length, low.length, close.length);
+  const plusDI = new Float64Array(n).fill(NaN), minusDI = new Float64Array(n).fill(NaN), out = new Float64Array(n).fill(NaN);
+  if (n <= period) return { adx: out, plusDI, minusDI };
+  const tr = new Float64Array(n), pdm = new Float64Array(n), mdm = new Float64Array(n);
+  for (let i = 1; i < n; i++) {
+    const up = high[i]! - high[i - 1]!, down = low[i - 1]! - low[i]!;
+    pdm[i] = up > down && up > 0 ? up : 0;
+    mdm[i] = down > up && down > 0 ? down : 0;
+    const pc = close[i - 1]!;
+    tr[i] = Math.max(high[i]! - low[i]!, Math.abs(high[i]! - pc), Math.abs(low[i]! - pc));
+  }
+  // Wilder-smoothed sums seeded at index `period`.
+  let sTR = 0, sP = 0, sM = 0;
+  for (let i = 1; i <= period; i++) { sTR += tr[i]!; sP += pdm[i]!; sM += mdm[i]!; }
+  const dx = new Float64Array(n).fill(NaN);
+  const diAt = (i: number) => {
+    const p = sTR === 0 ? 0 : (100 * sP) / sTR, m = sTR === 0 ? 0 : (100 * sM) / sTR;
+    plusDI[i] = p; minusDI[i] = m;
+    const sum = p + m;
+    dx[i] = sum === 0 ? 0 : (100 * Math.abs(p - m)) / sum;
+  };
+  diAt(period);
+  for (let i = period + 1; i < n; i++) {
+    sTR = sTR - sTR / period + tr[i]!;
+    sP = sP - sP / period + pdm[i]!;
+    sM = sM - sM / period + mdm[i]!;
+    diAt(i);
+  }
+  // ADX = Wilder-smoothed DX starting `period` bars after the first DX.
+  const start = period, adxStart = start + period;
+  if (adxStart < n) {
+    let acc = 0; for (let i = start + 1; i <= adxStart; i++) acc += dx[i]!;
+    let prev = acc / period;
+    out[adxStart] = prev;
+    for (let i = adxStart + 1; i < n; i++) { prev = (prev * (period - 1) + dx[i]!) / period; out[i] = prev; }
+  }
+  return { adx: out, plusDI, minusDI };
+}
+
+export interface SuperTrend { trend: Float64Array; direction: Float64Array; }
+
+/**
+ * SuperTrend (ATR bands with trend-following flip). `trend` is the line; `direction`
+ * is +1 (up / support below price) or −1 (down / resistance above price).
+ */
+export function superTrend(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>, period = 10, mult = 3,
+): SuperTrend {
+  const n = Math.min(high.length, low.length, close.length);
+  const a = atr(high, low, close, period);
+  const trend = new Float64Array(n).fill(NaN), direction = new Float64Array(n).fill(NaN);
+  const finalUpper = new Float64Array(n), finalLower = new Float64Array(n);
+  let dir = 1;
+  for (let i = 0; i < n; i++) {
+    if (Number.isNaN(a[i]!)) continue;
+    const hl2 = (high[i]! + low[i]!) / 2;
+    const bU = hl2 + mult * a[i]!, bL = hl2 - mult * a[i]!;
+    const prevValid = i > 0 && !Number.isNaN(a[i - 1]!);
+    finalUpper[i] = prevValid && (bU < finalUpper[i - 1]! || close[i - 1]! > finalUpper[i - 1]!) ? bU : (prevValid ? finalUpper[i - 1]! : bU);
+    finalLower[i] = prevValid && (bL > finalLower[i - 1]! || close[i - 1]! < finalLower[i - 1]!) ? bL : (prevValid ? finalLower[i - 1]! : bL);
+    if (!prevValid) dir = close[i]! >= hl2 ? 1 : -1;
+    else if (dir === 1 && close[i]! < finalLower[i]!) dir = -1;
+    else if (dir === -1 && close[i]! > finalUpper[i]!) dir = 1;
+    direction[i] = dir;
+    trend[i] = dir === 1 ? finalLower[i]! : finalUpper[i]!;
+  }
+  return { trend, direction };
+}
+
+export interface FibLevel { ratio: number; price: number; }
+
+/** Fibonacci retracement price levels between a `high` and `low` (standard ratios). */
+export function fibRetracements(high: number, low: number, ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]): FibLevel[] {
+  const span = high - low;
+  return ratios.map((r) => ({ ratio: r, price: high - span * r }));
+}
+
 export { toF64 as toFloat64 };

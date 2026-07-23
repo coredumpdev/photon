@@ -1,6 +1,7 @@
 import {
   Plot, Plot3D, PolarPlot, linkX,
   rsi, macd, firstFinite, addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth,
+  ichimoku, keltner, stochastic, adx, superTrend, fibRetracements,
 } from "@photonviz/core";
 import {
   addMap, addGeoJson, xyzVectorSource, pmtilesSource, protomapsStyle,
@@ -1282,6 +1283,111 @@ function buildFinance(grid: HTMLElement): void {
   macdP.render();
 
   linkX([priceP, rsiP, macdP]);
+
+  // --- Advanced indicators & drawing tools ---
+  const ordOpts = () => ({ theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times } }, showToolbar: false });
+
+  // Ichimoku — cloud (spanA/spanB fill) + Tenkan/Kijun.
+  const ich = ichimoku(h, l, 9, 26, 52);
+  const ichP = new Plot(panel(grid, "Ichimoku", "cloud · tenkan/kijun"), ordOpts());
+  const cloudStart = Math.max(firstFinite(ich.spanA), firstFinite(ich.spanB));
+  if (cloudStart >= 0) ichP.addArea({ x: idx.subarray(cloudStart), y: ich.spanA.subarray(cloudStart), base: ich.spanB.subarray(cloudStart), color: "rgba(52,211,153,0.13)" });
+  ichP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+  const tk = trim(ich.conversion), kj = trim(ich.base);
+  ichP.addLine({ x: tk.x, y: tk.y, color: "#f472b6", width: 1, name: "tenkan" });
+  ichP.addLine({ x: kj.x, y: kj.y, color: "#60a5fa", width: 1, name: "kijun" });
+  ichP.render();
+
+  // Keltner channels — EMA20 ± 2·ATR.
+  const kc = keltner(h, l, c, 20, 2, 10);
+  const kcP = new Plot(panel(grid, "Keltner channels", "EMA20 ± 2·ATR"), ordOpts());
+  kcP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+  for (const [ser, w] of [[kc.upper, 1], [kc.middle, 1.5], [kc.lower, 1]] as const) { const t = trim(ser); kcP.addLine({ x: t.x, y: t.y, color: "#a78bfa", width: w }); }
+  kcP.render();
+
+  // SuperTrend — ATR trend-follow line.
+  const st = superTrend(h, l, c, 10, 3);
+  const stP = new Plot(panel(grid, "SuperTrend", "ATR trend flip"), ordOpts());
+  stP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+  const stt = trim(st.trend);
+  stP.addLine({ x: stt.x, y: stt.y, color: "#22d3ee", width: 2, name: "SuperTrend" });
+  stP.render();
+
+  // Drawing tools — a trendline + Fibonacci retracement (data-space, pans/zooms).
+  const drP = new Plot(panel(grid, "Drawing tools", "trendline · Fibonacci"), ordOpts());
+  drP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+  drP.addAnnotation({ type: "line", x0: 5, y0: l[5]!, x1: N - 6, y1: h[N - 6]!, color: "#f59e0b", width: 1.5, dash: [6, 4] });
+  let fHi = -Infinity, fLo = Infinity;
+  for (let i = 0; i < N; i++) { fHi = Math.max(fHi, h[i]!); fLo = Math.min(fLo, l[i]!); }
+  drP.addAnnotation({ type: "fib", x0: 0, x1: N - 1, high: fHi, low: fLo, fill: true, color: "#94a3b8" });
+  drP.render();
+
+  // Stochastic sub-pane — %K / %D with 20/80 guides.
+  const stoch = stochastic(h, l, c, 14, 3);
+  const soP = new Plot(panel(grid, "Stochastic", "%K · %D · 20/80"), { theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 100] } }, showToolbar: false });
+  const kk = trim(stoch.k), dd = trim(stoch.d);
+  soP.addLine({ x: kk.x, y: kk.y, color: "#60a5fa", width: 1.5, name: "%K" });
+  soP.addLine({ x: dd.x, y: dd.y, color: "#f59e0b", width: 1.5, name: "%D" });
+  soP.addAnnotation({ type: "span", dim: "y", value: 80, color: "#475569", dash: [4, 4] });
+  soP.addAnnotation({ type: "span", dim: "y", value: 20, color: "#475569", dash: [4, 4] });
+  soP.render();
+
+  // ADX sub-pane — +DI / −DI / ADX.
+  const adxV = adx(h, l, c, 14);
+  const adP = new Plot(panel(grid, "ADX", "+DI · −DI · ADX(14)"), ordOpts());
+  const pdi = trim(adxV.plusDI), mdi = trim(adxV.minusDI), adl = trim(adxV.adx);
+  adP.addLine({ x: pdi.x, y: pdi.y, color: "#34d399", width: 1, name: "+DI" });
+  adP.addLine({ x: mdi.x, y: mdi.y, color: "#f472b6", width: 1, name: "−DI" });
+  adP.addLine({ x: adl.x, y: adl.y, color: "#e2e8f0", width: 1.5, name: "ADX" });
+  adP.render();
+
+  buildLiveCandles(grid);
+}
+
+// Live crypto candles — Binance BTCUSDT 1m WebSocket, with a simulated fallback
+// so the panel streams even offline (updateLast on the forming bar, roll on close).
+function buildLiveCandles(grid: HTMLElement): void {
+  const W = 60;
+  const lx = Float64Array.from({ length: W }, (_, i) => i);
+  const lo = new Float64Array(W), lh = new Float64Array(W), ll = new Float64Array(W), lc = new Float64Array(W);
+  let base = 60000;
+  for (let i = 0; i < W; i++) {
+    const op = base, cl = op + gaussian(0, 60);
+    lo[i] = op; lc[i] = cl; lh[i] = Math.max(op, cl) + Math.abs(gaussian(0, 30)); ll[i] = Math.min(op, cl) - Math.abs(gaussian(0, 30));
+    base = cl;
+  }
+  const p = new Plot(panel(grid, "Live · BTCUSDT 1m", "Binance WS · updateLast/appendCandle"), { theme: "dark", showToolbar: false });
+  const cs = p.addCandlestick({ x: lx, open: lo, high: lh, low: ll, close: lc, renderType: "dynamic" });
+  p.render();
+
+  const push = (o: number, hi: number, low: number, cl: number, closed: boolean): void => {
+    cs.updateLast({ x: W - 1, open: o, high: hi, low: low, close: cl });
+    if (closed) {
+      for (let i = 0; i < W - 1; i++) { lo[i] = lo[i + 1]!; lh[i] = lh[i + 1]!; ll[i] = ll[i + 1]!; lc[i] = lc[i + 1]!; }
+      lo[W - 1] = cl; lh[W - 1] = cl; ll[W - 1] = cl; lc[W - 1] = cl;
+      cs.setData({ x: lx, open: lo, high: lh, low: ll, close: lc });
+    }
+    p.render();
+  };
+
+  function startSim(): void {
+    let cur = lc[W - 1]!, hi = cur, low = cur, ticks = 0;
+    setInterval(() => {
+      cur += gaussian(0, 40); hi = Math.max(hi, cur); low = Math.min(low, cur);
+      const closed = ++ticks % 20 === 0;
+      push(lc[W - 1]!, hi, low, cur, closed);
+      if (closed) { hi = low = cur; }
+    }, 200);
+  }
+
+  try {
+    const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@kline_1m");
+    ws.onmessage = (e) => { try { const k = JSON.parse(e.data).k; push(+k.o, +k.h, +k.l, +k.c, !!k.x); } catch { /* ignore */ } };
+    ws.onerror = () => { try { ws.close(); } catch { /* ignore */ } startSim(); };
+    setTimeout(() => { if (ws.readyState !== WebSocket.OPEN) { try { ws.close(); } catch { /* ignore */ } startSim(); } }, 3000);
+  } catch {
+    startSim();
+  }
 }
 
 const built = { static: false, dynamic: false, maps: false, finance: false };

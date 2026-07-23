@@ -144,13 +144,19 @@ export interface GraphInput extends Omit<GraphOptions, "x" | "y"> {
 /**
  * A Canvas2D overlay marker drawn above the data, projected through the scales:
  * a full-width/height guide line (`span`), a shaded range (`band`), a rectangle
- * (`box`), or text (`label`). `yAxis` targets a secondary axis where relevant.
+ * (`box`), text (`label`), an arbitrary segment (`line` — trendlines), a segment
+ * extended past its end (`ray`), or Fibonacci retracement levels (`fib`). `yAxis`
+ * targets a secondary axis where relevant. All coordinates are in data space, so
+ * annotations pan and zoom with the chart.
  */
 export type Annotation =
   | { type: "span"; dim: Dim; value: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
   | { type: "band"; dim: Dim; from: number; to: number; color?: string; yAxis?: string }
   | { type: "box"; x: Range; y: Range; color?: string; border?: string; yAxis?: string }
-  | { type: "label"; x: number; y: number; text: string; color?: string; font?: string; align?: "left" | "center" | "right"; yAxis?: string };
+  | { type: "label"; x: number; y: number; text: string; color?: string; font?: string; align?: "left" | "center" | "right"; yAxis?: string }
+  | { type: "line"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
+  | { type: "ray"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
+  | { type: "fib"; x0: number; x1: number; high: number; low: number; ratios?: number[]; color?: string; fill?: boolean; yAxis?: string };
 
 /** One line of the hover tooltip header, produced by {@link PlotOptions.hoverReadout}. */
 export interface HoverReadoutRow {
@@ -1338,13 +1344,47 @@ export class Plot {
         const rw = Math.abs(x1 - x0), rh = Math.abs(y1 - y0);
         if (a.color) { ctx.fillStyle = a.color; ctx.fillRect(rx, ry, rw, rh); }
         if (a.border) { ctx.strokeStyle = a.border; ctx.lineWidth = 1; ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh); }
-      } else {
+      } else if (a.type === "label") {
         const s = yScaleOf(a.yAxis);
         ctx.fillStyle = a.color ?? this.theme.text;
         ctx.font = a.font ?? this.theme.font;
         ctx.textAlign = a.align ?? "left";
         ctx.textBaseline = "middle";
         ctx.fillText(a.text, px(a.x), py(s, a.y));
+      } else if (a.type === "line" || a.type === "ray") {
+        const s = yScaleOf(a.yAxis);
+        ctx.strokeStyle = a.color ?? this.theme.axis;
+        ctx.lineWidth = a.width ?? 1.5;
+        if (a.dash) ctx.setLineDash(a.dash);
+        const X0 = px(a.x0), Y0 = py(s, a.y0);
+        let X1 = px(a.x1), Y1 = py(s, a.y1);
+        if (a.type === "ray") {
+          // Extend far past the second point; the region clip trims it to the edge.
+          const dx = X1 - X0, dy = Y1 - Y0, len = Math.hypot(dx, dy) || 1, f = 8000 / len;
+          X1 = X0 + dx * f; Y1 = Y0 + dy * f;
+        }
+        ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X1, Y1); ctx.stroke();
+      } else {
+        // Fibonacci retracement levels between `high` and `low` across [x0, x1].
+        const s = yScaleOf(a.yAxis);
+        const ratios = a.ratios ?? [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+        const span = a.high - a.low;
+        const fx0 = Math.min(px(a.x0), px(a.x1)), fx1 = Math.max(px(a.x0), px(a.x1));
+        const color = a.color ?? this.theme.axis;
+        const ys = ratios.map((r) => py(s, a.high - span * r));
+        if (a.fill) {
+          for (let i = 0; i < ys.length - 1; i++) {
+            ctx.fillStyle = `rgba(96,165,250,${i % 2 === 0 ? 0.06 : 0.12})`;
+            ctx.fillRect(fx0, Math.min(ys[i]!, ys[i + 1]!), fx1 - fx0, Math.abs(ys[i + 1]! - ys[i]!));
+          }
+        }
+        ctx.setLineDash([]); ctx.strokeStyle = color; ctx.lineWidth = 1;
+        ctx.fillStyle = color; ctx.font = this.theme.font; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+        for (let i = 0; i < ratios.length; i++) {
+          const y = Math.round(ys[i]!) + 0.5;
+          ctx.beginPath(); ctx.moveTo(fx0, y); ctx.lineTo(fx1, y); ctx.stroke();
+          ctx.fillText(`${(ratios[i]! * 100).toFixed(1)}% · ${(a.high - span * ratios[i]!).toFixed(2)}`, fx0 + 4, y - 2);
+        }
       }
     }
     ctx.restore();

@@ -110,8 +110,11 @@ export { earcut } from "./geo/earcut.js";
 // --- Finance: TA indicators, chart transforms, and Plot builders -------------
 export {
   sma, ema, wma, rollingStd, bollinger, rsi, macd, vwap, trueRange, atr, firstFinite,
+  stochastic, keltner, obv, ichimoku, adx, superTrend, fibRetracements,
 } from "./finance/indicators.js";
-export type { BollingerBands, Macd } from "./finance/indicators.js";
+export type {
+  BollingerBands, Macd, Stochastic, Channel, Ichimoku, Adx, SuperTrend, FibLevel,
+} from "./finance/indicators.js";
 export {
   heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth,
 } from "./finance/transforms.js";
