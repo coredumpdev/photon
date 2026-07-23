@@ -1029,15 +1029,22 @@ export class Plot {
     // In fullscreen only the fullscreen element renders, so attach the menu there.
     (document.fullscreenElement ?? document.body).appendChild(menu);
     this.drawMenu = menu;
-    // Dismiss on an interaction OUTSIDE the menu (clicks inside must reach the items).
+    // Dismiss on an interaction OUTSIDE the menu (clicks inside must reach the items),
+    // or when fullscreen / scroll / resize changes (Esc-exit doesn't fire pointerdown).
     const dismiss = (ev?: Event) => {
-      if (ev && ev.target instanceof Node && menu.contains(ev.target)) return;
+      if (ev && ev.type === "pointerdown" && ev.target instanceof Node && menu.contains(ev.target)) return;
       window.removeEventListener("pointerdown", dismiss, true);
       window.removeEventListener("blur", dismiss);
+      window.removeEventListener("resize", dismiss);
+      document.removeEventListener("fullscreenchange", dismiss);
+      document.removeEventListener("scroll", dismiss, true);
       this.hideDrawMenu();
     };
     setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
     window.addEventListener("blur", dismiss);
+    window.addEventListener("resize", dismiss);
+    document.addEventListener("fullscreenchange", dismiss);
+    document.addEventListener("scroll", dismiss, true);
     this.requestRender();
   }
 
