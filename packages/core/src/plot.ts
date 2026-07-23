@@ -1652,15 +1652,18 @@ export class Plot {
     if (active >= 0 && active < this.drawings.length) {
       const a = this.drawings[active]!;
       const s = yScaleOf(a.yAxis);
+      // Handles follow the drawing's current color (so recoloring updates them too).
+      const col = (a as { color?: string }).color ?? this.theme.axis;
+      const selected = this.selectedDrawing === active;
       ctx.setLineDash([]);
       for (const pt of this.drawingHandlePts(a)) {
         const hx = px(pt.x), hy = py(s, pt.y);
         ctx.beginPath();
-        ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
-        ctx.fillStyle = this.selectedDrawing === active ? "#f59e0b" : (this.isDark ? "#e2e8f0" : "#fff");
+        ctx.arc(hx, hy, selected ? 5 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = col;
         ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = this.isDark ? "#0b1220" : "#334155";
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = this.isDark ? "#0b1220" : "#ffffff";
         ctx.stroke();
       }
     }
