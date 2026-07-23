@@ -1,8 +1,8 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { AxisFrame } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import { decimateIndices } from "./line-util.js";
 import { GpuDecimator } from "./gpu-decimate.js";
 import type { DrawState, Layer } from "./layer.js";
@@ -42,6 +42,8 @@ export interface LineOptions {
    * zoomed out (preserves peaks). Requires monotonic x; auto-detected. Default true.
    */
   decimate?: boolean;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 // Each segment is an instanced quad, extended and round-capped in the fragment
@@ -256,6 +258,7 @@ export class LineLayer implements Layer {
   private monotonic: boolean;
   private gpuDec: GpuDecimator | null = null;
   private step?: "before" | "after" | "center";
+  private usage: number;
   private xRef = 0;
   private yRef = 0;
   private xs: Float64Array;
@@ -281,6 +284,7 @@ export class LineLayer implements Layer {
     this.colorCss = typeof colorInput === "string" ? colorInput : toColorCss(this.color);
     this.name = opts.name ?? this.id;
     this.yAxis = opts.yAxis ?? "y";
+    this.usage = bufferUsage(gl, opts.renderType);
 
     let n = Math.min(opts.x.length, opts.y.length);
     let xs: ArrayLike<number> = opts.x, ys: ArrayLike<number> = opts.y;
@@ -314,7 +318,7 @@ export class LineLayer implements Layer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.cornerBuf);
     gl.bufferData(gl.ARRAY_BUFFER, CORNERS, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, data, this.usage);
 
     this.configureVao(this.fullVao, this.posBuf);
     this.configureVao(this.decVao, this.decBuf);
@@ -413,7 +417,7 @@ export class LineLayer implements Layer {
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
     this.count = n; this.monotonic = mono; this.decKey = "";
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.posBuf);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.DYNAMIC_DRAW);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
     this.syncGpu(data, n);
   }
 

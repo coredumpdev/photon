@@ -4,7 +4,7 @@ import type { AxisFrame } from "../gl/transform.js";
 import { LineLayer } from "../layers/line.js";
 import { ScatterLayer } from "../layers/scatter.js";
 import { darkTheme, lightTheme, type Theme } from "../render/overlay.js";
-import type { Color } from "../types.js";
+import type { Color, RenderType } from "../types.js";
 
 export interface PolarOptions {
   theme?: "light" | "dark" | Theme;
@@ -34,6 +34,8 @@ export interface PolarLineOptions {
   width?: number;
   /** Connect the last point back to the first. */
   closed?: boolean;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 export interface PolarScatterOptions {
@@ -43,6 +45,8 @@ export interface PolarScatterOptions {
   size?: number;
   /** Optional per-point labels (one per point), shown as the title of the click-pinned info box. */
   labels?: ArrayLike<string>;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 /** A live handle to update a polar series with new (theta, r) data. */
@@ -206,7 +210,7 @@ export class PolarPlot {
   addLine(opts: PolarLineOptions): PolarSeries {
     const closed = opts.closed ?? false;
     const { x, y, maxR } = this.toXY(opts.theta, opts.r, closed);
-    const layer = new LineLayer(this.gl, { x, y, color: opts.color, width: opts.width ?? 2, decimate: false });
+    const layer = new LineLayer(this.gl, { x, y, color: opts.color, width: opts.width ?? 2, decimate: false, renderType: opts.renderType });
     const entry: Entry = { layer, closed, maxR, theta: opts.theta, r: opts.r };
     this.entries.push(entry);
     this.refit();
@@ -215,7 +219,7 @@ export class PolarPlot {
 
   addScatter(opts: PolarScatterOptions): PolarSeries {
     const { x, y, maxR } = this.toXY(opts.theta, opts.r, false);
-    const layer = new ScatterLayer(this.gl, { x, y, color: opts.color, size: opts.size ?? 5 });
+    const layer = new ScatterLayer(this.gl, { x, y, color: opts.color, size: opts.size ?? 5, renderType: opts.renderType });
     const entry: Entry = { layer, closed: false, maxR, theta: opts.theta, r: opts.r, labels: opts.labels };
     this.entries.push(entry);
     this.refit();

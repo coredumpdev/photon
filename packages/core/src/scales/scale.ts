@@ -177,9 +177,113 @@ export class CategoricalScale implements Scale {
   }
 }
 
-export type ScaleType = "linear" | "log" | "time" | "categorical";
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function makeScale(type: ScaleType, domain?: Range, factors?: string[]): Scale {
+/**
+ * An **ordinal time** axis — the standard financial x-axis. Bars are plotted at
+ * evenly-spaced integer indices `0..n-1` (like {@link CategoricalScale}, so the
+ * domain is the band `[-0.5, n-1+0.5]`), which **collapses market gaps**
+ * (weekends, overnight, holidays) instead of leaving blank space the way a real
+ * {@link TimeScale} would. Each index carries a timestamp; ticks are placed at
+ * natural calendar boundaries (day / month / year, or hour / minute when zoomed
+ * in) and subsampled toward the target count, so labels stay readable at any zoom.
+ *
+ * Plot your candles/bars at `x = 0,1,2,…` and pass the per-bar epoch-ms `times`.
+ */
+export class OrdinalTimeScale implements Scale {
+  readonly type = "ordinal-time";
+  readonly log = false;
+  times: number[];
+  domain: Range;
+  constructor(times: ArrayLike<number> = []) {
+    this.times = Array.from({ length: times.length }, (_, i) => times[i]!);
+    const n = this.times.length;
+    this.domain = n > 0 ? [-0.5, n - 0.5] : [-0.5, 0.5];
+  }
+  norm(value: number): number {
+    const [a, b] = this.domain;
+    return b === a ? 0 : (value - a) / (b - a);
+  }
+  invert(t: number): number {
+    const [a, b] = this.domain;
+    return a + t * (b - a);
+  }
+  /** Timestamp at a (rounded, clamped) index. */
+  private timeAt(i: number): number {
+    const n = this.times.length;
+    if (n === 0) return 0;
+    const k = Math.max(0, Math.min(n - 1, Math.round(i)));
+    return this.times[k]!;
+  }
+  ticks(target = 6): Tick[] {
+    const n = this.times.length;
+    if (n === 0) return [];
+    const i0 = Math.max(0, Math.ceil(this.domain[0] - 1e-9));
+    const i1 = Math.min(n - 1, Math.floor(this.domain[1] + 1e-9));
+    if (i1 < i0) return [];
+    // Calendar levels coarse→fine: a boundary key (marks a new period) + a label.
+    const dayKey = (d: Date) => d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
+    const levels = [
+      { key: (d: Date) => d.getFullYear(), label: (d: Date) => `${d.getFullYear()}` },
+      {
+        key: (d: Date) => d.getFullYear() * 12 + d.getMonth(),
+        label: (d: Date) => (d.getMonth() === 0 ? `${d.getFullYear()}` : MONTHS[d.getMonth()]!),
+      },
+      { key: dayKey, label: (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}` },
+      { key: (d: Date) => dayKey(d) * 100 + d.getHours(), label: hhmm },
+      { key: (d: Date) => (dayKey(d) * 100 + d.getHours()) * 100 + d.getMinutes(), label: hhmm },
+    ];
+    const boundaries = (lvl: (typeof levels)[number]): number[] => {
+      const out: number[] = [];
+      let prev = i0 > 0 ? lvl.key(new Date(this.times[i0 - 1]!)) : NaN;
+      for (let i = i0; i <= i1; i++) {
+        const k = lvl.key(new Date(this.times[i]!));
+        if (k !== prev) { out.push(i); prev = k; }
+      }
+      return out;
+    };
+    // Finest level with any boundaries; stop once one yields at least `target`
+    // (enough to subsample down — finer would only be denser).
+    let best: { lvl: (typeof levels)[number]; b: number[] } | null = null;
+    for (const lvl of levels) {
+      const b = boundaries(lvl);
+      if (b.length === 0) continue;
+      best = { lvl, b };
+      if (b.length >= target) break;
+    }
+    let idxs: number[];
+    let label: (d: Date) => string;
+    if (best) {
+      idxs = best.b;
+      label = best.lvl.label;
+      if (idxs.length > target * 1.5) {
+        const stride = Math.ceil(idxs.length / target);
+        idxs = idxs.filter((_, k) => k % stride === 0);
+      }
+    } else {
+      // No calendar change in view (e.g. a handful of same-minute bars): space evenly.
+      idxs = [];
+      const step = Math.max(1, Math.floor((i1 - i0) / Math.max(1, target - 1)));
+      for (let i = i0; i <= i1; i += step) idxs.push(i);
+      label = (d) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${hhmm(d)}`;
+    }
+    return idxs.map((i) => ({ value: i, label: label(new Date(this.times[i]!)) }));
+  }
+  formatTick(value: number): string {
+    const d = new Date(this.timeAt(value));
+    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${hhmm(d)}`;
+  }
+}
+
+function hhmm(d: Date): string {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+export type ScaleType = "linear" | "log" | "time" | "categorical" | "ordinal-time";
+
+export function makeScale(
+  type: ScaleType, domain?: Range, factors?: string[], times?: ArrayLike<number>,
+): Scale {
   switch (type) {
     case "linear":
       return new LinearScale(domain);
@@ -189,6 +293,8 @@ export function makeScale(type: ScaleType, domain?: Range, factors?: string[]): 
       return new TimeScale(domain);
     case "categorical":
       return new CategoricalScale(factors ?? []);
+    case "ordinal-time":
+      return new OrdinalTimeScale(times ?? []);
     default:
       throw new Error(`Unknown scale type: ${type as string}`);
   }

@@ -1,6 +1,6 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -16,6 +16,8 @@ export interface VolumeOptions {
   /** Overall opacity multiplier. Default 1. */
   density?: number;
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const STEPS = 160;
@@ -101,7 +103,10 @@ export class VolumeLayer implements Layer3D {
   private ext: { x: Range; y: Range; z: Range };
   private density: number;
   private cmapName: ColormapName;
-  private vDomain: Range;
+  private vDomain: Range = [0, 1];
+  private dims: [number, number, number];
+  private domainOpt?: Range;
+  private usage: number;
   private camLocal: [number, number, number] = [0.5, 0.5, 2];
 
   constructor(gl: WebGL2RenderingContext, opts: VolumeOptions) {
@@ -109,8 +114,11 @@ export class VolumeLayer implements Layer3D {
     this.gl = gl;
     this.program = getProgram(gl);
     this.name = opts.name;
+    this.usage = bufferUsage(gl, opts.renderType);
     this.density = opts.density ?? 1;
     this.cmapName = opts.colormap ?? "viridis";
+    this.dims = opts.dims;
+    this.domainOpt = opts.domain;
     const [nx, ny, nz] = opts.dims;
     const ex = opts.extent?.x ?? [0, nx - 1];
     const ey = opts.extent?.y ?? [0, ny - 1];
@@ -118,27 +126,16 @@ export class VolumeLayer implements Layer3D {
     this.ext = { x: ex, y: ey, z: ez };
     this.b3 = { x: ex, y: ey, z: ez };
 
-    let vmin = opts.domain?.[0] ?? Infinity;
-    let vmax = opts.domain?.[1] ?? -Infinity;
-    if (!opts.domain) {
-      for (let i = 0; i < opts.values.length; i++) { const v = opts.values[i]!; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
-    }
-    this.vDomain = [vmin, vmax];
-    const span = vmax - vmin || 1;
-
     // R8 3D texture (normalized value), linear-filtered.
-    const voxels = new Uint8Array(nx * ny * nz);
-    for (let i = 0; i < voxels.length; i++) voxels[i] = Math.max(0, Math.min(255, Math.round(((opts.values[i]! - vmin) / span) * 255)));
     this.tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_3D, this.tex);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, nx, ny, nz, 0, gl.RED, gl.UNSIGNED_BYTE, voxels);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_3D, null);
+    this.uploadVolume(opts.values);
 
     // 256×1 colormap LUT.
     const cmap = colormap(this.cmapName);
@@ -170,7 +167,7 @@ export class VolumeLayer implements Layer3D {
     this.buffer = gl.createBuffer()!;
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
     gl.enableVertexAttribArray(1);
@@ -178,6 +175,31 @@ export class VolumeLayer implements Layer3D {
     gl.bindVertexArray(null);
 
     this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uVolume", "uLUT", "uCamLocal", "uDensity"]);
+  }
+
+  /** Normalize the scalar field and (re)upload it into the R8 3D texture. */
+  private uploadVolume(values: ArrayLike<number>): void {
+    const gl = this.gl;
+    const [nx, ny, nz] = this.dims;
+    let vmin = this.domainOpt?.[0] ?? Infinity;
+    let vmax = this.domainOpt?.[1] ?? -Infinity;
+    if (!this.domainOpt) {
+      for (let i = 0; i < values.length; i++) { const v = values[i]!; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
+    }
+    this.vDomain = [vmin, vmax];
+    const span = vmax - vmin || 1;
+
+    const voxels = new Uint8Array(nx * ny * nz);
+    for (let i = 0; i < voxels.length; i++) voxels[i] = Math.max(0, Math.min(255, Math.round(((values[i]! - vmin) / span) * 255)));
+    gl.bindTexture(gl.TEXTURE_3D, this.tex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, nx, ny, nz, 0, gl.RED, gl.UNSIGNED_BYTE, voxels);
+    gl.bindTexture(gl.TEXTURE_3D, null);
+  }
+
+  /** Stream a new scalar volume (same dims); re-uploads the 3D texture. Call `plot.refresh()` after. */
+  setData(values: ArrayLike<number>): void {
+    this.uploadVolume(values);
   }
 
   bounds3() { return this.b3; }

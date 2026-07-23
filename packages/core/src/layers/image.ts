@@ -1,6 +1,6 @@
 import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Range } from "../types.js";
+import type { Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 /** Anything `texImage2D` accepts, or a URL string the layer loads itself. */
@@ -17,6 +17,8 @@ export interface ImageOptions {
   opacity?: number;
   /** Called after an async (URL) image finishes loading — wire to `plot.requestRender`. */
   onLoad?: () => void;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
 }
@@ -98,18 +100,7 @@ export class ImageLayer implements Layer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    if (typeof opts.source === "string") {
-      const img = new Image();
-      this.img = img;
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        this.upload(img);
-        opts.onLoad?.();
-      };
-      img.src = opts.source;
-    } else {
-      this.upload(opts.source);
-    }
+    this.setSource(opts.source, opts.onLoad);
 
     // Quad over the extent (v=0 at y0, matching texImage2D row order via flipY).
     const data = new Float32Array([
@@ -133,6 +124,29 @@ export class ImageLayer implements Layer {
     gl.bindVertexArray(null);
 
     this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uTex", "uOpacity"]);
+  }
+
+  /** Point the texture at a new source: load a URL async, or upload a bitmap now. */
+  private setSource(source: ImageSource, onLoad?: () => void): void {
+    if (typeof source === "string") {
+      if (this.img) this.img.onload = null;
+      const img = new Image();
+      this.img = img;
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        this.upload(img);
+        onLoad?.();
+      };
+      img.src = source;
+    } else {
+      this.img = null;
+      this.upload(source);
+    }
+  }
+
+  /** Replace the image source and re-upload the texture (for streaming). */
+  setData(source: ImageSource, onLoad?: () => void): void {
+    this.setSource(source, onLoad);
   }
 
   private upload(src: TexImageSource): void {

@@ -10,6 +10,7 @@ import {
   HexbinLayer,
   ImageLayer,
   LineLayer,
+  OhlcLayer,
   PatchesLayer,
   PieLayer,
   Plot as CorePlot,
@@ -38,6 +39,7 @@ import {
   type Line3DLayer,
   type Line3DOptions,
   type LineOptions,
+  type OhlcOptions,
   type Quiver3DLayer,
   type Quiver3DOptions,
   type VolumeLayer,
@@ -117,12 +119,12 @@ export function Plot({ options, className, style, children }: PlotProps) {
 
 export type LineProps = LineOptions;
 
-export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate }: LineProps) {
+export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate, renderType }: LineProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<LineLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addLine({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate });
+    const l = plot.addLine({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate, renderType });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
@@ -130,7 +132,7 @@ export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, 
     };
     // Structural props → recreate the layer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, width, name, yAxis, step, join, miterLimit, decimate]);
+  }, [plot, color, width, name, yAxis, step, join, miterLimit, decimate, renderType]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y);
@@ -143,19 +145,19 @@ export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, 
 
 export type ScatterProps = ScatterOptions;
 
-export function Scatter({ x, y, color, size, marker, name, yAxis, colorBy }: ScatterProps) {
+export function Scatter({ x, y, color, size, marker, name, yAxis, colorBy, renderType }: ScatterProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<ScatterLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addScatter({ x, y, color, size, marker, name, yAxis, colorBy });
+    const l = plot.addScatter({ x, y, color, size, marker, name, yAxis, colorBy, renderType });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, size, marker, name, yAxis, colorBy]);
+  }, [plot, color, size, marker, name, yAxis, colorBy, renderType]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y);
@@ -168,19 +170,19 @@ export function Scatter({ x, y, color, size, marker, name, yAxis, colorBy }: Sca
 
 export type BarProps = BarOptions;
 
-export function Bar({ x, y, base, width, offset, orientation, color, name, yAxis }: BarProps) {
+export function Bar({ x, y, base, width, offset, orientation, color, colors, name, yAxis, renderType }: BarProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<BarLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addBar({ x, y, base, width, offset, orientation, color, name, yAxis });
+    const l = plot.addBar({ x, y, base, width, offset, orientation, color, colors, name, yAxis, renderType });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, width, offset, orientation, color, name, yAxis]);
+  }, [plot, width, offset, orientation, color, colors, name, yAxis, renderType]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y, base);
@@ -193,19 +195,19 @@ export function Bar({ x, y, base, width, offset, orientation, color, name, yAxis
 
 export type AreaProps = AreaOptions;
 
-export function Area({ x, y, base, color, name, yAxis }: AreaProps) {
+export function Area({ x, y, base, color, name, yAxis, renderType }: AreaProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<AreaLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addArea({ x, y, base, color, name, yAxis });
+    const l = plot.addArea({ x, y, base, color, name, yAxis, renderType });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, name, yAxis]);
+  }, [plot, color, name, yAxis, renderType]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y, base);
@@ -263,7 +265,10 @@ export function YAxis({ id, ...opts }: YAxisProps) {
   const plot = useContext(PlotContext);
   useEffect(() => {
     if (!plot) return;
-    plot.addYAxis(id, opts);
+    // Guard against React StrictMode's double-invoke (and re-adds): the axis is
+    // removed on cleanup, so a remount re-adds it cleanly instead of throwing.
+    if (!plot.hasYAxis(id)) plot.addYAxis(id, opts);
+    return () => plot.removeYAxis(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plot, id]);
   return null;
@@ -473,6 +478,39 @@ export function Candlestick(props: CandlestickProps) {
     props.upColor,
     props.downColor,
     props.wickWidth,
+    props.name,
+    props.yAxis,
+  ]);
+  return null;
+}
+
+export type OhlcProps = OhlcOptions;
+
+/** OHLC bar chart. Static. */
+export function Ohlc(props: OhlcProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<OhlcLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addOhlc(props);
+    layer.current = l;
+    plot.render();
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    plot,
+    props.x,
+    props.open,
+    props.high,
+    props.low,
+    props.close,
+    props.width,
+    props.upColor,
+    props.downColor,
+    props.lineWidth,
     props.name,
     props.yAxis,
   ]);

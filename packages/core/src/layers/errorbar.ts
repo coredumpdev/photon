@@ -1,7 +1,7 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 /** A per-point error, given as one value for all points or an array. */
@@ -28,8 +28,20 @@ export interface ErrorBarOptions {
   band?: boolean;
   /** Band fill opacity. Default 0.2. */
   bandOpacity?: number;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
+}
+
+/** New positions/errors for {@link ErrorBarLayer.setData} (styling stays fixed). */
+export interface ErrorBarData {
+  x: ArrayLike<number>;
+  y: ArrayLike<number>;
+  yerr?: ErrInput;
+  yerrLow?: ErrInput;
+  yerrHigh?: ErrInput;
+  xerr?: ErrInput;
 }
 
 // Data-space segment expanded to a pixel-thick rect (butt ends).
@@ -123,6 +135,7 @@ export class ErrorBarLayer implements Layer {
   private bandOpacity: number;
   private showWhiskers: boolean;
   private showBand: boolean;
+  private usage: number;
   private segCount = 0;
   private capCount = 0;
   private bandVerts = 0;
@@ -145,53 +158,9 @@ export class ErrorBarLayer implements Layer {
     this.bandOpacity = opts.bandOpacity ?? 0.2;
     this.showBand = opts.band === true;
     this.showWhiskers = opts.whiskers ?? true;
+    this.usage = bufferUsage(gl, opts.renderType);
 
-    const n = Math.min(opts.x.length, opts.y.length);
-    this.xRef = n > 0 ? opts.x[0]! : 0;
-    this.yRef = n > 0 ? opts.y[0]! : 0;
-
-    const segs: number[] = [];   // vec4 per whisker
-    const caps: number[] = [];   // vec3 per cap
-    const lowPts: Array<[number, number]> = []; // for the band envelope
-    const highPts: Array<[number, number]> = [];
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-
-    const hasY = opts.yerr != null || opts.yerrLow != null || opts.yerrHigh != null;
-    const hasX = opts.xerr != null;
-
-    for (let i = 0; i < n; i++) {
-      const x = opts.x[i]!, y = opts.y[i]!;
-      const eyLo = opts.yerrLow != null ? errAt(opts.yerrLow, i) : errAt(opts.yerr, i);
-      const eyHi = opts.yerrHigh != null ? errAt(opts.yerrHigh, i) : errAt(opts.yerr, i);
-      const ex = errAt(opts.xerr, i);
-      const yLo = y - eyLo, yHi = y + eyHi;
-      const xLo = x - ex, xHi = x + ex;
-
-      if (hasY) {
-        segs.push(x - this.xRef, yLo - this.yRef, x - this.xRef, yHi - this.yRef);
-        caps.push(x - this.xRef, yLo - this.yRef, 0, x - this.xRef, yHi - this.yRef, 0);
-      }
-      if (hasX) {
-        segs.push(xLo - this.xRef, y - this.yRef, xHi - this.xRef, y - this.yRef);
-        caps.push(xLo - this.xRef, y - this.yRef, 1, xHi - this.xRef, y - this.yRef, 1);
-      }
-      lowPts.push([x - this.xRef, yLo - this.yRef]);
-      highPts.push([x - this.xRef, yHi - this.yRef]);
-
-      minX = Math.min(minX, xLo); maxX = Math.max(maxX, xHi);
-      minY = Math.min(minY, yLo); maxY = Math.max(maxY, yHi);
-    }
-    this.xBounds = [minX, maxX];
-    this.yBounds = [minY, maxY];
-    this.segCount = segs.length / 4;
-    this.capCount = this.capSize > 0 ? caps.length / 3 : 0;
-
-    // Band as a triangle strip alternating high/low along x.
-    const band: number[] = [];
-    for (let i = 0; i < n; i++) {
-      band.push(highPts[i]![0], highPts[i]![1], lowPts[i]![0], lowPts[i]![1]);
-    }
-    this.bandVerts = n * 2;
+    const { segs, caps, band } = this.build(opts);
 
     const cornerSeg = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, cornerSeg);
@@ -202,13 +171,13 @@ export class ErrorBarLayer implements Layer {
 
     const segBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(segs), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, segs, this.usage);
     const capBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, capBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(caps), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, caps, this.usage);
     const bandBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, bandBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(band), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, band, this.usage);
     this.buffers = [cornerSeg, cornerQuad, segBuf, capBuf, bandBuf];
 
     // Whisker VAO: unit segment + instanced vec4 endpoints.
@@ -244,6 +213,70 @@ export class ErrorBarLayer implements Layer {
     this.uSeg = uniformLocations(gl, this.progs.seg, [...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uWidth"]);
     this.uCap = uniformLocations(gl, this.progs.cap, [...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uCapSize", "uWidth"]);
     this.uBand = uniformLocations(gl, this.progs.band, [...TRANSFORM_UNIFORMS, "uColor"]);
+  }
+
+  /** Recompute refs/bounds/counts and the whisker/cap/band vertex arrays from new data. */
+  private build(d: ErrorBarData): { segs: Float32Array; caps: Float32Array; band: Float32Array } {
+    const n = Math.min(d.x.length, d.y.length);
+    this.xRef = n > 0 ? d.x[0]! : 0;
+    this.yRef = n > 0 ? d.y[0]! : 0;
+
+    const segs: number[] = [];   // vec4 per whisker
+    const caps: number[] = [];   // vec3 per cap
+    const lowPts: Array<[number, number]> = []; // for the band envelope
+    const highPts: Array<[number, number]> = [];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+    const hasY = d.yerr != null || d.yerrLow != null || d.yerrHigh != null;
+    const hasX = d.xerr != null;
+
+    for (let i = 0; i < n; i++) {
+      const x = d.x[i]!, y = d.y[i]!;
+      const eyLo = d.yerrLow != null ? errAt(d.yerrLow, i) : errAt(d.yerr, i);
+      const eyHi = d.yerrHigh != null ? errAt(d.yerrHigh, i) : errAt(d.yerr, i);
+      const ex = errAt(d.xerr, i);
+      const yLo = y - eyLo, yHi = y + eyHi;
+      const xLo = x - ex, xHi = x + ex;
+
+      if (hasY) {
+        segs.push(x - this.xRef, yLo - this.yRef, x - this.xRef, yHi - this.yRef);
+        caps.push(x - this.xRef, yLo - this.yRef, 0, x - this.xRef, yHi - this.yRef, 0);
+      }
+      if (hasX) {
+        segs.push(xLo - this.xRef, y - this.yRef, xHi - this.xRef, y - this.yRef);
+        caps.push(xLo - this.xRef, y - this.yRef, 1, xHi - this.xRef, y - this.yRef, 1);
+      }
+      lowPts.push([x - this.xRef, yLo - this.yRef]);
+      highPts.push([x - this.xRef, yHi - this.yRef]);
+
+      minX = Math.min(minX, xLo); maxX = Math.max(maxX, xHi);
+      minY = Math.min(minY, yLo); maxY = Math.max(maxY, yHi);
+    }
+    this.xBounds = [minX, maxX];
+    this.yBounds = [minY, maxY];
+    this.segCount = segs.length / 4;
+    this.capCount = this.capSize > 0 ? caps.length / 3 : 0;
+
+    // Band as a triangle strip alternating high/low along x.
+    const band: number[] = [];
+    for (let i = 0; i < n; i++) {
+      band.push(highPts[i]![0], highPts[i]![1], lowPts[i]![0], lowPts[i]![1]);
+    }
+    this.bandVerts = n * 2;
+
+    return { segs: new Float32Array(segs), caps: new Float32Array(caps), band: new Float32Array(band) };
+  }
+
+  /** Replace the data and re-upload (for streaming). */
+  setData(data: ErrorBarData): void {
+    const gl = this.gl;
+    const { segs, caps, band } = this.build(data);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
+    gl.bufferData(gl.ARRAY_BUFFER, segs, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[3]!);
+    gl.bufferData(gl.ARRAY_BUFFER, caps, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[4]!);
+    gl.bufferData(gl.ARRAY_BUFFER, band, this.usage);
   }
 
   bounds() {

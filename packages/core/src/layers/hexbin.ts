@@ -1,7 +1,7 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Range } from "../types.js";
+import type { Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface HexbinOptions {
@@ -12,6 +12,8 @@ export interface HexbinOptions {
   colormap?: ColormapName;
   /** Count range mapped to the colormap. Defaults to [1, maxCount]. */
   domain?: Range;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   yAxis?: string;
 }
 
@@ -64,28 +66,70 @@ export class HexbinLayer implements Layer {
   private vao: WebGLVertexArrayObject;
   private buffers: WebGLBuffer[] = [];
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private radius: number;
-  private cellCount: number;
+  private radius = 1;
+  private cellCount = 0;
   private xRef = 0;
   private yRef = 0;
   private xBounds: Range = [0, 0];
   private yBounds: Range = [0, 0];
+  // Styling captured at construction, reused by setData.
+  private cmap: ReturnType<typeof colormap>;
+  private explicitRadius: number | undefined;
+  private domain: Range | undefined;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: HexbinOptions) {
     this.id = `hexbin-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
+    this.usage = bufferUsage(gl, opts.renderType);
     this.yAxis = opts.yAxis ?? "y";
 
-    const n = Math.min(opts.x.length, opts.y.length);
+    this.cmap = colormap(opts.colormap ?? "viridis");
+    this.explicitRadius = opts.radius;
+    this.domain = opts.domain;
+
+    const { centers, colors } = this.build(opts.x, opts.y);
+
+    const vao = gl.createVertexArray()!;
+    this.vao = vao;
+    gl.bindVertexArray(vao);
+    const hexBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, hexBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, HEX, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    const centerBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, centerBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, centers, this.usage);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(1, 1);
+    const colorBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(2, 1);
+    gl.bindVertexArray(null);
+    this.buffers = [hexBuf, centerBuf, colorBuf];
+
+    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uRadius"]);
+  }
+
+  /** Bin the points into hex cells; sets radius, refs, bounds and cell count. */
+  private build(
+    x: ArrayLike<number>, y: ArrayLike<number>,
+  ): { centers: Float32Array; colors: Float32Array } {
+    const n = Math.min(x.length, y.length);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (let i = 0; i < n; i++) {
-      const x = opts.x[i]!, y = opts.y[i]!;
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      const px = x[i]!, py = y[i]!;
+      if (px < minX) minX = px; if (px > maxX) maxX = px;
+      if (py < minY) minY = py; if (py > maxY) maxY = py;
     }
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
-    const r = opts.radius ?? ((maxX - minX) / 30 || 1);
+    const r = this.explicitRadius ?? ((maxX - minX) / 30 || 1);
     this.radius = r;
     const dx = r * 2 * Math.sin(Math.PI / 3);
     const dy = r * 1.5;
@@ -94,7 +138,7 @@ export class HexbinLayer implements Layer {
     const cells = new Map<string, { cx: number; cy: number; count: number }>();
     let maxCount = 1;
     for (let i = 0; i < n; i++) {
-      const px = opts.x[i]!, py = opts.y[i]!;
+      const px = x[i]!, py = y[i]!;
       const pj = Math.round(py / dy);
       const pi = Math.round(px / dx - (pj & 1) / 2);
       const key = `${pi},${pj}`;
@@ -111,43 +155,28 @@ export class HexbinLayer implements Layer {
     this.xRef = minX; this.yRef = minY;
     const centers = new Float32Array(this.cellCount * 2);
     const colors = new Float32Array(this.cellCount * 4);
-    const cmap = colormap(opts.colormap ?? "viridis");
-    const lo = opts.domain?.[0] ?? 1;
-    const hi = opts.domain?.[1] ?? maxCount;
+    const lo = this.domain?.[0] ?? 1;
+    const hi = this.domain?.[1] ?? maxCount;
     const span = hi - lo || 1;
     let k = 0;
     for (const cell of cells.values()) {
       centers[k * 2] = cell.cx - this.xRef;
       centers[k * 2 + 1] = cell.cy - this.yRef;
-      const [cr, cg, cb] = cmap((cell.count - lo) / span);
+      const [cr, cg, cb] = this.cmap((cell.count - lo) / span);
       colors[k * 4] = cr; colors[k * 4 + 1] = cg; colors[k * 4 + 2] = cb; colors[k * 4 + 3] = 1;
       k++;
     }
+    return { centers, colors };
+  }
 
-    const vao = gl.createVertexArray()!;
-    this.vao = vao;
-    gl.bindVertexArray(vao);
-    const hexBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, hexBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, HEX, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    const centerBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, centerBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, centers, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
-    gl.vertexAttribDivisor(1, 1);
-    const colorBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
-    gl.vertexAttribDivisor(2, 1);
-    gl.bindVertexArray(null);
-    this.buffers = [hexBuf, centerBuf, colorBuf];
-
-    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uRadius"]);
+  /** Replace the point arrays, re-bin and re-upload the cells (for streaming). */
+  setData(x: ArrayLike<number>, y: ArrayLike<number>): void {
+    const { centers, colors } = this.build(x, y);
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[1]!);
+    gl.bufferData(gl.ARRAY_BUFFER, centers, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
   }
 
   bounds() {

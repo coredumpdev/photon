@@ -1,7 +1,7 @@
 import { colormapLUT, type ColormapName } from "../color/colormap.js";
 import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Range } from "../types.js";
+import type { Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface HeatmapOptions {
@@ -16,6 +16,8 @@ export interface HeatmapOptions {
   domain?: Range;
   /** Bilinear filtering (default true) vs. hard cells. */
   smooth?: boolean;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   yAxis?: string;
 }
 
@@ -61,6 +63,11 @@ export class HeatmapLayer implements Layer {
   private xRef: number;
   private yRef: number;
   private ext: { x: Range; y: Range };
+  // Styling captured at construction, reused by setData.
+  private lut: Float32Array;
+  private fixedDomain: Range | undefined;
+  private cols: number;
+  private rows: number;
 
   constructor(gl: WebGL2RenderingContext, opts: HeatmapOptions) {
     this.id = `heatmap-${counter++}`;
@@ -73,42 +80,22 @@ export class HeatmapLayer implements Layer {
     this.xRef = x0;
     this.yRef = y0;
 
-    // Bake values into an RGBA texture via the colormap.
-    const { cols, rows, values } = opts;
-    const lut = colormapLUT(opts.colormap ?? "viridis");
-    let lo = opts.domain?.[0] ?? Infinity;
-    let hi = opts.domain?.[1] ?? -Infinity;
-    if (!opts.domain) {
-      for (let i = 0; i < values.length; i++) {
-        const v = values[i]!;
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-      }
-    }
-    const span = hi - lo || 1;
-    const pixels = new Uint8Array(cols * rows * 4);
-    // Direct LUT indexing — no per-cell closure call or tuple allocation.
-    for (let i = 0; i < cols * rows; i++) {
-      let t = (values[i]! - lo) / span;
-      t = t <= 0 ? 0 : t >= 1 ? 1 : t;
-      const j = ((t * 255) | 0) * 3;
-      pixels[i * 4] = (lut[j]! * 255 + 0.5) | 0;
-      pixels[i * 4 + 1] = (lut[j + 1]! * 255 + 0.5) | 0;
-      pixels[i * 4 + 2] = (lut[j + 2]! * 255 + 0.5) | 0;
-      pixels[i * 4 + 3] = 255;
-    }
+    this.lut = colormapLUT(opts.colormap ?? "viridis");
+    this.fixedDomain = opts.domain;
+    this.cols = opts.cols;
+    this.rows = opts.rows;
 
     const texture = gl.createTexture()!;
     this.texture = texture;
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     const filter = opts.smooth === false ? gl.NEAREST : gl.LINEAR;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    // Bake values into the RGBA texture via the colormap.
+    this.uploadValues(opts.values, opts.cols, opts.rows);
 
     // Quad over the extent: (posX, posY, u, v). v=0 at y0 (row 0 bottom).
     const data = new Float32Array([
@@ -132,6 +119,44 @@ export class HeatmapLayer implements Layer {
     gl.bindVertexArray(null);
 
     this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uTex"]);
+  }
+
+  /** Bake a `cols*rows` value grid into the RGBA data texture via the colormap. */
+  private uploadValues(values: ArrayLike<number>, cols: number, rows: number): void {
+    const gl = this.gl;
+    const lut = this.lut;
+    let lo = this.fixedDomain?.[0] ?? Infinity;
+    let hi = this.fixedDomain?.[1] ?? -Infinity;
+    if (!this.fixedDomain) {
+      for (let i = 0; i < values.length; i++) {
+        const v = values[i]!;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+    }
+    const span = hi - lo || 1;
+    const pixels = new Uint8Array(cols * rows * 4);
+    // Direct LUT indexing — no per-cell closure call or tuple allocation.
+    for (let i = 0; i < cols * rows; i++) {
+      let t = (values[i]! - lo) / span;
+      t = t <= 0 ? 0 : t >= 1 ? 1 : t;
+      const j = ((t * 255) | 0) * 3;
+      pixels[i * 4] = (lut[j]! * 255 + 0.5) | 0;
+      pixels[i * 4 + 1] = (lut[j + 1]! * 255 + 0.5) | 0;
+      pixels[i * 4 + 2] = (lut[j + 2]! * 255 + 0.5) | 0;
+      pixels[i * 4 + 3] = 255;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /** Replace the value grid and re-bake the data texture (for streaming). */
+  setData(values: ArrayLike<number>, cols: number = this.cols, rows: number = this.rows): void {
+    this.cols = cols;
+    this.rows = rows;
+    this.uploadValues(values, cols, rows);
   }
 
   bounds() {

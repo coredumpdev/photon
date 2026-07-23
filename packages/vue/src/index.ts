@@ -19,6 +19,7 @@ import {
   type Layer,
   type Line3DOptions,
   type LineOptions,
+  type OhlcOptions,
   type PatchesOptions,
   type Quiver3DOptions,
   type PieOptions,
@@ -112,17 +113,20 @@ function useLayer<L extends Layer>(
 const arr = () => ({ type: [Array, Object, Float64Array, Float32Array] as unknown as PropType<ArrayLike<number>>, required: true as const });
 const opt = <T,>() => ({ type: [String, Number, Object, Array, Boolean, Float64Array, Float32Array] as unknown as PropType<T>, default: undefined });
 
+/** Buffer-usage hint threaded to every core layer that accepts it ("dynamic" = GL_DYNAMIC_DRAW). */
+type RenderType = NonNullable<LineOptions["renderType"]>;
+
 export const Line = defineComponent({
   name: "PhotonLine",
   props: {
     x: arr(), y: arr(),
     color: opt<LineOptions["color"]>(), width: opt<number>(), name: opt<string>(),
     yAxis: opt<string>(), step: opt<LineOptions["step"]>(), join: opt<LineOptions["join"]>(),
-    miterLimit: opt<number>(), decimate: opt<boolean>(),
+    miterLimit: opt<number>(), decimate: opt<boolean>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addLine({ x: props.x, y: props.y, color: props.color, width: props.width, name: props.name, yAxis: props.yAxis, step: props.step, join: props.join, miterLimit: props.miterLimit, decimate: props.decimate }),
+      (p) => p.addLine({ x: props.x, y: props.y, color: props.color, width: props.width, name: props.name, yAxis: props.yAxis, step: props.step, join: props.join, miterLimit: props.miterLimit, decimate: props.decimate, renderType: props.renderType }),
       () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.miterLimit, props.decimate],
       () => [props.x, props.y],
       (l) => l.setData(props.x, props.y),
@@ -136,11 +140,11 @@ export const Scatter = defineComponent({
   props: {
     x: arr(), y: arr(),
     color: opt<ScatterOptions["color"]>(), size: opt<number>(), marker: opt<ScatterOptions["marker"]>(),
-    name: opt<string>(), yAxis: opt<string>(), colorBy: opt<ScatterOptions["colorBy"]>(),
+    name: opt<string>(), yAxis: opt<string>(), colorBy: opt<ScatterOptions["colorBy"]>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addScatter({ x: props.x, y: props.y, color: props.color, size: props.size, marker: props.marker, name: props.name, yAxis: props.yAxis, colorBy: props.colorBy }),
+      (p) => p.addScatter({ x: props.x, y: props.y, color: props.color, size: props.size, marker: props.marker, name: props.name, yAxis: props.yAxis, colorBy: props.colorBy, renderType: props.renderType }),
       () => [props.color, props.size, props.marker, props.name, props.yAxis, props.colorBy],
       () => [props.x, props.y],
       (l) => l.setData(props.x, props.y),
@@ -155,11 +159,11 @@ export const Bar = defineComponent({
     x: arr(), y: arr(),
     base: opt<BarOptions["base"]>(), width: opt<number>(), offset: opt<number>(),
     orientation: opt<BarOptions["orientation"]>(),
-    color: opt<BarOptions["color"]>(), name: opt<string>(), yAxis: opt<string>(),
+    color: opt<BarOptions["color"]>(), name: opt<string>(), yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addBar({ x: props.x, y: props.y, base: props.base, width: props.width, offset: props.offset, orientation: props.orientation, color: props.color, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addBar({ x: props.x, y: props.y, base: props.base, width: props.width, offset: props.offset, orientation: props.orientation, color: props.color, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.width, props.offset, props.orientation, props.color, props.name, props.yAxis],
       () => [props.x, props.y, props.base],
       (l) => l.setData(props.x, props.y, props.base),
@@ -173,11 +177,11 @@ export const Area = defineComponent({
   props: {
     x: arr(), y: arr(),
     base: opt<AreaOptions["base"]>(), color: opt<AreaOptions["color"]>(),
-    name: opt<string>(), yAxis: opt<string>(),
+    name: opt<string>(), yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addArea({ x: props.x, y: props.y, base: props.base, color: props.color, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addArea({ x: props.x, y: props.y, base: props.base, color: props.color, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.color, props.name, props.yAxis],
       () => [props.x, props.y, props.base],
       (l) => l.setData(props.x, props.y, props.base),
@@ -262,11 +266,11 @@ export const Heatmap = defineComponent({
     colormap: opt<HeatmapOptions["colormap"]>(),
     domain: opt<HeatmapOptions["domain"]>(),
     smooth: opt<boolean>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addHeatmap({ values: props.values, cols: props.cols, rows: props.rows, extent: props.extent, colormap: props.colormap, domain: props.domain, smooth: props.smooth, yAxis: props.yAxis }),
+      (p) => p.addHeatmap({ values: props.values, cols: props.cols, rows: props.rows, extent: props.extent, colormap: props.colormap, domain: props.domain, smooth: props.smooth, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.values, props.cols, props.rows, props.extent, props.colormap, props.domain, props.smooth, props.yAxis],
       noData,
       noUpdate,
@@ -282,11 +286,11 @@ export const Box = defineComponent({
     width: opt<number>(),
     box: opt<boolean>(),
     violin: opt<boolean>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addBox({ groups: props.groups, width: props.width, box: props.box, violin: props.violin, yAxis: props.yAxis }),
+      (p) => p.addBox({ groups: props.groups, width: props.width, box: props.box, violin: props.violin, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.groups, props.width, props.box, props.violin, props.yAxis],
       noData,
       noUpdate,
@@ -302,11 +306,11 @@ export const Hexbin = defineComponent({
     radius: opt<number>(),
     colormap: opt<HexbinOptions["colormap"]>(),
     domain: opt<HexbinOptions["domain"]>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addHexbin({ x: props.x, y: props.y, radius: props.radius, colormap: props.colormap, domain: props.domain, yAxis: props.yAxis }),
+      (p) => p.addHexbin({ x: props.x, y: props.y, radius: props.radius, colormap: props.colormap, domain: props.domain, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.x, props.y, props.radius, props.colormap, props.domain, props.yAxis],
       noData,
       noUpdate,
@@ -325,11 +329,11 @@ export const Contour = defineComponent({
     levels: opt<ContourOptions["levels"]>(),
     color: opt<ContourOptions["color"]>(),
     colormap: opt<ContourOptions["colormap"]>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addContour({ values: props.values, cols: props.cols, rows: props.rows, extent: props.extent, levels: props.levels, color: props.color, colormap: props.colormap, yAxis: props.yAxis }),
+      (p) => p.addContour({ values: props.values, cols: props.cols, rows: props.rows, extent: props.extent, levels: props.levels, color: props.color, colormap: props.colormap, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.values, props.cols, props.rows, props.extent, props.levels, props.color, props.colormap, props.yAxis],
       noData,
       noUpdate,
@@ -353,11 +357,11 @@ export const ErrorBar = defineComponent({
     band: opt<boolean>(),
     bandOpacity: opt<number>(),
     name: opt<string>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addErrorBar({ x: props.x, y: props.y, yerr: props.yerr, yerrLow: props.yerrLow, yerrHigh: props.yerrHigh, xerr: props.xerr, color: props.color, width: props.width, capSize: props.capSize, whiskers: props.whiskers, band: props.band, bandOpacity: props.bandOpacity, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addErrorBar({ x: props.x, y: props.y, yerr: props.yerr, yerrLow: props.yerrLow, yerrHigh: props.yerrHigh, xerr: props.xerr, color: props.color, width: props.width, capSize: props.capSize, whiskers: props.whiskers, band: props.band, bandOpacity: props.bandOpacity, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.x, props.y, props.yerr, props.yerrLow, props.yerrHigh, props.xerr, props.color, props.width, props.capSize, props.whiskers, props.band, props.bandOpacity, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -375,11 +379,11 @@ export const Stem = defineComponent({
     width: opt<number>(),
     markerSize: opt<number>(),
     name: opt<string>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addStem({ x: props.x, y: props.y, baseline: props.baseline, color: props.color, width: props.width, markerSize: props.markerSize, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addStem({ x: props.x, y: props.y, baseline: props.baseline, color: props.color, width: props.width, markerSize: props.markerSize, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.x, props.y, props.baseline, props.color, props.width, props.markerSize, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -398,11 +402,11 @@ export const Quiver = defineComponent({
     headSize: opt<number>(),
     colorBy: opt<QuiverOptions["colorBy"]>(),
     name: opt<string>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addQuiver({ x: props.x, y: props.y, u: props.u, v: props.v, scale: props.scale, color: props.color, width: props.width, headSize: props.headSize, colorBy: props.colorBy, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addQuiver({ x: props.x, y: props.y, u: props.u, v: props.v, scale: props.scale, color: props.color, width: props.width, headSize: props.headSize, colorBy: props.colorBy, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.x, props.y, props.u, props.v, props.scale, props.color, props.width, props.headSize, props.colorBy, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -424,12 +428,38 @@ export const Candlestick = defineComponent({
     downColor: opt<CandlestickOptions["downColor"]>(),
     wickWidth: opt<number>(),
     name: opt<string>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addCandlestick({ x: props.x, open: props.open, high: props.high, low: props.low, close: props.close, width: props.width, upColor: props.upColor, downColor: props.downColor, wickWidth: props.wickWidth, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addCandlestick({ x: props.x, open: props.open, high: props.high, low: props.low, close: props.close, width: props.width, upColor: props.upColor, downColor: props.downColor, wickWidth: props.wickWidth, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.x, props.open, props.high, props.low, props.close, props.width, props.upColor, props.downColor, props.wickWidth, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const Ohlc = defineComponent({
+  name: "PhotonOhlc",
+  props: {
+    x: arr(),
+    open: arr(),
+    high: arr(),
+    low: arr(),
+    close: arr(),
+    width: opt<number>(),
+    upColor: opt<OhlcOptions["upColor"]>(),
+    downColor: opt<OhlcOptions["downColor"]>(),
+    lineWidth: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => p.addOhlc({ x: props.x, open: props.open, high: props.high, low: props.low, close: props.close, width: props.width, upColor: props.upColor, downColor: props.downColor, lineWidth: props.lineWidth, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
+      () => [props.x, props.open, props.high, props.low, props.close, props.width, props.upColor, props.downColor, props.lineWidth, props.name, props.yAxis],
       noData,
       noUpdate,
     );
@@ -448,11 +478,11 @@ export const Pie = defineComponent({
     innerRadius: opt<number>(),
     startAngle: opt<number>(),
     name: opt<string>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addPie({ values: props.values, colors: props.colors, colormap: props.colormap, center: props.center, radius: props.radius, innerRadius: props.innerRadius, startAngle: props.startAngle, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addPie({ values: props.values, colors: props.colors, colormap: props.colormap, center: props.center, radius: props.radius, innerRadius: props.innerRadius, startAngle: props.startAngle, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.values, props.colors, props.colormap, props.center, props.radius, props.innerRadius, props.startAngle, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -470,11 +500,11 @@ export const Patches = defineComponent({
     domain: opt<PatchesOptions["domain"]>(),
     opacity: opt<number>(),
     name: opt<string>(),
-    yAxis: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addPatches({ patches: props.patches, color: props.color, colormap: props.colormap, domain: props.domain, opacity: props.opacity, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addPatches({ patches: props.patches, color: props.color, colormap: props.colormap, domain: props.domain, opacity: props.opacity, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.patches, props.color, props.colormap, props.domain, props.opacity, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -488,11 +518,11 @@ export const Image = defineComponent({
   props: {
     source: { type: [Object, String] as unknown as PropType<ImageOptions["source"]>, required: true },
     extent: { type: Object as PropType<ImageOptions["extent"]>, required: true },
-    smooth: opt<boolean>(), opacity: opt<number>(), name: opt<string>(), yAxis: opt<string>(),
+    smooth: opt<boolean>(), opacity: opt<number>(), name: opt<string>(), yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addImage({ source: props.source, extent: props.extent, smooth: props.smooth, opacity: props.opacity, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addImage({ source: props.source, extent: props.extent, smooth: props.smooth, opacity: props.opacity, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.source, props.extent, props.smooth, props.opacity, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -507,11 +537,11 @@ export const Graph = defineComponent({
     edges: { type: Array as PropType<GraphInput["edges"]>, required: true },
     x: opt<GraphInput["x"]>(), y: opt<GraphInput["y"]>(), nodes: opt<number>(),
     nodeColor: opt<GraphInput["nodeColor"]>(), edgeColor: opt<GraphInput["edgeColor"]>(),
-    nodeSize: opt<number>(), name: opt<string>(), yAxis: opt<string>(),
+    nodeSize: opt<number>(), name: opt<string>(), yAxis: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addGraph({ edges: props.edges, x: props.x, y: props.y, nodes: props.nodes, nodeColor: props.nodeColor, edgeColor: props.edgeColor, nodeSize: props.nodeSize, name: props.name, yAxis: props.yAxis }),
+      (p) => p.addGraph({ edges: props.edges, x: props.x, y: props.y, nodes: props.nodes, nodeColor: props.nodeColor, edgeColor: props.edgeColor, nodeSize: props.nodeSize, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
       () => [props.edges, props.x, props.y, props.nodes, props.nodeColor, props.edgeColor, props.nodeSize, props.name, props.yAxis],
       noData,
       noUpdate,
@@ -686,10 +716,10 @@ export const Surface = defineComponent({
     rows: { type: Number, required: true },
     extentX: opt<SurfaceOptions["extentX"]>(),
     extentZ: opt<SurfaceOptions["extentZ"]>(),
-    colormap: opt<SurfaceOptions["colormap"]>(),
+    colormap: opt<SurfaceOptions["colormap"]>(), renderType: opt<RenderType>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addSurface({ values: props.values, cols: props.cols, rows: props.rows, extentX: props.extentX, extentZ: props.extentZ, colormap: props.colormap }));
+    usePlot3DLayer((p) => p.addSurface({ values: props.values, cols: props.cols, rows: props.rows, extentX: props.extentX, extentZ: props.extentZ, colormap: props.colormap, renderType: props.renderType }));
     return () => null;
   },
 });
@@ -728,10 +758,10 @@ export const Bar3D = defineComponent({
   props: {
     x: arr(), y: arr(), z: arr(),
     width: opt<number>(), color: opt<Bar3DOptions["color"]>(),
-    colorBy: opt<Bar3DOptions["colorBy"]>(), name: opt<string>(),
+    colorBy: opt<Bar3DOptions["colorBy"]>(), name: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addBar3D({ x: props.x, y: props.y, z: props.z, width: props.width, color: props.color, colorBy: props.colorBy, name: props.name }));
+    usePlot3DLayer((p) => p.addBar3D({ x: props.x, y: props.y, z: props.z, width: props.width, color: props.color, colorBy: props.colorBy, name: props.name, renderType: props.renderType }));
     return () => null;
   },
 });
@@ -741,10 +771,10 @@ export const Quiver3D = defineComponent({
   props: {
     x: arr(), y: arr(), z: arr(), u: arr(), v: arr(), w: arr(),
     scale: opt<number>(), color: opt<Quiver3DOptions["color"]>(),
-    colorBy: opt<Quiver3DOptions["colorBy"]>(), headSize: opt<number>(), name: opt<string>(),
+    colorBy: opt<Quiver3DOptions["colorBy"]>(), headSize: opt<number>(), name: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addQuiver3D({ x: props.x, y: props.y, z: props.z, u: props.u, v: props.v, w: props.w, scale: props.scale, color: props.color, colorBy: props.colorBy, headSize: props.headSize, name: props.name }));
+    usePlot3DLayer((p) => p.addQuiver3D({ x: props.x, y: props.y, z: props.z, u: props.u, v: props.v, w: props.w, scale: props.scale, color: props.color, colorBy: props.colorBy, headSize: props.headSize, name: props.name, renderType: props.renderType }));
     return () => null;
   },
 });
@@ -760,10 +790,10 @@ export const Contour3D = defineComponent({
     levels: opt<Contour3DOptions["levels"]>(),
     color: opt<Contour3DOptions["color"]>(),
     colormap: opt<Contour3DOptions["colormap"]>(),
-    name: opt<string>(),
+    name: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addContour3D({ values: props.values, cols: props.cols, rows: props.rows, extentX: props.extentX, extentZ: props.extentZ, levels: props.levels, color: props.color, colormap: props.colormap, name: props.name }));
+    usePlot3DLayer((p) => p.addContour3D({ values: props.values, cols: props.cols, rows: props.rows, extentX: props.extentX, extentZ: props.extentZ, levels: props.levels, color: props.color, colormap: props.colormap, name: props.name, renderType: props.renderType }));
     return () => null;
   },
 });
@@ -777,10 +807,10 @@ export const Isosurface = defineComponent({
     extent: opt<IsosurfaceOptions["extent"]>(),
     color: opt<IsosurfaceOptions["color"]>(),
     opacity: opt<number>(),
-    name: opt<string>(),
+    name: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addIsosurface({ values: props.values, dims: props.dims, isoLevel: props.isoLevel, extent: props.extent, color: props.color, opacity: props.opacity, name: props.name }));
+    usePlot3DLayer((p) => p.addIsosurface({ values: props.values, dims: props.dims, isoLevel: props.isoLevel, extent: props.extent, color: props.color, opacity: props.opacity, name: props.name, renderType: props.renderType }));
     return () => null;
   },
 });
@@ -794,10 +824,10 @@ export const Volume = defineComponent({
     colormap: opt<VolumeOptions["colormap"]>(),
     domain: opt<VolumeOptions["domain"]>(),
     density: opt<number>(),
-    name: opt<string>(),
+    name: opt<string>(), renderType: opt<RenderType>(),
   },
   setup(props) {
-    usePlot3DLayer((p) => p.addVolume({ values: props.values, dims: props.dims, extent: props.extent, colormap: props.colormap, domain: props.domain, density: props.density, name: props.name }));
+    usePlot3DLayer((p) => p.addVolume({ values: props.values, dims: props.dims, extent: props.extent, colormap: props.colormap, domain: props.domain, density: props.density, name: props.name, renderType: props.renderType }));
     return () => null;
   },
 });

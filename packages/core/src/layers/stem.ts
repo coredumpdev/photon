@@ -1,7 +1,7 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 import { pickNearest, type PickMode, type Picked } from "./pick.js";
 
@@ -15,6 +15,8 @@ export interface StemOptions {
   width?: number;
   /** Tip marker diameter in CSS px (0 hides). Default 6. */
   markerSize?: number;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
 }
@@ -102,12 +104,13 @@ export class StemLayer implements Layer {
   private color: Color;
   private width: number;
   private markerSize: number;
-  private count: number;
+  private count!: number;
+  private usage: number;
   private baseline: number;
   private xRef = 0;
   private yRef = 0;
-  private xs: Float64Array;
-  private ys: Float64Array;
+  private xs!: Float64Array;
+  private ys!: Float64Array;
   private xBounds: Range = [0, 0];
   private yBounds: Range = [0, 0];
 
@@ -123,29 +126,9 @@ export class StemLayer implements Layer {
     this.width = opts.width ?? 1.5;
     this.markerSize = opts.markerSize ?? 6;
     this.baseline = opts.baseline ?? 0;
+    this.usage = bufferUsage(gl, opts.renderType);
 
-    const n = Math.min(opts.x.length, opts.y.length);
-    this.count = n;
-    this.xs = new Float64Array(n);
-    this.ys = new Float64Array(n);
-    this.xRef = n > 0 ? opts.x[0]! : 0;
-    this.yRef = n > 0 ? opts.y[0]! : 0;
-
-    const segs = new Float32Array(n * 4);
-    const tips = new Float32Array(n * 2);
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Math.min(this.baseline, Infinity), maxY = Math.max(this.baseline, -Infinity);
-    for (let i = 0; i < n; i++) {
-      const x = opts.x[i]!, y = opts.y[i]!;
-      this.xs[i] = x; this.ys[i] = y;
-      segs[i * 4] = x - this.xRef; segs[i * 4 + 1] = this.baseline - this.yRef;
-      segs[i * 4 + 2] = x - this.xRef; segs[i * 4 + 3] = y - this.yRef;
-      tips[i * 2] = x - this.xRef; tips[i * 2 + 1] = y - this.yRef;
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-    }
-    this.xBounds = [minX, maxX];
-    this.yBounds = [minY, maxY];
+    const { segs, tips } = this.build(opts.x, opts.y);
 
     const cornerSeg = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, cornerSeg);
@@ -155,10 +138,10 @@ export class StemLayer implements Layer {
     gl.bufferData(gl.ARRAY_BUFFER, QUAD_CORNERS, gl.STATIC_DRAW);
     const segBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, segs, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, segs, this.usage);
     const tipBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, tipBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, tips, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, tips, this.usage);
     this.buffers = [cornerSeg, cornerQuad, segBuf, tipBuf];
 
     this.stemVao = gl.createVertexArray()!;
@@ -184,6 +167,43 @@ export class StemLayer implements Layer {
 
     this.uStem = uniformLocations(gl, this.progs.stem, [...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uWidth"]);
     this.uMarker = uniformLocations(gl, this.progs.marker, [...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uSize"]);
+  }
+
+  /** Recompute count/refs/bounds and the stem+tip vertex arrays from new x/y. */
+  private build(x: ArrayLike<number>, y: ArrayLike<number>): { segs: Float32Array; tips: Float32Array } {
+    const n = Math.min(x.length, y.length);
+    this.count = n;
+    this.xs = new Float64Array(n);
+    this.ys = new Float64Array(n);
+    this.xRef = n > 0 ? x[0]! : 0;
+    this.yRef = n > 0 ? y[0]! : 0;
+
+    const segs = new Float32Array(n * 4);
+    const tips = new Float32Array(n * 2);
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Math.min(this.baseline, Infinity), maxY = Math.max(this.baseline, -Infinity);
+    for (let i = 0; i < n; i++) {
+      const xi = x[i]!, yi = y[i]!;
+      this.xs[i] = xi; this.ys[i] = yi;
+      segs[i * 4] = xi - this.xRef; segs[i * 4 + 1] = this.baseline - this.yRef;
+      segs[i * 4 + 2] = xi - this.xRef; segs[i * 4 + 3] = yi - this.yRef;
+      tips[i * 2] = xi - this.xRef; tips[i * 2 + 1] = yi - this.yRef;
+      if (xi < minX) minX = xi; if (xi > maxX) maxX = xi;
+      if (yi < minY) minY = yi; if (yi > maxY) maxY = yi;
+    }
+    this.xBounds = [minX, maxX];
+    this.yBounds = [minY, maxY];
+    return { segs, tips };
+  }
+
+  /** Replace the data and re-upload (for streaming). */
+  setData(x: ArrayLike<number>, y: ArrayLike<number>): void {
+    const gl = this.gl;
+    const { segs, tips } = this.build(x, y);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
+    gl.bufferData(gl.ARRAY_BUFFER, segs, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[3]!);
+    gl.bufferData(gl.ARRAY_BUFFER, tips, this.usage);
   }
 
   bounds() {

@@ -1,8 +1,8 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface QuiverOptions {
@@ -25,6 +25,8 @@ export interface QuiverOptions {
     colormap?: ColormapName;
     domain?: Range;
   };
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
 }
@@ -118,7 +120,10 @@ export class QuiverLayer implements Layer {
   private width: number;
   private headSize: number;
   private useVertexColor: boolean;
-  private count: number;
+  private explicitScale: number | undefined;
+  private colorBy: QuiverOptions["colorBy"];
+  private usage: number;
+  private count!: number;
   private xRef = 0;
   private yRef = 0;
   private xBounds: Range = [0, 0];
@@ -136,67 +141,21 @@ export class QuiverLayer implements Layer {
     this.width = opts.width ?? 1.5;
     this.headSize = opts.headSize ?? 9;
     this.useVertexColor = opts.colorBy != null;
+    this.explicitScale = opts.scale;
+    this.colorBy = opts.colorBy;
+    this.usage = bufferUsage(gl, opts.renderType);
 
-    const n = Math.min(opts.x.length, opts.y.length, opts.u.length, opts.v.length);
-    this.count = n;
-    this.xRef = n > 0 ? opts.x[0]! : 0;
-    this.yRef = n > 0 ? opts.y[0]! : 0;
-
-    // Auto scale so the largest arrow spans ~90% of a nominal grid cell.
-    let maxMag = 0;
-    for (let i = 0; i < n; i++) maxMag = Math.max(maxMag, Math.hypot(opts.u[i]!, opts.v[i]!));
-    let scale = opts.scale;
-    if (scale == null) {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (let i = 0; i < n; i++) {
-        minX = Math.min(minX, opts.x[i]!); maxX = Math.max(maxX, opts.x[i]!);
-        minY = Math.min(minY, opts.y[i]!); maxY = Math.max(maxY, opts.y[i]!);
-      }
-      const diag = Math.hypot(maxX - minX, maxY - minY) || 1;
-      const cell = diag / Math.max(1, Math.sqrt(n));
-      scale = maxMag > 0 ? (0.9 * cell) / maxMag : 1;
-    }
-
-    const arrows = new Float32Array(n * 4);
-    const colors = new Float32Array(n * 4);
-    const cmap = colormap(opts.colorBy?.colormap ?? "viridis");
-    const vals = opts.colorBy?.values;
-    let lo = opts.colorBy?.domain?.[0] ?? Infinity;
-    let hi = opts.colorBy?.domain?.[1] ?? -Infinity;
-    if (this.useVertexColor && !opts.colorBy?.domain) {
-      for (let i = 0; i < n; i++) {
-        const v = vals ? vals[i]! : Math.hypot(opts.u[i]!, opts.v[i]!);
-        lo = Math.min(lo, v); hi = Math.max(hi, v);
-      }
-    }
-    const span = (hi - lo) || 1;
-
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (let i = 0; i < n; i++) {
-      const x = opts.x[i]!, y = opts.y[i]!;
-      const tx = x + opts.u[i]! * scale, ty = y + opts.v[i]! * scale;
-      arrows[i * 4] = x - this.xRef; arrows[i * 4 + 1] = y - this.yRef;
-      arrows[i * 4 + 2] = tx - this.xRef; arrows[i * 4 + 3] = ty - this.yRef;
-      if (this.useVertexColor) {
-        const v = vals ? vals[i]! : Math.hypot(opts.u[i]!, opts.v[i]!);
-        const [r, g, b] = cmap((v - lo) / span);
-        colors[i * 4] = r; colors[i * 4 + 1] = g; colors[i * 4 + 2] = b; colors[i * 4 + 3] = 1;
-      }
-      minX = Math.min(minX, x, tx); maxX = Math.max(maxX, x, tx);
-      minY = Math.min(minY, y, ty); maxY = Math.max(maxY, y, ty);
-    }
-    this.xBounds = [minX, maxX];
-    this.yBounds = [minY, maxY];
+    const { arrows, colors } = this.build(opts.x, opts.y, opts.u, opts.v);
 
     const cornerBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuf);
     gl.bufferData(gl.ARRAY_BUFFER, SEG_CORNERS, gl.STATIC_DRAW);
     const arrowBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, arrowBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, arrows, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, arrows, this.usage);
     const colorBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
     this.buffers = [cornerBuf, arrowBuf, colorBuf];
 
     this.shaftVao = gl.createVertexArray()!;
@@ -231,6 +190,77 @@ export class QuiverLayer implements Layer {
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(2, 1);
+  }
+
+  /** Recompute count/refs/bounds and the arrow+color arrays from new x/y/u/v. */
+  private build(
+    x: ArrayLike<number>, y: ArrayLike<number>,
+    u: ArrayLike<number>, v: ArrayLike<number>,
+  ): { arrows: Float32Array; colors: Float32Array } {
+    const n = Math.min(x.length, y.length, u.length, v.length);
+    this.count = n;
+    this.xRef = n > 0 ? x[0]! : 0;
+    this.yRef = n > 0 ? y[0]! : 0;
+
+    // Auto scale so the largest arrow spans ~90% of a nominal grid cell.
+    let maxMag = 0;
+    for (let i = 0; i < n; i++) maxMag = Math.max(maxMag, Math.hypot(u[i]!, v[i]!));
+    let scale = this.explicitScale;
+    if (scale == null) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let i = 0; i < n; i++) {
+        minX = Math.min(minX, x[i]!); maxX = Math.max(maxX, x[i]!);
+        minY = Math.min(minY, y[i]!); maxY = Math.max(maxY, y[i]!);
+      }
+      const diag = Math.hypot(maxX - minX, maxY - minY) || 1;
+      const cell = diag / Math.max(1, Math.sqrt(n));
+      scale = maxMag > 0 ? (0.9 * cell) / maxMag : 1;
+    }
+
+    const arrows = new Float32Array(n * 4);
+    const colors = new Float32Array(n * 4);
+    const cmap = colormap(this.colorBy?.colormap ?? "viridis");
+    const vals = this.colorBy?.values;
+    let lo = this.colorBy?.domain?.[0] ?? Infinity;
+    let hi = this.colorBy?.domain?.[1] ?? -Infinity;
+    if (this.useVertexColor && !this.colorBy?.domain) {
+      for (let i = 0; i < n; i++) {
+        const val = vals ? vals[i]! : Math.hypot(u[i]!, v[i]!);
+        lo = Math.min(lo, val); hi = Math.max(hi, val);
+      }
+    }
+    const span = (hi - lo) || 1;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const xi = x[i]!, yi = y[i]!;
+      const tx = xi + u[i]! * scale, ty = yi + v[i]! * scale;
+      arrows[i * 4] = xi - this.xRef; arrows[i * 4 + 1] = yi - this.yRef;
+      arrows[i * 4 + 2] = tx - this.xRef; arrows[i * 4 + 3] = ty - this.yRef;
+      if (this.useVertexColor) {
+        const val = vals ? vals[i]! : Math.hypot(u[i]!, v[i]!);
+        const [r, g, b] = cmap((val - lo) / span);
+        colors[i * 4] = r; colors[i * 4 + 1] = g; colors[i * 4 + 2] = b; colors[i * 4 + 3] = 1;
+      }
+      minX = Math.min(minX, xi, tx); maxX = Math.max(maxX, xi, tx);
+      minY = Math.min(minY, yi, ty); maxY = Math.max(maxY, yi, ty);
+    }
+    this.xBounds = [minX, maxX];
+    this.yBounds = [minY, maxY];
+    return { arrows, colors };
+  }
+
+  /** Replace the data and re-upload (for streaming). */
+  setData(
+    x: ArrayLike<number>, y: ArrayLike<number>,
+    u: ArrayLike<number>, v: ArrayLike<number>,
+  ): void {
+    const gl = this.gl;
+    const { arrows, colors } = this.build(x, y, u, v);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[1]!);
+    gl.bufferData(gl.ARRAY_BUFFER, arrows, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
   }
 
   bounds() {

@@ -1,8 +1,8 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface ContourOptions {
@@ -16,6 +16,8 @@ export interface ContourOptions {
   /** Single line color; if omitted, levels are colored by a colormap. */
   color?: string | Color;
   colormap?: ColormapName;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   yAxis?: string;
 }
 
@@ -56,32 +58,66 @@ export class ContourLayer implements Layer {
   private vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private vertexCount: number;
+  private vertexCount = 0;
   private xRef: number;
   private yRef: number;
   private ext: { x: Range; y: Range };
+  private cols: number;
+  private rows: number;
+  // Styling captured at construction, reused by setData.
+  private levelsOpt: number[] | number | undefined;
+  private cmap: ReturnType<typeof colormap>;
+  private fixedColor: Color | null;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: ContourOptions) {
     this.id = `contour-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
+    this.usage = bufferUsage(gl, opts.renderType);
     this.yAxis = opts.yAxis ?? "y";
     this.ext = opts.extent;
-    const { cols, rows, values } = opts;
-    const [x0, x1] = opts.extent.x, [y0, y1] = opts.extent.y;
+    this.cols = opts.cols;
+    this.rows = opts.rows;
+    const [x0, y0] = [opts.extent.x[0], opts.extent.y[0]];
     this.xRef = x0; this.yRef = y0;
+
+    this.levelsOpt = opts.levels;
+    this.cmap = colormap(opts.colormap ?? "viridis");
+    this.fixedColor = opts.color != null
+      ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
+      : null;
+
+    const data = this.build(opts.values, opts.cols, opts.rows);
+
+    const vao = gl.createVertexArray()!;
+    const buffer = gl.createBuffer()!;
+    this.vao = vao; this.buffer = buffer;
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, this.usage);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
+    gl.bindVertexArray(null);
+
+    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS]);
+  }
+
+  /** Marching-squares the scalar field into iso-line segments; sets vertexCount. */
+  private build(values: ArrayLike<number>, cols: number, rows: number): Float32Array {
+    const [x0, x1] = this.ext.x, [y0, y1] = this.ext.y;
 
     let vmin = Infinity, vmax = -Infinity;
     for (let i = 0; i < values.length; i++) { const v = values[i]!; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
-    const count = typeof opts.levels === "number" ? opts.levels : 8;
-    const levels = Array.isArray(opts.levels)
-      ? opts.levels
+    const count = typeof this.levelsOpt === "number" ? this.levelsOpt : 8;
+    const levels = Array.isArray(this.levelsOpt)
+      ? this.levelsOpt
       : Array.from({ length: count }, (_, i) => vmin + ((vmax - vmin) * (i + 1)) / (count + 1));
 
-    const cmap = colormap(opts.colormap ?? "viridis");
-    const fixed = opts.color != null
-      ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
-      : null;
+    const cmap = this.cmap;
+    const fixed = this.fixedColor;
     const gx = (c: number) => x0 + (c / (cols - 1)) * (x1 - x0) - this.xRef;
     const gy = (r: number) => y0 + (r / (rows - 1)) * (y1 - y0) - this.yRef;
     const at = (c: number, r: number) => values[r * cols + c]!;
@@ -116,19 +152,16 @@ export class ContourLayer implements Layer {
     }
 
     this.vertexCount = data.length / 6;
-    const vao = gl.createVertexArray()!;
-    const buffer = gl.createBuffer()!;
-    this.vao = vao; this.buffer = buffer;
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
-    gl.bindVertexArray(null);
+    return new Float32Array(data);
+  }
 
-    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS]);
+  /** Replace the scalar field and recompute the iso lines (for streaming). */
+  setData(values: ArrayLike<number>, cols: number = this.cols, rows: number = this.rows): void {
+    this.cols = cols;
+    this.rows = rows;
+    const data = this.build(values, cols, rows);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
   }
 
   bounds() {

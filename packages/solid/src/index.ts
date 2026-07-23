@@ -5,6 +5,7 @@ import {
   ErrorBarLayer,
   HeatmapLayer,
   HexbinLayer,
+  OhlcLayer,
   Plot as CorePlot,
   Plot3D as CorePlot3D,
   PolarPlot as CorePolarPlot,
@@ -27,6 +28,7 @@ import {
   type IsosurfaceOptions,
   type Line3DOptions,
   type LineOptions,
+  type OhlcOptions,
   type PatchesOptions,
   type Quiver3DOptions,
   type VolumeOptions,
@@ -179,7 +181,7 @@ export function Line(props: LineProps): JSX.Element {
   const plot = usePlot();
   bindStreaming(
     plot,
-    () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.miterLimit, props.decimate],
+    () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.miterLimit, props.decimate, props.renderType],
     (p) =>
       p.addLine({
         x: props.x,
@@ -192,6 +194,7 @@ export function Line(props: LineProps): JSX.Element {
         join: props.join,
         miterLimit: props.miterLimit,
         decimate: props.decimate,
+        renderType: props.renderType,
       }),
     () => [props.x, props.y],
     (l) => l.setData(props.x, props.y),
@@ -206,7 +209,7 @@ export function Scatter(props: ScatterProps): JSX.Element {
   const plot = usePlot();
   bindStreaming(
     plot,
-    () => [props.color, props.size, props.marker, props.name, props.yAxis, props.colorBy],
+    () => [props.color, props.size, props.marker, props.name, props.yAxis, props.colorBy, props.renderType],
     (p) =>
       p.addScatter({
         x: props.x,
@@ -217,6 +220,7 @@ export function Scatter(props: ScatterProps): JSX.Element {
         name: props.name,
         yAxis: props.yAxis,
         colorBy: props.colorBy,
+        renderType: props.renderType,
       }),
     () => [props.x, props.y],
     (l) => l.setData(props.x, props.y),
@@ -231,7 +235,7 @@ export function Bar(props: BarProps): JSX.Element {
   const plot = usePlot();
   bindStreaming(
     plot,
-    () => [props.width, props.offset, props.orientation, props.color, props.name, props.yAxis],
+    () => [props.width, props.offset, props.orientation, props.color, props.colors, props.name, props.yAxis, props.renderType],
     (p) =>
       p.addBar({
         x: props.x,
@@ -241,8 +245,10 @@ export function Bar(props: BarProps): JSX.Element {
         offset: props.offset,
         orientation: props.orientation,
         color: props.color,
+        colors: props.colors,
         name: props.name,
         yAxis: props.yAxis,
+        renderType: props.renderType,
       }),
     () => [props.x, props.y, props.base],
     (l) => l.setData(props.x, props.y, props.base),
@@ -257,7 +263,7 @@ export function Area(props: AreaProps): JSX.Element {
   const plot = usePlot();
   bindStreaming(
     plot,
-    () => [props.color, props.name, props.yAxis],
+    () => [props.color, props.name, props.yAxis, props.renderType],
     (p) =>
       p.addArea({
         x: props.x,
@@ -266,6 +272,7 @@ export function Area(props: AreaProps): JSX.Element {
         color: props.color,
         name: props.name,
         yAxis: props.yAxis,
+        renderType: props.renderType,
       }),
     () => [props.x, props.y, props.base],
     (l) => l.setData(props.x, props.y, props.base),
@@ -490,6 +497,31 @@ export function Candlestick(props: CandlestickProps): JSX.Element {
       props.yAxis,
     ],
     (p) => p.addCandlestick(props),
+  );
+  return null;
+}
+
+export type OhlcProps = OhlcOptions;
+
+/** OHLC bar chart. Static. */
+export function Ohlc(props: OhlcProps): JSX.Element {
+  const plot = usePlot();
+  bindStatic<OhlcLayer>(
+    plot,
+    () => [
+      props.x,
+      props.open,
+      props.high,
+      props.low,
+      props.close,
+      props.width,
+      props.upColor,
+      props.downColor,
+      props.lineWidth,
+      props.name,
+      props.yAxis,
+    ],
+    (p) => p.addOhlc(props),
   );
   return null;
 }

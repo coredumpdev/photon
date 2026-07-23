@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CategoricalScale, LinearScale, LogScale, TimeScale, makeScale } from "../src/scales/scale.js";
+import {
+  CategoricalScale, LinearScale, LogScale, OrdinalTimeScale, TimeScale, makeScale,
+} from "../src/scales/scale.js";
 
 describe("LinearScale", () => {
   it("normalizes and inverts", () => {
@@ -88,5 +90,61 @@ describe("CategoricalScale", () => {
     expect(s.domain).toEqual([-0.5, 0.5]);
     expect(s.ticks()).toHaveLength(0);
     expect(s.formatTick(0)).toBe("");
+  });
+});
+
+describe("OrdinalTimeScale", () => {
+  const DAY = 86_400_000, HOUR = 3_600_000;
+  // Six bars across three calendar days, two bars per day, with big overnight gaps.
+  const base = Date.UTC(2024, 0, 1, 9, 0, 0);
+  const times = [base, base + HOUR, base + DAY, base + DAY + HOUR, base + 2 * DAY, base + 2 * DAY + HOUR];
+
+  it("fixes the domain to the index bands", () => {
+    const s = new OrdinalTimeScale(times);
+    expect(s.domain).toEqual([-0.5, 5.5]);
+    expect(s.type).toBe("ordinal-time");
+    expect(s.log).toBe(false);
+  });
+
+  it("collapses market gaps: bars are evenly spaced regardless of time deltas", () => {
+    const even = new OrdinalTimeScale(times).norm.bind(new OrdinalTimeScale(times));
+    // An irregularly-timed series with the same COUNT must map to identical positions.
+    const irregular = [0, 1, 2, 100, 101, 5000].map((k) => base + k * HOUR);
+    const a = new OrdinalTimeScale(times);
+    const b = new OrdinalTimeScale(irregular);
+    for (let i = 0; i < 6; i++) expect(a.norm(i)).toBeCloseTo(b.norm(i));
+    // Index i sits at its band centre, like a categorical axis.
+    expect(a.norm(0)).toBeCloseTo(1 / 12);
+    expect(even(2)).toBeCloseTo((2 + 0.5) / 6);
+  });
+
+  it("places calendar-boundary ticks at integer indices with labels", () => {
+    const s = new OrdinalTimeScale(times);
+    const ticks = s.ticks();
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const t of ticks) {
+      expect(Number.isInteger(t.value)).toBe(true);
+      expect(t.value).toBeGreaterThanOrEqual(0);
+      expect(t.value).toBeLessThanOrEqual(5);
+      expect(typeof t.label).toBe("string");
+      expect(t.label!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("formats a value from the timestamp at its (rounded) index", () => {
+    const s = new OrdinalTimeScale(times);
+    expect(s.formatTick(0)).toMatch(/\d/);
+  });
+
+  it("is built by makeScale from a times array", () => {
+    const s = makeScale("ordinal-time", undefined, undefined, times);
+    expect(s).toBeInstanceOf(OrdinalTimeScale);
+    expect(s.domain).toEqual([-0.5, 5.5]);
+  });
+
+  it("handles empty times", () => {
+    const s = new OrdinalTimeScale([]);
+    expect(s.domain).toEqual([-0.5, 0.5]);
+    expect(s.ticks()).toHaveLength(0);
   });
 });

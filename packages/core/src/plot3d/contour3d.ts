@@ -1,7 +1,7 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Color, Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -19,6 +19,8 @@ export interface Contour3DOptions {
   color?: string | Color;
   colormap?: ColormapName;
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 // Marching squares: case → edge pairs (e0 bottom, e1 right, e2 top, e3 left).
@@ -63,32 +65,56 @@ export class Contour3DLayer implements Layer3D {
   private vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private vertCount: number;
-  private b3: Bounds3;
+  private vertCount!: number;
+  private b3!: Bounds3;
   private cInfo: ColorInfo | null = null;
+  private cmapName: ColormapName;
+  private fixed: Color | null;
+  private levelsOpt?: number[] | number;
+  private cols!: number;
+  private rows!: number;
+  private extentX!: Range;
+  private extentZ!: Range;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: Contour3DOptions) {
     this.id = `contour3d-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
     this.name = opts.name;
-    const { cols, rows, values } = opts;
-    const [x0, x1] = opts.extentX ?? [0, cols - 1];
-    const [z0, z1] = opts.extentZ ?? [0, rows - 1];
+    this.usage = bufferUsage(gl, opts.renderType);
+    this.cmapName = opts.colormap ?? "viridis";
+    this.levelsOpt = opts.levels;
+    this.fixed = opts.color != null
+      ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
+      : null;
+
+    this.vao = gl.createVertexArray()!;
+    this.buffer = gl.createBuffer()!;
+    this.build(opts.values, opts.cols, opts.rows, opts.extentX, opts.extentZ);
+
+    this.uniforms = uniformLocations(gl, this.program, ["uMVP"]);
+  }
+
+  /** Marching-squares the grid at each iso level and (re)upload the line buffer. */
+  private build(values: ArrayLike<number>, cols: number, rows: number, extentX?: Range, extentZ?: Range): void {
+    const gl = this.gl;
+    this.cols = cols; this.rows = rows;
+    const [x0, x1] = extentX ?? [0, cols - 1];
+    const [z0, z1] = extentZ ?? [0, rows - 1];
+    this.extentX = [x0, x1]; this.extentZ = [z0, z1];
 
     let vmin = Infinity, vmax = -Infinity;
     for (let i = 0; i < values.length; i++) { const v = values[i]!; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
     const lspan = vmax - vmin || 1;
-    const count = typeof opts.levels === "number" ? opts.levels : 10;
-    const levels = Array.isArray(opts.levels)
-      ? opts.levels
+    const count = typeof this.levelsOpt === "number" ? this.levelsOpt : 10;
+    const levels = Array.isArray(this.levelsOpt)
+      ? this.levelsOpt
       : Array.from({ length: count }, (_, i) => vmin + (lspan * (i + 1)) / (count + 1));
 
-    const cmap = colormap(opts.colormap ?? "viridis");
-    const fixed = opts.color != null
-      ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
-      : null;
-    if (!fixed) this.cInfo = { colormap: opts.colormap ?? "viridis", domain: [vmin, vmax], label: opts.name };
+    const cmap = colormap(this.cmapName);
+    const fixed = this.fixed;
+    if (!fixed) this.cInfo = { colormap: this.cmapName, domain: [vmin, vmax], label: this.name };
 
     const wx = (c: number) => x0 + (c / (cols - 1)) * (x1 - x0);
     const wz = (r: number) => z0 + (r / (rows - 1)) * (z1 - z0);
@@ -123,18 +149,25 @@ export class Contour3DLayer implements Layer3D {
     this.vertCount = data.length / 6;
     this.b3 = { x: [x0, x1], y: [vmin, vmax], z: [z0, z1] };
 
-    this.vao = gl.createVertexArray()!;
-    this.buffer = gl.createBuffer()!;
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
     gl.bindVertexArray(null);
+  }
 
-    this.uniforms = uniformLocations(gl, this.program, ["uMVP"]);
+  /** Stream a new scalar field (contours recomputed). Call `plot.refresh()` after. */
+  setData(values: ArrayLike<number>, opts?: { cols?: number; rows?: number; extentX?: Range; extentZ?: Range }): void {
+    this.build(
+      values,
+      opts?.cols ?? this.cols,
+      opts?.rows ?? this.rows,
+      opts?.extentX ?? this.extentX,
+      opts?.extentZ ?? this.extentZ,
+    );
   }
 
   bounds3() { return this.vertCount ? this.b3 : null; }

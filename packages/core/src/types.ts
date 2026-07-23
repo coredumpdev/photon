@@ -78,6 +78,14 @@ export type Dim = "x" | "y";
  */
 export type InteractionMode = "pan" | "box" | "box-x" | "box-y";
 
+/**
+ * How a layer expects its data to change, mapped to a WebGL buffer-usage hint:
+ * `"static"` → `STATIC_DRAW` (upload once), `"dynamic"` → `DYNAMIC_DRAW` (stream
+ * via `setData`). Purely a performance hint — `setData` works either way. Default
+ * `"static"`. Set `"dynamic"` on layers you update every frame.
+ */
+export type RenderType = "static" | "dynamic";
+
 export type Range = readonly [number, number];
 
 export interface Bounds {

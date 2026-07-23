@@ -1,7 +1,7 @@
 import { colormapLUT, type ColormapName } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Color, Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -19,6 +19,8 @@ export interface PointCloudOptions {
   labels?: ArrayLike<string>;
   /** Series name (legend / colorbar label). */
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -71,11 +73,13 @@ export class PointCloudLayer implements Layer3D {
   private labels?: ArrayLike<string>;
   /** Interleaved pos(3)+color(3)+size(1); positions are streamed in place. */
   private data: Float32Array;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: PointCloudOptions) {
     this.id = `points3d-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
+    this.usage = bufferUsage(gl, opts.renderType);
     this.size = opts.size ?? 4;
     this.name = opts.name;
     this.labels = opts.labels;
@@ -120,7 +124,7 @@ export class PointCloudLayer implements Layer3D {
     this.vao = vao; this.buffer = buffer;
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.data, this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);
     gl.enableVertexAttribArray(1);
@@ -153,7 +157,7 @@ export class PointCloudLayer implements Layer3D {
     }
     this.updateBounds();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, this.data, this.gl.DYNAMIC_DRAW);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, this.data, this.usage);
   }
 
   bounds3() { return this.count ? this.b3 : null; }

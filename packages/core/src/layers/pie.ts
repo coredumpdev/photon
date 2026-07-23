@@ -1,8 +1,8 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
-import { uniformLocations } from "../gl/program.js";
+import { bufferUsage, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 import { getFillProgram } from "./patches.js";
 
@@ -26,6 +26,8 @@ export interface PieOptions {
   innerRadius?: number;
   /** Angle of the first slice edge, radians. Default `Math.PI / 2` (12 o'clock). */
   startAngle?: number;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
 }
@@ -52,6 +54,15 @@ export class PieLayer implements Layer {
   private yRef: number;
   private xBounds: Range;
   private yBounds: Range;
+  // Captured geometry/color options so streaming reuses them.
+  private cx: number;
+  private cy: number;
+  private R: number;
+  private rIn: number;
+  private start: number;
+  private colorsOpt: (string | Color)[] | undefined;
+  private cmap: ReturnType<typeof colormap> | null;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: PieOptions) {
     this.id = `pie-${counter++}`;
@@ -61,24 +72,53 @@ export class PieLayer implements Layer {
     this.yAxis = opts.yAxis ?? "y";
 
     const [cx, cy] = opts.center ?? [0, 0];
-    const R = opts.radius ?? 1;
-    const rIn = opts.innerRadius ?? 0;
-    const start = opts.startAngle ?? Math.PI / 2;
+    this.cx = cx;
+    this.cy = cy;
+    this.R = opts.radius ?? 1;
+    this.rIn = opts.innerRadius ?? 0;
+    this.start = opts.startAngle ?? Math.PI / 2;
     this.xRef = cx;
     this.yRef = cy;
-    this.xBounds = [cx - R, cx + R];
-    this.yBounds = [cy - R, cy + R];
+    this.xBounds = [cx - this.R, cx + this.R];
+    this.yBounds = [cy - this.R, cy + this.R];
     this.colorCss = "#3b82f6";
+    this.colorsOpt = opts.colors;
+    this.cmap = opts.colormap ? colormap(opts.colormap) : null;
+    this.usage = bufferUsage(gl, opts.renderType);
 
-    const n = opts.values.length;
+    const { positions, colors } = this.build(opts.values);
+
+    const vao = gl.createVertexArray()!;
+    this.vao = vao;
+    gl.bindVertexArray(vao);
+    const posBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, this.usage);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    const colBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    this.buffers = [posBuf, colBuf];
+
+    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS]);
+  }
+
+  /** Recompute vertexCount and the position/color triangle soup from new slice values. */
+  private build(values: ArrayLike<number>): { positions: Float32Array; colors: Float32Array } {
+    const { cx, cy, R, rIn, start } = this;
+    const n = values.length;
     let total = 0;
-    for (let i = 0; i < n; i++) total += Math.max(0, opts.values[i]!);
+    for (let i = 0; i < n; i++) total += Math.max(0, values[i]!);
     if (total <= 0) total = 1;
 
-    const cmap = opts.colormap ? colormap(opts.colormap) : null;
+    const cmap = this.cmap;
     const colorAt = (i: number): Color => {
-      if (opts.colors?.[i] != null) {
-        const c = opts.colors[i]!;
+      if (this.colorsOpt?.[i] != null) {
+        const c = this.colorsOpt[i]!;
         return Array.isArray(c) ? (c as Color) : parseColor(c as string);
       }
       if (cmap) {
@@ -98,7 +138,7 @@ export class PieLayer implements Layer {
 
     let a0 = start;
     for (let i = 0; i < n; i++) {
-      const frac = Math.max(0, opts.values[i]!) / total;
+      const frac = Math.max(0, values[i]!) / total;
       const span = frac * Math.PI * 2;
       if (span <= 0) continue;
       const a1 = a0 - span; // clockwise
@@ -128,23 +168,17 @@ export class PieLayer implements Layer {
     }
 
     this.vertexCount = positions.length / 2;
-    const vao = gl.createVertexArray()!;
-    this.vao = vao;
-    gl.bindVertexArray(vao);
-    const posBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    const colBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
-    this.buffers = [posBuf, colBuf];
+    return { positions: new Float32Array(positions), colors: new Float32Array(colors) };
+  }
 
-    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS]);
+  /** Replace the slice values and re-upload (for streaming). */
+  setData(values: ArrayLike<number>): void {
+    const gl = this.gl;
+    const { positions, colors } = this.build(values);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[0]!);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[1]!);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
   }
 
   bounds() {

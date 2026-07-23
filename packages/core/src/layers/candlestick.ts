@@ -1,7 +1,7 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface CandlestickOptions {
@@ -19,8 +19,30 @@ export interface CandlestickOptions {
   downColor?: string | Color;
   /** Wick thickness in CSS px. Default 1.5. */
   wickWidth?: number;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
+}
+
+/** The OHLC of a single candle — used by {@link CandlestickLayer.updateLast}/`appendCandle`. */
+export interface Candle {
+  x: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+/** New OHLC arrays for {@link CandlestickLayer.setData} (colors/width stay fixed). */
+export interface CandlestickData {
+  x: ArrayLike<number>;
+  open: ArrayLike<number>;
+  high: ArrayLike<number>;
+  low: ArrayLike<number>;
+  close: ArrayLike<number>;
+  /** Optional new body width; keeps the previous width if omitted. */
+  width?: number;
 }
 
 // Body: an instanced data-space rectangle with a per-candle color.
@@ -102,7 +124,22 @@ export class CandlestickLayer implements Layer {
   private uBody: Record<string, WebGLUniformLocation | null>;
   private uWick: Record<string, WebGLUniformLocation | null>;
   private wickWidth: number;
-  private count: number;
+  private usage: number;
+  private up: Color;
+  private down: Color;
+  /** Body width in data units (median-derived unless the user fixed it). */
+  private bodyWidth = 1;
+  private explicitWidth: number | undefined;
+  // Retained OHLC (plain arrays so streaming can mutate/grow in place).
+  private xs: number[] = [];
+  private os: number[] = [];
+  private hs: number[] = [];
+  private ls: number[] = [];
+  private cs: number[] = [];
+  private rects = new Float32Array(0);
+  private wicks = new Float32Array(0);
+  private colors = new Float32Array(0);
+  private count = 0;
   private xRef = 0;
   private yRef = 0;
   private xBounds: Range = [0, 0];
@@ -115,35 +152,15 @@ export class CandlestickLayer implements Layer {
     this.name = opts.name ?? this.id;
     this.yAxis = opts.yAxis ?? "y";
     this.wickWidth = opts.wickWidth ?? 1.5;
+    this.usage = bufferUsage(gl, opts.renderType);
 
-    const up = toColor(opts.upColor ?? "#26a69a");
-    const down = toColor(opts.downColor ?? "#ef5350");
-    this.colorCss = toColorCss(up);
+    this.up = toColor(opts.upColor ?? "#26a69a");
+    this.down = toColor(opts.downColor ?? "#ef5350");
+    this.colorCss = toColorCss(this.up);
 
-    const n = Math.min(opts.x.length, opts.open.length, opts.high.length, opts.low.length, opts.close.length);
-    this.count = n;
-    const width = opts.width ?? medianSpacing(opts.x, n) * 0.7;
-    this.xRef = n > 0 ? opts.x[0]! : 0;
-    this.yRef = n > 0 ? opts.open[0]! : 0;
-
-    const rects = new Float32Array(n * 4);
-    const wicks = new Float32Array(n * 4);
-    const colors = new Float32Array(n * 4);
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (let i = 0; i < n; i++) {
-      const cx = opts.x[i]!, o = opts.open[i]!, h = opts.high[i]!, l = opts.low[i]!, c = opts.close[i]!;
-      const x0 = cx - width / 2, x1 = cx + width / 2;
-      rects[i * 4] = x0 - this.xRef; rects[i * 4 + 1] = o - this.yRef;
-      rects[i * 4 + 2] = x1 - this.xRef; rects[i * 4 + 3] = c - this.yRef;
-      wicks[i * 4] = cx - this.xRef; wicks[i * 4 + 1] = l - this.yRef;
-      wicks[i * 4 + 2] = cx - this.xRef; wicks[i * 4 + 3] = h - this.yRef;
-      const col = c >= o ? up : down;
-      colors[i * 4] = col[0]; colors[i * 4 + 1] = col[1]; colors[i * 4 + 2] = col[2]; colors[i * 4 + 3] = col[3];
-      minX = Math.min(minX, x0); maxX = Math.max(maxX, x1);
-      minY = Math.min(minY, l); maxY = Math.max(maxY, h);
-    }
-    this.xBounds = [minX, maxX];
-    this.yBounds = [minY, maxY];
+    this.explicitWidth = opts.width;
+    this.ingest(opts);
+    this.rebuild();
 
     const cornerRect = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, cornerRect);
@@ -153,13 +170,13 @@ export class CandlestickLayer implements Layer {
     gl.bufferData(gl.ARRAY_BUFFER, SEG_CORNERS, gl.STATIC_DRAW);
     const rectBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, rectBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, rects, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.rects, this.usage);
     const wickBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, wickBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, wicks, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.wicks, this.usage);
     const colorBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.colors, this.usage);
     this.buffers = [cornerRect, cornerSeg, rectBuf, wickBuf, colorBuf];
 
     this.bodyVao = gl.createVertexArray()!;
@@ -193,6 +210,106 @@ export class CandlestickLayer implements Layer {
 
     this.uBody = uniformLocations(gl, this.progs.body, [...TRANSFORM_UNIFORMS]);
     this.uWick = uniformLocations(gl, this.progs.wick, [...TRANSFORM_UNIFORMS, "uResolution", "uWidth"]);
+  }
+
+  /** Copy the incoming OHLC arrays into the retained plain arrays. */
+  private ingest(d: CandlestickData): void {
+    const n = Math.min(d.x.length, d.open.length, d.high.length, d.low.length, d.close.length);
+    this.xs = Array.from({ length: n }, (_, i) => d.x[i]!);
+    this.os = Array.from({ length: n }, (_, i) => d.open[i]!);
+    this.hs = Array.from({ length: n }, (_, i) => d.high[i]!);
+    this.ls = Array.from({ length: n }, (_, i) => d.low[i]!);
+    this.cs = Array.from({ length: n }, (_, i) => d.close[i]!);
+    if (d.width != null) this.explicitWidth = d.width;
+  }
+
+  /** Write candle `i`'s body rect, wick segment and up/down color into the arrays. */
+  private emitCandle(i: number): void {
+    const cx = this.xs[i]!, o = this.os[i]!, h = this.hs[i]!, l = this.ls[i]!, c = this.cs[i]!;
+    const x0 = cx - this.bodyWidth / 2, x1 = cx + this.bodyWidth / 2;
+    const r = this.rects, wk = this.wicks, col = this.colors;
+    r[i * 4] = x0 - this.xRef; r[i * 4 + 1] = o - this.yRef;
+    r[i * 4 + 2] = x1 - this.xRef; r[i * 4 + 3] = c - this.yRef;
+    wk[i * 4] = cx - this.xRef; wk[i * 4 + 1] = l - this.yRef;
+    wk[i * 4 + 2] = cx - this.xRef; wk[i * 4 + 3] = h - this.yRef;
+    const cc = c >= o ? this.up : this.down;
+    col[i * 4] = cc[0]; col[i * 4 + 1] = cc[1]; col[i * 4 + 2] = cc[2]; col[i * 4 + 3] = cc[3];
+  }
+
+  /** Recompute width/refs/bounds and refill the vertex arrays from the retained OHLC. */
+  private rebuild(): void {
+    const n = this.xs.length;
+    this.count = n;
+    this.bodyWidth = this.explicitWidth ?? medianSpacing(this.xs, n) * 0.7;
+    this.rects = new Float32Array(n * 4);
+    this.wicks = new Float32Array(n * 4);
+    this.colors = new Float32Array(n * 4);
+    this.xRef = n > 0 ? this.xs[0]! : 0;
+    this.yRef = n > 0 ? this.os[0]! : 0;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      this.emitCandle(i);
+      minX = Math.min(minX, this.xs[i]! - this.bodyWidth / 2);
+      maxX = Math.max(maxX, this.xs[i]! + this.bodyWidth / 2);
+      minY = Math.min(minY, this.ls[i]!);
+      maxY = Math.max(maxY, this.hs[i]!);
+    }
+    this.xBounds = n > 0 ? [minX, maxX] : [0, 0];
+    this.yBounds = n > 0 ? [minY, maxY] : [0, 0];
+  }
+
+  /** Re-upload all three per-candle buffers (after a full rebuild). */
+  private upload(): void {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
+    gl.bufferData(gl.ARRAY_BUFFER, this.rects, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[3]!);
+    gl.bufferData(gl.ARRAY_BUFFER, this.wicks, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[4]!);
+    gl.bufferData(gl.ARRAY_BUFFER, this.colors, this.usage);
+  }
+
+  /** Replace every candle and re-upload (for streaming a whole new window). */
+  setData(data: CandlestickData): void {
+    this.ingest(data);
+    this.rebuild();
+    this.upload();
+  }
+
+  /**
+   * Append one new candle (grows the series). Prefer {@link updateLast} for the
+   * in-progress candle and `appendCandle` only when a bar closes and a new one opens.
+   */
+  appendCandle(c: Candle): void {
+    this.xs.push(c.x); this.os.push(c.open); this.hs.push(c.high);
+    this.ls.push(c.low); this.cs.push(c.close);
+    this.rebuild();
+    this.upload();
+  }
+
+  /**
+   * Update the most recent candle in place — the cheap hot path for a live
+   * (forming) bar. Only that candle's 12 floats are re-uploaded; bounds are
+   * extended (never shrunk) to include it. No-op when the series is empty.
+   */
+  updateLast(c: Candle): void {
+    const i = this.xs.length - 1;
+    if (i < 0) return;
+    this.xs[i] = c.x; this.os[i] = c.open; this.hs[i] = c.high;
+    this.ls[i] = c.low; this.cs[i] = c.close;
+    this.emitCandle(i);
+    const gl = this.gl, off = i * 4;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, off * 4, this.rects.subarray(off, off + 4));
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[3]!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, off * 4, this.wicks.subarray(off, off + 4));
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[4]!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, off * 4, this.colors.subarray(off, off + 4));
+    this.xBounds = [
+      Math.min(this.xBounds[0], c.x - this.bodyWidth / 2),
+      Math.max(this.xBounds[1], c.x + this.bodyWidth / 2),
+    ];
+    this.yBounds = [Math.min(this.yBounds[0], c.low), Math.max(this.yBounds[1], c.high)];
   }
 
   bounds() {

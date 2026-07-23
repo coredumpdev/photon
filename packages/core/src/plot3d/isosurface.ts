@@ -1,6 +1,6 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Color, Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { Bounds3, Layer3D } from "./layer3d.js";
 import { marchingCubes } from "./marching-cubes.js";
 import type { Mat4 } from "./mat4.js";
@@ -17,6 +17,8 @@ export interface IsosurfaceOptions {
   /** Fill opacity 0..1. Default 1. */
   opacity?: number;
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -61,10 +63,11 @@ export class IsosurfaceLayer implements Layer3D {
   private vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private vertCount: number;
+  private vertCount!: number;
   private color: Color;
   private opacity: number;
-  private b3: Bounds3;
+  private b3!: Bounds3;
+  private usage: number;
   private lightDir: [number, number, number] = [0.5, 1, 0.35];
   private ambient = 0.35;
 
@@ -73,16 +76,32 @@ export class IsosurfaceLayer implements Layer3D {
     this.gl = gl;
     this.program = getProgram(gl);
     this.name = opts.name;
+    this.usage = bufferUsage(gl, opts.renderType);
     const ci = opts.color ?? "#38bdf8";
     this.color = Array.isArray(ci) ? (ci as Color) : parseColor(ci as string);
     this.colorCss = typeof ci === "string" ? ci : toColorCss(this.color);
     this.opacity = opts.opacity ?? 1;
 
-    const { positions, normals } = marchingCubes(opts.values, opts.dims, opts.isoLevel, opts.extent);
+    this.vao = gl.createVertexArray()!;
+    this.buffer = gl.createBuffer()!;
+    this.build(opts.values, opts.dims, opts.isoLevel, opts.extent);
+
+    this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uColor", "uLightDir", "uAmbient", "uOpacity"]);
+  }
+
+  /** Run marching cubes and (re)upload the interleaved pos/normal vertex buffer. */
+  private build(
+    values: ArrayLike<number>,
+    dims: [number, number, number],
+    isoLevel: number,
+    extent?: { x: Range; y: Range; z: Range },
+  ): void {
+    const gl = this.gl;
+    const { positions, normals } = marchingCubes(values, dims, isoLevel, extent);
     this.vertCount = positions.length / 3;
-    const ex = opts.extent?.x ?? [0, opts.dims[0] - 1];
-    const ey = opts.extent?.y ?? [0, opts.dims[1] - 1];
-    const ez = opts.extent?.z ?? [0, opts.dims[2] - 1];
+    const ex = extent?.x ?? [0, dims[0] - 1];
+    const ey = extent?.y ?? [0, dims[1] - 1];
+    const ez = extent?.z ?? [0, dims[2] - 1];
     this.b3 = { x: ex, y: ey, z: ez };
 
     // Interleave pos(3)+normal(3).
@@ -92,18 +111,24 @@ export class IsosurfaceLayer implements Layer3D {
       data[i * 6 + 3] = normals[i * 3]!; data[i * 6 + 4] = normals[i * 3 + 1]!; data[i * 6 + 5] = normals[i * 3 + 2]!;
     }
 
-    this.vao = gl.createVertexArray()!;
-    this.buffer = gl.createBuffer()!;
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, data, this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
     gl.bindVertexArray(null);
+  }
 
-    this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uColor", "uLightDir", "uAmbient", "uOpacity"]);
+  /** Stream a new volume + iso level (marching-cubes mesh recomputed). Call `plot.refresh()` after. */
+  setData(
+    values: ArrayLike<number>,
+    dims: [number, number, number],
+    isoLevel: number,
+    extent?: { x: Range; y: Range; z: Range },
+  ): void {
+    this.build(values, dims, isoLevel, extent);
   }
 
   bounds3() { return this.vertCount ? this.b3 : null; }

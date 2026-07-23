@@ -6,6 +6,7 @@ import { AreaLayer, type AreaOptions } from "./layers/area.js";
 import { BarLayer, type BarOptions } from "./layers/bar.js";
 import { BoxLayer, type BoxOptions } from "./layers/box.js";
 import { CandlestickLayer, type CandlestickOptions } from "./layers/candlestick.js";
+import { OhlcLayer, type OhlcOptions } from "./layers/ohlc.js";
 import { ContourLayer, type ContourOptions } from "./layers/contour.js";
 import { ErrorBarLayer, type ErrorBarOptions } from "./layers/errorbar.js";
 import { GraphLayer, type GraphOptions } from "./layers/graph.js";
@@ -50,6 +51,12 @@ export interface AxisScaleOptions {
   domain?: Range;
   /** Factor labels for a `"categorical"` axis (fixes the domain to the bands). */
   factors?: string[];
+  /**
+   * Per-index epoch-ms timestamps for an `"ordinal-time"` axis (finance/session
+   * axis). Plot bars at integer indices `0..times.length-1`; gaps collapse and
+   * ticks show calendar dates.
+   */
+  times?: ArrayLike<number>;
 }
 
 /** Legend placement + styling. `legend: true` uses all defaults. */
@@ -69,6 +76,8 @@ export interface YAxisOptions extends AxisConfig {
   domain?: Range;
   /** Factor labels for a `"categorical"` axis. */
   factors?: string[];
+  /** Per-index epoch-ms timestamps for an `"ordinal-time"` axis. */
+  times?: ArrayLike<number>;
   /** Which side to draw the axis on. Default `"right"` for secondary axes. */
   side?: "left" | "right";
   /** Axis + label color (secondary axes often match their series). */
@@ -319,6 +328,12 @@ export class Plot {
   private hoverReadout?: (dataX: number, dataY: number) => HoverReadoutRow[];
   /** Cursor position while the pointer is pressed, when `crosshair`. */
   private pressPx: { x: number; y: number } | null = null;
+  // Linked-pane plumbing (see linkX). View/cursor changes are emitted from render().
+  private viewListeners: Array<(x: Range) => void> = [];
+  private cursorListeners: Array<(dataX: number | null) => void> = [];
+  private lastEmittedX: Range | null = null;
+  private lastEmittedCursor: number | null = NaN as unknown as null;
+  private linkedCursorX: number | null = null;
   private tooltip: HTMLDivElement;
   /** A point clicked to pin its details, until another click clears it. */
   private selected: { layer: Pickable; x: number; y: number; index: number } | null = null;
@@ -350,24 +365,24 @@ export class Plot {
 
     const sx = options.scales?.x ?? {};
     const sy = options.scales?.y ?? {};
-    // A categorical axis is fixed to its factor bands: never autoscale, and `home()`
-    // restores that band domain.
-    const xCat = sx.type === "categorical";
-    this.scaleX = makeScale(sx.type ?? "linear", sx.domain ?? [0, 1], sx.factors);
-    this.autoX = !xCat && sx.domain == null;
-    this.initialX = xCat ? this.scaleX.domain : (sx.domain ?? null);
+    // A "band" axis (categorical factors or ordinal-time indices) is fixed to its
+    // band domain: never autoscale, and `home()` restores that band domain.
+    const xBand = sx.type === "categorical" || sx.type === "ordinal-time";
+    this.scaleX = makeScale(sx.type ?? "linear", sx.domain ?? [0, 1], sx.factors, sx.times);
+    this.autoX = !xBand && sx.domain == null;
+    this.initialX = xBand ? this.scaleX.domain : (sx.domain ?? null);
     this.axisX = new Axis(options.axes?.x);
 
     // Primary y axis.
-    const yCat = sy.type === "categorical";
-    const yScale = makeScale(sy.type ?? "linear", sy.domain ?? [0, 1], sy.factors);
+    const yBand = sy.type === "categorical" || sy.type === "ordinal-time";
+    const yScale = makeScale(sy.type ?? "linear", sy.domain ?? [0, 1], sy.factors, sy.times);
     this.yAxes.set("y", {
       id: "y",
       scale: yScale,
       axis: new Axis(options.axes?.y),
       side: "left",
-      auto: !yCat && sy.domain == null,
-      initial: yCat ? yScale.domain : (sy.domain ?? null),
+      auto: !yBand && sy.domain == null,
+      initial: yBand ? yScale.domain : (sy.domain ?? null),
     });
 
     this.isDark = options.theme === "dark";
@@ -696,6 +711,11 @@ export class Plot {
     return this.register(new CandlestickLayer(this.gl, opts));
   }
 
+  /** An OHLC bar chart (low→high line with open/close ticks). Streams like candlesticks. */
+  addOhlc(opts: OhlcOptions): OhlcLayer {
+    return this.register(new OhlcLayer(this.gl, opts));
+  }
+
   /** Filled polygons (choropleth-capable). Rings are triangulated with earcut. */
   addPatches(opts: PatchesOptions): PatchesLayer {
     return this.register(new PatchesLayer(this.gl, opts));
@@ -824,19 +844,31 @@ export class Plot {
   /** Register an additional named y axis. Series opt in via `addLine({ yAxis })`. */
   addYAxis(id: string, opts: YAxisOptions = {}): void {
     if (this.yAxes.has(id)) throw new Error(`Y axis "${id}" already exists`);
-    const { type, domain, factors, side, color, ...axisConfig } = opts;
-    const cat = type === "categorical";
-    const scale = makeScale(type ?? "linear", domain ?? [0, 1], factors);
+    const { type, domain, factors, times, side, color, ...axisConfig } = opts;
+    const band = type === "categorical" || type === "ordinal-time";
+    const scale = makeScale(type ?? "linear", domain ?? [0, 1], factors, times);
     this.yAxes.set(id, {
       id,
       scale,
       axis: new Axis(axisConfig),
       side: side ?? "right",
-      auto: !cat && domain == null,
-      initial: cat ? scale.domain : (domain ?? null),
+      auto: !band && domain == null,
+      initial: band ? scale.domain : (domain ?? null),
       color,
     });
     this.autoscale();
+    this.requestRender();
+  }
+
+  /** Whether a y axis with this id exists (the primary is always `"y"`). */
+  hasYAxis(id: string): boolean {
+    return this.yAxes.has(id);
+  }
+
+  /** Remove a secondary y axis. No-op for the primary `"y"` or an unknown id. */
+  removeYAxis(id: string): void {
+    if (id === "y" || !this.yAxes.has(id)) return;
+    this.yAxes.delete(id);
     this.requestRender();
   }
 
@@ -872,6 +904,31 @@ export class Plot {
     if (view.yAxes) {
       for (const [id, r] of Object.entries(view.yAxes)) this.setYDomain(id, r);
     }
+    this.requestRender();
+  }
+
+  /**
+   * Subscribe to x-domain changes (pan / zoom / home / setView). Fires once per
+   * frame after the domain settles. Returns an unsubscribe function. See {@link linkX}.
+   */
+  onViewChange(cb: (x: Range) => void): () => void {
+    this.viewListeners.push(cb);
+    return () => { this.viewListeners = this.viewListeners.filter((f) => f !== cb); };
+  }
+
+  /**
+   * Subscribe to the hover cursor's data-space x (or `null` when it leaves the
+   * plot). Returns an unsubscribe function. Used to share a crosshair across panes.
+   */
+  onCursorMove(cb: (dataX: number | null) => void): () => void {
+    this.cursorListeners.push(cb);
+    return () => { this.cursorListeners = this.cursorListeners.filter((f) => f !== cb); };
+  }
+
+  /** Draw a linked crosshair at this data-space x (pushed from another pane), or clear it with `null`. */
+  setLinkedCursor(dataX: number | null): void {
+    if (this.linkedCursorX === dataX) return;
+    this.linkedCursorX = dataX;
     this.requestRender();
   }
 
@@ -992,11 +1049,30 @@ export class Plot {
     return this.yAxes.get("y")!;
   }
 
+  /** Fire view/cursor listeners once the frame's x-domain + cursor are settled. */
+  private emitLinks(region: ReturnType<typeof plotRegion>): void {
+    const dx = this.scaleX.domain;
+    if (!this.lastEmittedX || this.lastEmittedX[0] !== dx[0] || this.lastEmittedX[1] !== dx[1]) {
+      this.lastEmittedX = [dx[0], dx[1]];
+      for (const cb of this.viewListeners) cb(this.lastEmittedX);
+    }
+    if (this.cursorListeners.length) {
+      const cx = this.hoverEnabled && this.hoverPx
+        ? this.scaleX.invert(Math.max(0, Math.min(1, (this.hoverPx.x - region.left) / region.width)))
+        : null;
+      if (cx !== this.lastEmittedCursor) {
+        this.lastEmittedCursor = cx;
+        for (const cb of this.cursorListeners) cb(cx);
+      }
+    }
+  }
+
   render(): void {
     const layout = this.layout();
     const region = plotRegion(layout);
     if (this.equalAspect) this.applyAspect(region);
     if (this.boundedPan) this.clampView();
+    this.emitLinks(region);
     const primary = this.primaryY();
     const ticksX = this.axisX.resolve(this.scaleX);
     const ticksYPrimary = primary.axis.resolve(primary.scale);
@@ -1083,6 +1159,14 @@ export class Plot {
     // Both-axis guide lines while the pointer is pressed.
     if (this.crosshair && this.pressPx) {
       drawCrosshairXY(this.axisCtx, region, this.pressPx.x, this.pressPx.y, this.theme);
+    }
+
+    // Linked crosshair pushed from another pane (see linkX).
+    if (this.linkedCursorX != null) {
+      const nx = this.scaleX.norm(this.linkedCursorX);
+      if (nx >= -0.001 && nx <= 1.001) {
+        drawCrosshair(this.axisCtx, region, pxX(region, nx), this.theme);
+      }
     }
 
     // Hover crosshair + markers + tooltip.
@@ -1783,3 +1867,37 @@ export class Plot {
 }
 
 export { LinearScale };
+
+/**
+ * Link the x-axis (pan / zoom) and hover crosshair of several plots so they move
+ * together — the standard multi-pane financial layout (price on top, volume /
+ * RSI / MACD below, all sharing one time axis). The plots should share the same
+ * x-scale semantics (e.g. all `ordinal-time` over the same bars).
+ *
+ * ```ts
+ * const detach = linkX([pricePlot, volumePlot, rsiPlot]);
+ * // …later: detach();
+ * ```
+ *
+ * @returns a function that unlinks them again.
+ */
+export function linkX(plots: Plot[]): () => void {
+  let applying = false;
+  const unsubs: Array<() => void> = [];
+  for (const p of plots) {
+    unsubs.push(
+      p.onViewChange((x) => {
+        if (applying) return;
+        applying = true;
+        for (const q of plots) if (q !== p) q.setView({ x });
+        applying = false;
+      }),
+    );
+    unsubs.push(
+      p.onCursorMove((cx) => {
+        for (const q of plots) if (q !== p) q.setLinkedCursor(cx);
+      }),
+    );
+  }
+  return () => { for (const u of unsubs) u(); };
+}

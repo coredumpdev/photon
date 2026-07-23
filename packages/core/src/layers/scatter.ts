@@ -1,8 +1,8 @@
 import { colormapLUT, type ColormapName } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 import { pickNearest, type PickMode, type Picked } from "./pick.js";
 
@@ -41,6 +41,8 @@ export interface ScatterOptions {
     /** Value range mapped to [0,1]. Defaults to the data min/max. */
     domain?: Range;
   };
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -139,6 +141,7 @@ export class ScatterLayer implements Layer {
   private count: number;
   private size: number;
   private marker: number;
+  private usage: number;
   private color: Color;
   private useVertexColor: boolean;
   private labels?: ArrayLike<string>;
@@ -160,6 +163,7 @@ export class ScatterLayer implements Layer {
     this.colorCss = typeof colorInput === "string" ? colorInput : toColorCss(this.color);
     this.name = opts.name ?? this.id;
     this.yAxis = opts.yAxis ?? "y";
+    this.usage = bufferUsage(gl, opts.renderType);
     this.useVertexColor = opts.colorBy != null;
     this.labels = opts.labels;
 
@@ -219,14 +223,14 @@ export class ScatterLayer implements Layer {
 
     const posBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, pos, this.usage);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(1, 1);
 
     const colorBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(2, 1);
@@ -282,7 +286,7 @@ export class ScatterLayer implements Layer {
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
     this.useVertexColor = false;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers[1]!);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, pos, this.gl.DYNAMIC_DRAW);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, pos, this.usage);
   }
 
   draw(state: DrawState): void {

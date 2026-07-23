@@ -1,7 +1,7 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface AreaOptions {
@@ -10,6 +10,8 @@ export interface AreaOptions {
   /** Lower edge(s). Number or per-point array — pass cumulative to stack. */
   base?: number | ArrayLike<number>;
   color?: string | Color;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
 }
@@ -47,6 +49,7 @@ export class AreaLayer implements Layer {
   private uniforms: Record<string, WebGLUniformLocation | null>;
   private vertexCount: number;
   private color: Color;
+  private usage: number;
   private xRef = 0;
   private yRef = 0;
   private xBounds: Range = [0, 0];
@@ -61,6 +64,7 @@ export class AreaLayer implements Layer {
     this.colorCss = typeof colorInput === "string" ? colorInput : toColorCss(this.color);
     this.name = opts.name ?? this.id;
     this.yAxis = opts.yAxis ?? "y";
+    this.usage = bufferUsage(gl, opts.renderType);
 
     const n = Math.min(opts.x.length, opts.y.length);
     this.vertexCount = n * 2;
@@ -89,7 +93,7 @@ export class AreaLayer implements Layer {
     this.vao = vao; this.buffer = buffer;
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, data, this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
@@ -116,7 +120,7 @@ export class AreaLayer implements Layer {
     }
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.DYNAMIC_DRAW);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
   }
 
   bounds() {

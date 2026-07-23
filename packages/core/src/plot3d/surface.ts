@@ -1,6 +1,6 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -17,6 +17,8 @@ export interface SurfaceOptions {
   name?: string;
   /** Render the grid as a wireframe (lines) instead of a lit filled surface. */
   wireframe?: boolean;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -80,11 +82,16 @@ export class SurfaceLayer implements Layer3D {
   private vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private vertexCount: number;
-  private b3: Bounds3;
+  private vertexCount!: number;
+  private b3!: Bounds3;
   private cmapName: ColormapName;
   private vDomain: Range = [0, 1];
   private wireframe: boolean;
+  private cols!: number;
+  private rows!: number;
+  private extentX!: Range;
+  private extentZ!: Range;
+  private usage: number;
   private lightDir: [number, number, number] = [0.5, 1, 0.35];
   private ambient = 0.35;
 
@@ -95,16 +102,29 @@ export class SurfaceLayer implements Layer3D {
     this.program = this.wireframe ? getWireProgram(gl) : getProgram(gl);
     this.name = opts.name;
     this.cmapName = opts.colormap ?? "viridis";
-    const { cols, rows, values } = opts;
-    const [x0, x1] = opts.extentX ?? [0, cols - 1];
-    const [z0, z1] = opts.extentZ ?? [0, rows - 1];
+    this.usage = bufferUsage(gl, opts.renderType);
+
+    this.vao = gl.createVertexArray()!;
+    this.buffer = gl.createBuffer()!;
+    this.build(opts.values, opts.cols, opts.rows, opts.extentX, opts.extentZ);
+
+    this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uLightDir", "uAmbient"]);
+  }
+
+  /** Build the mesh (positions/normals/colors or wireframe) and (re)upload the vertex buffer. */
+  private build(values: ArrayLike<number>, cols: number, rows: number, extentX?: Range, extentZ?: Range): void {
+    const gl = this.gl;
+    this.cols = cols; this.rows = rows;
+    const [x0, x1] = extentX ?? [0, cols - 1];
+    const [z0, z1] = extentZ ?? [0, rows - 1];
+    this.extentX = [x0, x1]; this.extentZ = [z0, z1];
     const dxWorld = (x1 - x0) / Math.max(1, cols - 1);
     const dzWorld = (z1 - z0) / Math.max(1, rows - 1);
 
     let vmin = Infinity, vmax = -Infinity;
     for (let i = 0; i < values.length; i++) { const v = values[i]!; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
     const span = vmax - vmin || 1;
-    const cmap = colormap(opts.colormap ?? "viridis");
+    const cmap = colormap(this.cmapName);
     const wx = (c: number) => x0 + (c / (cols - 1)) * (x1 - x0);
     const wz = (r: number) => z0 + (r / (rows - 1)) * (z1 - z0);
     const at = (c: number, r: number) => values[r * cols + c]!;
@@ -121,11 +141,8 @@ export class SurfaceLayer implements Layer3D {
     this.b3 = { x: [x0, x1], y: [vmin, vmax], z: [z0, z1] };
     this.vDomain = [vmin, vmax];
 
-    const vao = gl.createVertexArray()!;
-    const buffer = gl.createBuffer()!;
-    this.vao = vao; this.buffer = buffer;
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
 
     if (this.wireframe) {
       // Grid lines: per interior vertex, an edge to the right + down neighbour.
@@ -140,7 +157,7 @@ export class SurfaceLayer implements Layer3D {
         }
       }
       this.vertexCount = data.length / 6;
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), this.usage);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
       gl.enableVertexAttribArray(1);
@@ -158,7 +175,7 @@ export class SurfaceLayer implements Layer3D {
         }
       }
       this.vertexCount = data.length / 9;
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), this.usage);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
       gl.enableVertexAttribArray(1);
@@ -167,8 +184,17 @@ export class SurfaceLayer implements Layer3D {
       gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
     }
     gl.bindVertexArray(null);
+  }
 
-    this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uLightDir", "uAmbient"]);
+  /** Stream a new height grid (mesh/normals/wireframe rebuilt). Call `plot.refresh()` after. */
+  setData(values: ArrayLike<number>, opts?: { cols?: number; rows?: number; extentX?: Range; extentZ?: Range }): void {
+    this.build(
+      values,
+      opts?.cols ?? this.cols,
+      opts?.rows ?? this.rows,
+      opts?.extentX ?? this.extentX,
+      opts?.extentZ ?? this.extentZ,
+    );
   }
 
   bounds3() { return this.b3; }

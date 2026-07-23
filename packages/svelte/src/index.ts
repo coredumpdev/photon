@@ -23,6 +23,7 @@ import {
   type HexbinOptions,
   type Layer,
   type LineOptions,
+  type OhlcOptions,
   type PatchesOptions,
   type PieOptions,
   type PlotOptions,
@@ -55,6 +56,7 @@ export type SeriesSpec =
   | ({ type: "stem" } & StemOptions)
   | ({ type: "quiver" } & QuiverOptions)
   | ({ type: "candlestick" } & CandlestickOptions)
+  | ({ type: "ohlc" } & OhlcOptions)
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
@@ -87,6 +89,7 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "stem": return p.addStem(s);
     case "quiver": return p.addQuiver(s);
     case "candlestick": return p.addCandlestick(s);
+    case "ohlc": return p.addOhlc(s);
     case "pie": return p.addPie(s);
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
@@ -110,6 +113,7 @@ function updateSeries(layer: Layer, s: SeriesSpec): void {
     case "stem": break; // static
     case "quiver": break; // static
     case "candlestick": break; // static
+    case "ohlc": break; // static
     case "pie": break; // static
     case "patches": break; // static
     case "image": break; // static

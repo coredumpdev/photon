@@ -1,8 +1,8 @@
 import { parseColor } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import { boxStats, kde } from "../stats/index.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 export interface BoxGroup {
@@ -21,6 +21,8 @@ export interface BoxOptions {
   box?: boolean;
   /** Draw a violin (KDE) shape behind/instead of the box (default false). */
   violin?: boolean;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   yAxis?: string;
 }
 
@@ -85,23 +87,50 @@ export class BoxLayer implements Layer {
   private yRef = 0;
   private xBounds: Range = [0, 0];
   private yBounds: Range = [0, 0];
-  private triCount: number;
-  private lineStart: number;
-  private lineCount: number;
-  private pointStart: number;
-  private pointCount: number;
+  private triCount = 0;
+  private lineStart = 0;
+  private lineCount = 0;
+  private pointStart = 0;
+  private pointCount = 0;
+  // Styling captured at construction, reused by setData.
+  private width: number;
+  private showBox: boolean;
+  private showViolin: boolean;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: BoxOptions) {
     this.id = `box-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
+    this.usage = bufferUsage(gl, opts.renderType);
     this.yAxis = opts.yAxis ?? "y";
 
-    const groups = opts.groups;
-    const width = opts.width ?? 0.6;
-    const hw = width / 2;
-    const showBox = opts.box !== false;
-    const showViolin = opts.violin === true;
+    this.width = opts.width ?? 0.6;
+    this.showBox = opts.box !== false;
+    this.showViolin = opts.violin === true;
+
+    const all = this.build(opts.groups);
+
+    const vao = gl.createVertexArray()!;
+    const buffer = gl.createBuffer()!;
+    this.vao = vao; this.buffer = buffer;
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, all, this.usage);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
+    gl.bindVertexArray(null);
+
+    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uPointSize", "uIsPoint"]);
+  }
+
+  /** Build box/whisker/violin geometry from the groups; sets refs, bounds and draw ranges. */
+  private build(groups: BoxGroup[]): Float32Array {
+    const hw = this.width / 2;
+    const showBox = this.showBox;
+    const showViolin = this.showViolin;
 
     this.xRef = groups.length ? groups[0]!.position : 0;
     // yRef from the first datum we can find.
@@ -178,26 +207,20 @@ export class BoxLayer implements Layer {
     this.xBounds = [minX, maxX];
     this.yBounds = [minY, maxY];
 
-    const all = [...tris.data, ...lines.data, ...points.data];
     this.triCount = tris.count;
     this.lineStart = tris.count;
     this.lineCount = lines.count;
     this.pointStart = tris.count + lines.count;
     this.pointCount = points.count;
+    return new Float32Array([...tris.data, ...lines.data, ...points.data]);
+  }
 
-    const vao = gl.createVertexArray()!;
-    const buffer = gl.createBuffer()!;
-    this.vao = vao; this.buffer = buffer;
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(all), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
-    gl.bindVertexArray(null);
-
-    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS, "uPointSize", "uIsPoint"]);
+  /** Replace the box groups and rebuild the geometry (for streaming). */
+  setData(groups: BoxGroup[], width?: number): void {
+    if (width != null) this.width = width;
+    const all = this.build(groups);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, all, this.usage);
   }
 
   bounds() {

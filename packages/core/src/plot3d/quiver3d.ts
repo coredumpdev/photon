@@ -1,7 +1,7 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Color, Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -22,6 +22,8 @@ export interface Quiver3DOptions {
   /** Arrowhead length as a fraction of the arrow. Default 0.28. */
   headSize?: number;
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -65,34 +67,58 @@ export class Quiver3DLayer implements Layer3D {
   private vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private vertCount: number;
-  private b3: Bounds3;
+  private vertCount!: number;
+  private b3!: Bounds3;
   private cInfo: ColorInfo | null = null;
-  private positions: Float32Array;
+  private positions!: Float32Array;
+  private base: Color;
+  private scale: number;
+  private headSize: number;
+  private colorByOpt?: Quiver3DOptions["colorBy"];
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: Quiver3DOptions) {
     this.id = `quiver3d-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
     this.name = opts.name;
-    const scale = opts.scale ?? 1;
-    const headSize = opts.headSize ?? 0.28;
-    const n = Math.min(opts.x.length, opts.y.length, opts.z.length, opts.u.length, opts.v.length, opts.w.length);
-
-    const base = opts.color != null
+    this.usage = bufferUsage(gl, opts.renderType);
+    this.scale = opts.scale ?? 1;
+    this.headSize = opts.headSize ?? 0.28;
+    this.colorByOpt = opts.colorBy;
+    this.base = opts.color != null
       ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
       : [0.5, 0.8, 1, 1] as Color;
-    const cmap = opts.colorBy ? colormap(opts.colorBy.colormap ?? "viridis") : null;
+    if (!opts.colorBy) this.colorCss = typeof opts.color === "string" ? opts.color : toColorCss(this.base);
+
+    this.vao = gl.createVertexArray()!;
+    this.buffer = gl.createBuffer()!;
+    this.build(opts.x, opts.y, opts.z, opts.u, opts.v, opts.w);
+
+    this.uniforms = uniformLocations(gl, this.program, ["uMVP"]);
+  }
+
+  /** Build the arrow line geometry (shaft + 4-wing head) and (re)upload the vertex buffer. */
+  private build(
+    x: ArrayLike<number>, y: ArrayLike<number>, z: ArrayLike<number>,
+    u: ArrayLike<number>, v: ArrayLike<number>, w: ArrayLike<number>,
+  ): void {
+    const gl = this.gl;
+    const scale = this.scale;
+    const headSize = this.headSize;
+    const n = Math.min(x.length, y.length, z.length, u.length, v.length, w.length);
+
+    const base = this.base;
+    const cmap = this.colorByOpt ? colormap(this.colorByOpt.colormap ?? "viridis") : null;
     // Magnitudes (for colorBy).
-    let lo = opts.colorBy?.domain?.[0] ?? Infinity;
-    let hi = opts.colorBy?.domain?.[1] ?? -Infinity;
-    const mag = (i: number) => Math.hypot(opts.u[i]!, opts.v[i]!, opts.w[i]!);
-    if (cmap && !opts.colorBy?.domain) {
+    let lo = this.colorByOpt?.domain?.[0] ?? Infinity;
+    let hi = this.colorByOpt?.domain?.[1] ?? -Infinity;
+    const mag = (i: number) => Math.hypot(u[i]!, v[i]!, w[i]!);
+    if (cmap && !this.colorByOpt?.domain) {
       for (let i = 0; i < n; i++) { const m = mag(i); if (m < lo) lo = m; if (m > hi) hi = m; }
     }
     const span = (hi - lo) || 1;
-    if (cmap) this.cInfo = { colormap: opts.colorBy!.colormap ?? "viridis", domain: [lo, hi], label: opts.name };
-    else this.colorCss = typeof opts.color === "string" ? opts.color : toColorCss(base);
+    if (cmap) this.cInfo = { colormap: this.colorByOpt!.colormap ?? "viridis", domain: [lo, hi], label: this.name };
 
     const data: number[] = [];
     this.positions = new Float32Array(n * 3);
@@ -103,8 +129,8 @@ export class Quiver3DLayer implements Layer3D {
       if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
     };
     for (let i = 0; i < n; i++) {
-      const bx = opts.x[i]!, by = opts.y[i]!, bz = opts.z[i]!;
-      const ux = opts.u[i]! * scale, uy = opts.v[i]! * scale, uz = opts.w[i]! * scale;
+      const bx = x[i]!, by = y[i]!, bz = z[i]!;
+      const ux = u[i]! * scale, uy = v[i]! * scale, uz = w[i]! * scale;
       const tx = bx + ux, ty = by + uy, tz = bz + uz;
       this.positions[i * 3] = bx; this.positions[i * 3 + 1] = by; this.positions[i * 3 + 2] = bz;
       const c = cmap ? cmap((mag(i) - lo) / span) : [base[0], base[1], base[2]] as [number, number, number];
@@ -131,18 +157,22 @@ export class Quiver3DLayer implements Layer3D {
     this.vertCount = data.length / 6;
     this.b3 = { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] };
 
-    this.vao = gl.createVertexArray()!;
-    this.buffer = gl.createBuffer()!;
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
     gl.bindVertexArray(null);
+  }
 
-    this.uniforms = uniformLocations(gl, this.program, ["uMVP"]);
+  /** Stream a new vector field (arrows rebuilt). Call `plot.refresh()` after. */
+  setData(
+    x: ArrayLike<number>, y: ArrayLike<number>, z: ArrayLike<number>,
+    u: ArrayLike<number>, v: ArrayLike<number>, w: ArrayLike<number>,
+  ): void {
+    this.build(x, y, z, u, v, w);
   }
 
   bounds3() { return this.vertCount ? this.b3 : null; }

@@ -1,9 +1,9 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { earcut } from "../geo/earcut.js";
 import { parseColor } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
-import type { Color, Range } from "../types.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 /** A solid-fill program driven by a per-vertex color triangle soup (shared with pie). */
@@ -56,6 +56,8 @@ export interface PatchesOptions {
   domain?: Range;
   /** Fill opacity, 0..1. Default 1. */
   opacity?: number;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
   name?: string;
   yAxis?: string;
 }
@@ -82,6 +84,12 @@ export class PatchesLayer implements Layer {
   private yRef = 0;
   private xBounds: Range = [0, 0];
   private yBounds: Range = [0, 0];
+  // Captured styling so streaming reuses it.
+  private defRgba: Color;
+  private opacity: number;
+  private cmap: ReturnType<typeof colormap> | null;
+  private domainOpt: Range | undefined;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: PatchesOptions) {
     this.id = `patches-${counter++}`;
@@ -90,16 +98,43 @@ export class PatchesLayer implements Layer {
     this.name = opts.name ?? this.id;
     this.yAxis = opts.yAxis ?? "y";
     const defColor = opts.color ?? "#3b82f6";
-    const defRgba = Array.isArray(defColor) ? (defColor as Color) : parseColor(defColor as string);
+    this.defRgba = Array.isArray(defColor) ? (defColor as Color) : parseColor(defColor as string);
     this.colorCss = typeof defColor === "string" ? defColor : "#3b82f6";
-    const opacity = opts.opacity ?? 1;
+    this.opacity = opts.opacity ?? 1;
+    this.cmap = opts.colormap ? colormap(opts.colormap) : null;
+    this.domainOpt = opts.domain;
+    this.usage = bufferUsage(gl, opts.renderType);
+
+    const { positions, colors } = this.build(opts.patches);
+
+    const vao = gl.createVertexArray()!;
+    this.vao = vao;
+    gl.bindVertexArray(vao);
+    const posBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, this.usage);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    const colBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    this.buffers = [posBuf, colBuf];
+
+    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS]);
+  }
+
+  /** Triangulate the patches and recompute refs/bounds/vertexCount into position/color arrays. */
+  private build(patches: Patch[]): { positions: Float32Array; colors: Float32Array } {
+    const defRgba = this.defRgba, opacity = this.opacity, cmap = this.cmap;
 
     // Colormap domain (choropleth), if coloring by value.
-    const cmap = opts.colormap ? colormap(opts.colormap) : null;
-    let lo = opts.domain?.[0] ?? Infinity;
-    let hi = opts.domain?.[1] ?? -Infinity;
-    if (cmap && !opts.domain) {
-      for (const patch of opts.patches) {
+    let lo = this.domainOpt?.[0] ?? Infinity;
+    let hi = this.domainOpt?.[1] ?? -Infinity;
+    if (cmap && !this.domainOpt) {
+      for (const patch of patches) {
         const v = patch.value;
         if (v == null) continue;
         if (v < lo) lo = v;
@@ -109,7 +144,9 @@ export class PatchesLayer implements Layer {
     const span = hi - lo || 1;
 
     // First vertex of the first non-empty patch anchors the float32 reference.
-    for (const patch of opts.patches) {
+    this.xRef = 0;
+    this.yRef = 0;
+    for (const patch of patches) {
       if (patch.x.length > 0) {
         this.xRef = patch.x[0]!;
         this.yRef = patch.y[0]!;
@@ -121,7 +158,7 @@ export class PatchesLayer implements Layer {
     const colors: number[] = [];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
-    for (const patch of opts.patches) {
+    for (const patch of patches) {
       const n = Math.min(patch.x.length, patch.y.length);
       if (n < 3) continue;
       // Resolve this patch's fill color.
@@ -161,24 +198,17 @@ export class PatchesLayer implements Layer {
     this.vertexCount = positions.length / 2;
     this.xBounds = minX <= maxX ? [minX, maxX] : [0, 0];
     this.yBounds = minY <= maxY ? [minY, maxY] : [0, 0];
+    return { positions: new Float32Array(positions), colors: new Float32Array(colors) };
+  }
 
-    const vao = gl.createVertexArray()!;
-    this.vao = vao;
-    gl.bindVertexArray(vao);
-    const posBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    const colBuf = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
-    this.buffers = [posBuf, colBuf];
-
-    this.uniforms = uniformLocations(gl, this.program, [...TRANSFORM_UNIFORMS]);
+  /** Replace the patches and re-upload (for streaming). */
+  setData(patches: Patch[]): void {
+    const gl = this.gl;
+    const { positions, colors } = this.build(patches);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[0]!);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[1]!);
+    gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
   }
 
   bounds() {

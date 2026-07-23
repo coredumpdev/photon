@@ -1,6 +1,6 @@
 import { parseColor, toColorCss } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Color } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Color, RenderType } from "../types.js";
 import type { Bounds3, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -10,6 +10,8 @@ export interface Line3DOptions {
   z: ArrayLike<number>;
   color?: string | Color;
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 const VERT = /* glsl */ `#version 300 es
@@ -47,11 +49,13 @@ export class Line3DLayer implements Layer3D {
   private color: Color;
   private b3: Bounds3;
   private positions: Float32Array;
+  private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: Line3DOptions) {
     this.id = `line3d-${counter++}`;
     this.gl = gl;
     this.program = getProgram(gl);
+    this.usage = bufferUsage(gl, opts.renderType);
     this.name = opts.name;
     const ci = opts.color ?? "#38bdf8";
     this.color = Array.isArray(ci) ? (ci as Color) : parseColor(ci as string);
@@ -75,7 +79,7 @@ export class Line3DLayer implements Layer3D {
     this.buffer = gl.createBuffer()!;
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, data, this.usage);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
@@ -103,7 +107,7 @@ export class Line3DLayer implements Layer3D {
     }
     this.b3 = { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] };
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.DYNAMIC_DRAW);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
   }
 
   draw(gl: WebGL2RenderingContext, mvp: Mat4): void {

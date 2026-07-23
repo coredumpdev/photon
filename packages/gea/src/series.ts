@@ -18,6 +18,7 @@ import type {
   Line3DOptions,
   LineLayer,
   LineOptions,
+  OhlcOptions,
   PatchesOptions,
   PieOptions,
   Plot as CorePlot,
@@ -60,6 +61,7 @@ export type SeriesSpec =
   | ({ type: "stem" } & StemOptions)
   | ({ type: "quiver" } & QuiverOptions)
   | ({ type: "candlestick" } & CandlestickOptions)
+  | ({ type: "ohlc" } & OhlcOptions)
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
@@ -85,6 +87,7 @@ export function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "stem": return p.addStem(s);
     case "quiver": return p.addQuiver(s);
     case "candlestick": return p.addCandlestick(s);
+    case "ohlc": return p.addOhlc(s);
     case "pie": return p.addPie(s);
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);

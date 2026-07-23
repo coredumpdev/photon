@@ -1,177 +1,401 @@
-import { Component } from "@geajs/core"
-import { Plot, PolarPlot, type SeriesSpec } from "@photonviz/gea"
+import { Component } from "@geajs/core";
+import { linkX } from "@photonviz/core";
+import { Plot, PolarPlot, Plot3D } from "@photonviz/gea";
+import {
+  addMap, addGeoJson, xyzVectorSource, pmtilesSource, protomapsStyle,
+  worldToLonLat, lonLatToWorld,
+} from "@photonviz/map";
+// The world basemap is embedded in the library (Natural Earth 10m) — no fetch.
+import { worldCountries } from "@photonviz/map/world";
 
-// Seeded RNG so every reload draws identical synthetic data.
-function makeRng(seed: number) {
-  let s = seed
-  const rand = () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff
-    return s / 0x7fffffff
-  }
-  const gaussian = (m: number, sd: number) =>
-    m + sd * Math.sqrt(-2 * Math.log(rand() || 1e-9)) * Math.cos(2 * Math.PI * (rand() || 1e-9))
-  return { rand, gaussian }
-}
+import { makeRng, jitter, businessDays } from "./data";
+import { buildStatic } from "./static-catalog";
+import { buildDynamic, type Updater } from "./dynamic-catalog";
 
-const { rand, gaussian } = makeRng(42)
+// Catalogs are built once at load. buildStatic() eagerly materializes all the
+// static data; buildDynamic() only builds the streaming *setup* closures — each
+// chart's heavy data is generated lazily inside onReady when the panel mounts.
+const S = buildStatic();
+const D = buildDynamic();
 
-// Decaying sine line.
-const lx = new Float64Array(400)
-const ly = new Float64Array(400)
-for (let i = 0; i < 400; i++) {
-  const t = (i / 400) * 12
-  lx[i] = t
-  ly[i] = Math.sin(t) * Math.exp(-t / 8)
-}
+const STATIC_COUNT = S.plots2D.length + S.polars.length + S.plots3D.length;
+const DYNAMIC_COUNT = D.plots2D.length + D.polars.length + D.plots3D.length + 2; // + linked finance
+const MAPS_COUNT = 3;
 
-// Scatter markers — one series per glyph.
-const shapes = ["circle", "square", "triangle", "diamond", "cross", "plus"] as const
-const mkColors = ["#38bdf8", "#f472b6", "#a3e635", "#fbbf24", "#a78bfa", "#34d399"]
-const mkX = Float64Array.from({ length: 12 }, (_, i) => i)
-const markerSeries: SeriesSpec[] = shapes.map((mk, r) => ({
-  type: "scatter",
-  x: mkX,
-  y: Float64Array.from({ length: 12 }, () => shapes.length - 1 - r),
-  size: 13,
-  marker: mk,
-  color: mkColors[r],
-  name: mk,
-}))
-
-// Categorical grouped bars + a target line.
-const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
-const idx = Float64Array.from(months, (_, i) => i)
-const revenue = Float64Array.from(months, (_, i) => 30 + i * 9 + rand() * 12)
-const target = Float64Array.from(months, () => 70 + rand() * 12)
-
-// Candlestick OHLC.
-const cx = new Float64Array(40)
-const co = new Float64Array(40)
-const ch = new Float64Array(40)
-const cl = new Float64Array(40)
-const cc = new Float64Array(40)
-let price = 100
-for (let i = 0; i < 40; i++) {
-  const o = price
-  const c = o + gaussian(0, 2.2)
-  cx[i] = i
-  co[i] = o
-  cc[i] = c
-  ch[i] = Math.max(o, c) + Math.abs(gaussian(0, 1.1))
-  cl[i] = Math.min(o, c) - Math.abs(gaussian(0, 1.1))
-  price = c
-}
-
-// Patches choropleth grid.
-const patchList: { x: number[]; y: number[]; value: number }[] = []
-for (let r = 0; r < 4; r++) {
-  for (let c = 0; c < 6; c++) {
-    const j = () => (rand() - 0.5) * 0.22
-    patchList.push({
-      x: [c + j(), c + 1 + j(), c + 1 + j(), c + j()],
-      y: [r + j(), r + j(), r + 1 + j(), r + 1 + j()],
-      value: Math.sin(c * 0.7) + Math.cos(r * 0.9) + rand() * 0.4,
-    })
+// ============================================================================
+// Static tab — one panel per chart via the config-driven Gea components. Single
+// wrapper series render declaratively (`series`); composite charts the wrapper
+// can't express as one series carry an imperative `setup` run through onReady.
+// ============================================================================
+class StaticTab extends Component {
+  template() {
+    return (
+      <div class="grid">
+        {S.plots2D.map((c) => (
+          <div class="panel" key={`s2-${c.title}`}>
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart">
+              <Plot
+                options={c.options}
+                yAxes={c.yAxes}
+                series={c.series}
+                annotations={c.annotations}
+                onReady={c.setup ? (p) => c.setup!(p) : undefined}
+              />
+            </div>
+          </div>
+        ))}
+        {S.polars.map((c) => (
+          <div class="panel" key={`sp-${c.title}`}>
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart"><PolarPlot options={c.options} series={c.series} /></div>
+          </div>
+        ))}
+        {S.plots3D.map((c) => (
+          <div class="panel" key={`s3-${c.title}`}>
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart">
+              <Plot3D options={c.options} layers={c.layers} onReady={c.setup ? (p) => c.setup!(p) : undefined} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 }
 
-// Polar rose + blips.
-const pTheta = Float64Array.from({ length: 240 }, (_, i) => (i / 239) * Math.PI * 2)
-const pR = Float64Array.from(pTheta, (th) => Math.abs(Math.cos(3 * th)))
-const bTheta = Float64Array.from({ length: 14 }, () => rand() * Math.PI * 2)
-const bR = Float64Array.from({ length: 14 }, () => 0.2 + rand() * 0.75)
+// ============================================================================
+// Dynamic tab — the same catalog animated. Each panel's onReady grabs the core
+// plot, adds renderType:"dynamic" layers and registers an updater. A single rAF
+// loop drives every updater and repaints the FPS badges (top-left over charts).
+// The updaters live in a module-scoped array (not a reactive field) so the tight
+// loop touches raw plots/layers, never proxied ones.
+// ============================================================================
+let dynUpdaters: Updater[] = [];
 
-const HIDDEN_AXES = { x: { ticks: [], showAxisLine: false }, y: { ticks: [], showAxisLine: false } }
+// Linked-finance shared state (built lazily as both panels' onReady fire).
+const FIN_TIMES = businessDays(60, Date.UTC(2024, 0, 1));
+const FIN_OPTS_PRICE = { theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times: FIN_TIMES } }, showToolbar: false };
+const FIN_OPTS_VOL = { theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times: FIN_TIMES }, y: { domain: [0, 80] } }, showToolbar: false };
+let fin: any = null;
 
+class DynamicTab extends Component {
+  declare props: { active: boolean };
+
+  fps = 0; // reactive — bound by every FPS badge
+
+  private raf = 0;
+  private frame = 0;
+  private fpsAvg = 0;
+  private lastNow = 0;
+  private fpsPaint = 0;
+
+  created(): void {
+    dynUpdaters = [];
+    fin = null;
+  }
+
+  /** onReady for a catalog panel: run its setup, keep the returned updater. */
+  register(setup: (p: any) => Updater, plot: any): void {
+    dynUpdaters.push(setup(plot));
+  }
+
+  // --- Linked finance: candlesticks + volume, joined via linkX ---------------
+  private finInit() {
+    if (fin) return fin;
+    const { rand, gaussian } = makeRng(7);
+    const N = 60;
+    const idx = Float64Array.from({ length: N }, (_, i) => i);
+    const o = new Float64Array(N), h = new Float64Array(N), l = new Float64Array(N), c = new Float64Array(N), vol = new Float64Array(N);
+    let price = 100;
+    for (let i = 0; i < N; i++) {
+      const open = price, close = open + gaussian(0, 2);
+      o[i] = open; c[i] = close;
+      h[i] = Math.max(open, close) + Math.abs(gaussian(0, 1));
+      l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1));
+      vol[i] = 20 + Math.abs(close - open) * 6 + rand() * 10;
+      price = close;
+    }
+    fin = { N, idx, o, h, l, c, vol, rand, priceP: null, volP: null, cs: null, volBar: null };
+    return fin;
+  }
+
+  onFinancePrice(plot: any): void {
+    const f = this.finInit();
+    f.priceP = plot;
+    f.cs = plot.addCandlestick({ x: f.idx, open: f.o, high: f.h, low: f.l, close: f.c, renderType: "dynamic" });
+    this.finReady();
+  }
+
+  onFinanceVol(plot: any): void {
+    const f = this.finInit();
+    f.volP = plot;
+    f.volBar = plot.addBar({ x: f.idx, y: f.vol, width: 0.7, color: "#38bdf8", renderType: "dynamic" });
+    this.finReady();
+  }
+
+  private finReady(): void {
+    const f = fin;
+    if (!f || !f.priceP || !f.volP) return;
+    linkX([f.priceP, f.volP]);
+    const { N, idx, o, h, l, c, vol } = f;
+    let curOpen = c[N - 1], curClose = curOpen, hi = curOpen, lo = curOpen, curVol = vol[N - 1], sinceClose = 0;
+    dynUpdaters.push(() => {
+      curClose += f.rand() * 2 - 1; hi = Math.max(hi, curClose); lo = Math.min(lo, curClose);
+      curVol = Math.max(5, curVol + jitter() * 3);
+      f.cs.updateLast({ x: N - 1, open: curOpen, high: hi, low: lo, close: curClose });
+      vol[N - 1] = curVol; f.volBar.setData(idx, vol);
+      f.priceP.render(); f.volP.render();
+      if (++sinceClose > 60) {
+        sinceClose = 0;
+        for (let i = 0; i < N - 1; i++) { o[i] = o[i + 1]; h[i] = h[i + 1]; l[i] = l[i + 1]; c[i] = c[i + 1]; vol[i] = vol[i + 1]; }
+        curOpen = curClose; o[N - 1] = curOpen; h[N - 1] = curOpen; l[N - 1] = curOpen; c[N - 1] = curOpen; hi = lo = curOpen;
+        curVol = 20 + f.rand() * 10; vol[N - 1] = curVol;
+        f.cs.setData({ x: idx, open: o, high: h, low: l, close: c });
+      }
+    });
+  }
+
+  onAfterRender(): void {
+    const loop = (now: number): void => {
+      this.frame++;
+      const t = this.frame / 60;
+      if (this.props.active) {
+        for (const u of dynUpdaters) u(t);
+        if (this.lastNow > 0) {
+          const dt = now - this.lastNow;
+          if (dt > 0) { const inst = 1000 / dt; this.fpsAvg = this.fpsAvg > 0 ? this.fpsAvg * 0.9 + inst * 0.1 : inst; }
+        }
+        if (now - this.fpsPaint > 250) { this.fpsPaint = now; this.fps = Math.round(this.fpsAvg); }
+      }
+      this.lastNow = now;
+      this.raf = requestAnimationFrame(loop);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+
+  dispose(): void {
+    cancelAnimationFrame(this.raf);
+    dynUpdaters = [];
+    fin = null;
+    super.dispose();
+  }
+
+  template() {
+    return (
+      <div class="grid">
+        {D.plots2D.map((c) => (
+          <div class="panel" key={`d2-${c.title}`}>
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart">
+              <div class="fps">{this.fps} fps</div>
+              <Plot options={c.options} onReady={(p) => this.register(c.setup, p)} />
+            </div>
+          </div>
+        ))}
+        {D.polars.map((c) => (
+          <div class="panel" key={`dp-${c.title}`}>
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart">
+              <div class="fps">{this.fps} fps</div>
+              <PolarPlot options={c.options} onReady={(p) => this.register(c.setup, p)} />
+            </div>
+          </div>
+        ))}
+        {D.plots3D.map((c) => (
+          <div class="panel" key={`d3-${c.title}`}>
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart">
+              <div class="fps">{this.fps} fps</div>
+              <Plot3D options={c.options} onReady={(p) => this.register(c.setup, p)} />
+            </div>
+          </div>
+        ))}
+
+        {/* Linked finance dashboard — price + volume joined via linkX. */}
+        <div class="panel" key="fin-price">
+          <h2>Linked finance · price<span> — candlesticks · ordinal-time</span></h2>
+          <div class="chart">
+            <div class="fps">{this.fps} fps</div>
+            <Plot options={FIN_OPTS_PRICE} onReady={(p) => this.onFinancePrice(p)} />
+          </div>
+        </div>
+        <div class="panel" key="fin-vol">
+          <h2>Linked finance · volume<span> — linkX-ed pane</span></h2>
+          <div class="chart">
+            <div class="fps">{this.fps} fps</div>
+            <Plot options={FIN_OPTS_VOL} onReady={(p) => this.onFinanceVol(p)} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ============================================================================
+// Maps tab — offline vector basemaps. No FPS badges. Refs live module-scoped so
+// click-picking touches raw plots/layers.
+// ============================================================================
+let mapRefs: any = {};
+
+const readout = (x: number, y: number) => {
+  const [lon, lat] = worldToLonLat(x, y);
+  return [{ label: "lon", value: `${lon.toFixed(2)}°` }, { label: "lat", value: `${lat.toFixed(2)}°` }];
+};
+
+const GEO_OPTS = { theme: "dark" as const, showToolbar: true, equalAspect: true, boundedPan: true, hoverReadout: readout };
+const BASEMAP_OPTS = { theme: "dark" as const, showToolbar: true, equalAspect: true, crosshair: true, pick: "xy" as const, boundedPan: true, hoverReadout: readout };
+const PM_OPTS = { theme: "dark" as const, showToolbar: true, equalAspect: true, boundedPan: true, crosshair: true, hoverReadout: readout };
+
+class MapsTab extends Component {
+  geoCap = "© Natural Earth (public domain) · embedded";
+  mapCap = "© MapLibre demo tiles";
+  pmCap = "no network — pick a .pmtiles file →";
+
+  created(): void { mapRefs = {}; }
+
+  // 1) Offline GeoJSON world (Natural Earth 10m embedded in the library).
+  onGeo(plot: any): void {
+    const style = {
+      background: [0.05, 0.09, 0.16, 1],
+      paint(_layer: string, type: string) {
+        if (type === "polygon") return { kind: "fill", color: [0.16, 0.2, 0.26, 1], outline: [0.5, 0.58, 0.68, 1], outlineWidth: 1.2 };
+        return { kind: "line", color: [0.5, 0.58, 0.68, 1], width: 1.2 };
+      },
+    };
+    mapRefs.geoPlot = plot;
+    mapRefs.geoLayer = addGeoJson(plot, { geojson: worldCountries, layer: "admin", style });
+  }
+
+  onGeoClick(e: MouseEvent): void {
+    const { geoPlot, geoLayer } = mapRefs;
+    if (!geoPlot || !geoLayer) return;
+    const d = geoPlot.dataAt(e.clientX, e.clientY);
+    if (!d) return;
+    const hit = geoLayer.pickFeature(d.x, d.y);
+    this.geoCap = hit ? String(hit.properties.ADMIN ?? hit.properties.NAME ?? "—") : "© Natural Earth · embedded";
+  }
+
+  // 2) Vector basemap — keyless MapLibre demo tiles + city overlay.
+  onBasemap(plot: any): void {
+    const source = xyzVectorSource({ url: "https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf", attribution: "© MapLibre demo tiles", maxZoom: 5 });
+    const style = {
+      background: [0.05, 0.09, 0.16, 1],
+      paint(layer: string, type: string) {
+        if (layer === "countries") return type === "polygon" ? { kind: "fill", color: [0.16, 0.2, 0.26, 1] } : { kind: "line", color: [0.3, 0.36, 0.44, 1], width: 1 };
+        if (layer === "geolines") return { kind: "line", color: [0.2, 0.25, 0.32, 1], width: 1 };
+        return null;
+      },
+    };
+    const map = addMap(plot, { source, style, bbox: [-175, -58, 190, 78] });
+    const cities: Array<[string, number, number]> = [
+      ["Istanbul", 28.98, 41.01], ["Tokyo", 139.69, 35.69], ["New York", -74.0, 40.71],
+      ["São Paulo", -46.63, -23.55], ["Sydney", 151.21, -33.87], ["Cairo", 31.24, 30.04],
+    ];
+    const wx: number[] = [], wy: number[] = [];
+    for (const [, lon, lat] of cities) { const [x, y] = lonLatToWorld(lon, lat); wx.push(x); wy.push(y); }
+    plot.addScatter({ x: wx, y: wy, size: 8, color: "#f472b6", labels: cities.map(([name]) => name) });
+    this.mapCap = map.attribution;
+  }
+
+  // 3) PMTiles (offline) — guarded: only builds a map once the user picks a file.
+  onPm(plot: any): void { mapRefs.pmPlot = plot; }
+
+  onFile(e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file || !mapRefs.pmPlot) return;
+    if (mapRefs.pmMap) { mapRefs.pmMap.dispose(); mapRefs.pmMap = null; }
+    const source = pmtilesSource({ blob: file, attribution: `local: ${file.name}` });
+    mapRefs.pmMap = addMap(mapRefs.pmPlot, { source, style: protomapsStyle("dark") });
+    this.pmCap = `local: ${file.name}`;
+  }
+
+  onPmClick(e: MouseEvent): void {
+    const { pmPlot, pmMap } = mapRefs;
+    if (!pmPlot || !pmMap) return;
+    const d = pmPlot.dataAt(e.clientX, e.clientY);
+    if (!d) return;
+    const hit = pmMap.pickFeature(d.x, d.y);
+    if (hit) this.pmCap = `${hit.layer}: ${JSON.stringify(hit.properties)}`;
+  }
+
+  template() {
+    return (
+      <div class="grid">
+        <div class="panel">
+          <h2>GeoJSON world<span> — offline · Natural Earth 10m</span></h2>
+          <div class="chart" click={(e: MouseEvent) => this.onGeoClick(e)}>
+            <Plot options={GEO_OPTS} onReady={(p) => this.onGeo(p)} />
+            <div class="cap">{this.geoCap}</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Vector basemap<span> — addMap · MVT · city overlay</span></h2>
+          <div class="chart">
+            <Plot options={BASEMAP_OPTS} onReady={(p) => this.onBasemap(p)} />
+            <div class="cap">{this.mapCap}</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>PMTiles (offline)<span> — pick a local .pmtiles file</span></h2>
+          <div class="chart" click={(e: MouseEvent) => this.onPmClick(e)}>
+            <Plot options={PM_OPTS} onReady={(p) => this.onPm(p)} />
+            <div class="cap">{this.pmCap}</div>
+            <input class="file" type="file" accept=".pmtiles" change={(e: Event) => this.onFile(e)} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ============================================================================
+// App shell — three tabs, one grid each. Static is default and built on load;
+// Dynamic and Maps mount LAZILY the first time their tab is activated so their
+// WebGL charts are built while visible (a plot built under display:none sizes
+// to 0). Built tabs stay mounted (just hidden) so switching back is instant.
+// ============================================================================
 export default class App extends Component {
+  activeTab: "static" | "dynamic" | "maps" = "static";
+  builtDynamic = false;
+  builtMaps = false;
+
+  activate(name: "static" | "dynamic" | "maps"): void {
+    // Make the tab visible first, then mount its charts on the next frame — so a
+    // lazily-built plot never initializes while its section is still display:none
+    // (a WebGL plot built hidden sizes to 0).
+    this.activeTab = name;
+    if (name === "dynamic" && !this.builtDynamic) requestAnimationFrame(() => { this.builtDynamic = true; });
+    if (name === "maps" && !this.builtMaps) requestAnimationFrame(() => { this.builtMaps = true; });
+  }
+
   template() {
     return (
       <main>
-        <h1>Photon · Gea wrapper — gallery</h1>
-        <div class="grid">
-          <div class="panel">
-            <h2>Line (decaying sine)</h2>
-            <div class="chart">
-              <Plot options={{ theme: "dark" }} series={[{ type: "line", x: lx, y: ly, color: "#38bdf8", width: 2 }]} />
-            </div>
-          </div>
+        <header>
+          <h1><b>Photon</b> · Gea — WebGL2 chart gallery</h1>
+          <p>Config-driven Gea components over one shared WebGL2 context. <b>Static</b>: the full chart catalog. <b>Dynamic</b>: the same catalog streaming live at 60fps, each panel with an FPS badge. <b>Maps</b>: offline vector basemaps.</p>
+        </header>
 
-          <div class="panel">
-            <h2>Scatter markers (6 glyphs)</h2>
-            <div class="chart">
-              <Plot
-                options={{ theme: "dark", showToolbar: false, scales: { x: { domain: [-1, 12] }, y: { domain: [-1, 6] } } }}
-                series={markerSeries}
-              />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Grouped bars + line (categorical)</h2>
-            <div class="chart">
-              <Plot
-                options={{
-                  theme: "dark",
-                  legend: { position: "top-left" },
-                  scales: { x: { type: "categorical", factors: months }, y: { domain: [0, 110] } },
-                  showToolbar: false,
-                }}
-                series={[
-                  { type: "bar", x: idx, y: revenue, width: 0.55, color: "#38bdf8", name: "revenue" },
-                  { type: "line", x: idx, y: target, color: "#f59e0b", width: 2.5, name: "target" },
-                ]}
-              />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Pie (viridis)</h2>
-            <div class="chart">
-              <Plot
-                options={{ theme: "dark", equalAspect: true, showToolbar: false, hover: false, axes: HIDDEN_AXES }}
-                series={[{ type: "pie", values: [35, 25, 20, 12, 8], colormap: "viridis" }]}
-              />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Donut</h2>
-            <div class="chart">
-              <Plot
-                options={{ theme: "dark", equalAspect: true, showToolbar: false, hover: false, axes: HIDDEN_AXES }}
-                series={[{ type: "pie", values: [8, 6, 5, 4, 3, 2], innerRadius: 0.55 }]}
-              />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Patches (choropleth)</h2>
-            <div class="chart">
-              <Plot options={{ theme: "dark", showToolbar: false }} series={[{ type: "patches", patches: patchList, colormap: "plasma" }]} />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Candlestick (OHLC)</h2>
-            <div class="chart">
-              <Plot options={{ theme: "dark" }} series={[{ type: "candlestick", x: cx, open: co, high: ch, low: cl, close: cc }]} />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Polar (line + scatter)</h2>
-            <div class="chart">
-              <PolarPlot
-                options={{ theme: "dark", maxRadius: 1 }}
-                series={[
-                  { type: "line", theta: pTheta, r: pR, color: "#a78bfa", width: 2, closed: true },
-                  { type: "scatter", theta: bTheta, r: bR, color: "#f472b6", size: 6 },
-                ]}
-              />
-            </div>
-          </div>
+        <div class="tabs">
+          <button class={this.activeTab === "static" ? "tab active" : "tab"} click={() => this.activate("static")}>Static<span class="count">{STATIC_COUNT}</span></button>
+          <button class={this.activeTab === "dynamic" ? "tab active" : "tab"} click={() => this.activate("dynamic")}>Dynamic<span class="count">{DYNAMIC_COUNT}</span></button>
+          <button class={this.activeTab === "maps" ? "tab active" : "tab"} click={() => this.activate("maps")}>Maps<span class="count">{MAPS_COUNT}</span></button>
         </div>
+        <div class="tabbar-line"></div>
+
+        <section class={this.activeTab === "static" ? "tabpanel active" : "tabpanel"}>
+          <StaticTab />
+        </section>
+        <section class={this.activeTab === "dynamic" ? "tabpanel active" : "tabpanel"}>
+          {this.builtDynamic ? <DynamicTab active={this.activeTab === "dynamic"} /> : null}
+        </section>
+        <section class={this.activeTab === "maps" ? "tabpanel active" : "tabpanel"}>
+          {this.builtMaps ? <MapsTab /> : null}
+        </section>
       </main>
-    )
+    );
   }
 }

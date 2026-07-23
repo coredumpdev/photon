@@ -1,3 +1,10 @@
+import type { RenderType } from "../types.js";
+
+/** Map a layer's {@link RenderType} to a WebGL buffer-usage hint (default STATIC_DRAW). */
+export function bufferUsage(gl: WebGL2RenderingContext, renderType?: RenderType): number {
+  return renderType === "dynamic" ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW;
+}
+
 /** Compile a single shader stage, throwing with the GLSL log on failure. */
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);

@@ -1,7 +1,7 @@
 import { colormap, type ColormapName } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
-import { createProgram, uniformLocations } from "../gl/program.js";
-import type { Color, Range } from "../types.js";
+import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
+import type { Color, Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -18,6 +18,8 @@ export interface Bar3DOptions {
   /** Color bars via a colormap (over `values`, default the heights). */
   colorBy?: { values?: ArrayLike<number>; colormap?: ColormapName; domain?: Range };
   name?: string;
+  /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
+  renderType?: RenderType;
 }
 
 // A unit cube: y in [0,1], x/z in [-0.5,0.5], with per-face normals.
@@ -94,12 +96,17 @@ export class Bar3DLayer implements Layer3D {
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject;
   private buffers: WebGLBuffer[] = [];
+  private instBuf!: WebGLBuffer;
   private uniforms: Record<string, WebGLUniformLocation | null>;
-  private count: number;
-  private width: number;
-  private b3: Bounds3;
+  private count!: number;
+  private width!: number;
+  private b3!: Bounds3;
   private cInfo: ColorInfo | null = null;
-  private positions: Float32Array;
+  private positions!: Float32Array;
+  private base: Color;
+  private optWidth?: number;
+  private colorByOpt?: Bar3DOptions["colorBy"];
+  private usage: number;
   private lightDir: [number, number, number] = [0.5, 1, 0.35];
   private ambient = 0.35;
 
@@ -108,43 +115,13 @@ export class Bar3DLayer implements Layer3D {
     this.gl = gl;
     this.program = getProgram(gl);
     this.name = opts.name;
-    const n = Math.min(opts.x.length, opts.y.length, opts.z.length);
-    this.count = n;
-    const dx = medianSpacing(opts.x, n), dz = medianSpacing(opts.z, n);
-    this.width = opts.width ?? Math.min(dx, dz) * 0.7;
-
-    const base = opts.color != null
+    this.usage = bufferUsage(gl, opts.renderType);
+    this.optWidth = opts.width;
+    this.colorByOpt = opts.colorBy;
+    this.base = opts.color != null
       ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
       : [0.24, 0.55, 0.96, 1] as Color;
-    const cvals = opts.colorBy?.values ?? (opts.colorBy ? opts.y : null);
-    const cmap = opts.colorBy ? colormap(opts.colorBy.colormap ?? "viridis") : null;
-    let lo = opts.colorBy?.domain?.[0] ?? Infinity;
-    let hi = opts.colorBy?.domain?.[1] ?? -Infinity;
-    if (cmap && cvals && !opts.colorBy?.domain) {
-      for (let i = 0; i < n; i++) { const v = cvals[i]!; if (v < lo) lo = v; if (v > hi) hi = v; }
-    }
-    const span = (hi - lo) || 1;
-    if (cmap) this.cInfo = { colormap: opts.colorBy!.colormap ?? "viridis", domain: [lo, hi], label: opts.name };
-    else this.colorCss = opts.color != null && typeof opts.color === "string" ? opts.color : "#3b82f6";
-
-    // Instance buffer: base(2) + height(1) + color(3).
-    const inst = new Float32Array(n * 6);
-    this.positions = new Float32Array(n * 3); // bar tops, for hover picking
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = 0, maxY = 0;
-    const hw = this.width / 2;
-    for (let i = 0; i < n; i++) {
-      const x = opts.x[i]!, z = opts.z[i]!, h = opts.y[i]!;
-      inst[i * 6] = x; inst[i * 6 + 1] = z; inst[i * 6 + 2] = h;
-      this.positions[i * 3] = x; this.positions[i * 3 + 1] = h; this.positions[i * 3 + 2] = z;
-      let c: [number, number, number];
-      if (cmap && cvals) c = cmap((cvals[i]! - lo) / span);
-      else c = [base[0], base[1], base[2]];
-      inst[i * 6 + 3] = c[0]; inst[i * 6 + 4] = c[1]; inst[i * 6 + 5] = c[2];
-      if (x - hw < minX) minX = x - hw; if (x + hw > maxX) maxX = x + hw;
-      if (z - hw < minZ) minZ = z - hw; if (z + hw > maxZ) maxZ = z + hw;
-      if (h < minY) minY = h; if (h > maxY) maxY = h;
-    }
-    this.b3 = { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] };
+    if (!opts.colorBy) this.colorCss = opts.color != null && typeof opts.color === "string" ? opts.color : "#3b82f6";
 
     this.vao = gl.createVertexArray()!;
     gl.bindVertexArray(this.vao);
@@ -157,7 +134,6 @@ export class Bar3DLayer implements Layer3D {
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
     const instBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, inst, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 24, 0);
     gl.vertexAttribDivisor(2, 1);
@@ -169,8 +145,58 @@ export class Bar3DLayer implements Layer3D {
     gl.vertexAttribDivisor(4, 1);
     gl.bindVertexArray(null);
     this.buffers = [cubeBuf, instBuf];
+    this.instBuf = instBuf;
+
+    this.build(opts.x, opts.z, opts.y);
 
     this.uniforms = uniformLocations(gl, this.program, ["uMVP", "uWidth", "uLightDir", "uAmbient"]);
+  }
+
+  /** Build the per-bar instances (base/height/color) and (re)upload the instance buffer. */
+  private build(x: ArrayLike<number>, z: ArrayLike<number>, y: ArrayLike<number>): void {
+    const gl = this.gl;
+    const n = Math.min(x.length, y.length, z.length);
+    this.count = n;
+    const dx = medianSpacing(x, n), dz = medianSpacing(z, n);
+    this.width = this.optWidth ?? Math.min(dx, dz) * 0.7;
+
+    const base = this.base;
+    const cvals = this.colorByOpt?.values ?? (this.colorByOpt ? y : null);
+    const cmap = this.colorByOpt ? colormap(this.colorByOpt.colormap ?? "viridis") : null;
+    let lo = this.colorByOpt?.domain?.[0] ?? Infinity;
+    let hi = this.colorByOpt?.domain?.[1] ?? -Infinity;
+    if (cmap && cvals && !this.colorByOpt?.domain) {
+      for (let i = 0; i < n; i++) { const v = cvals[i]!; if (v < lo) lo = v; if (v > hi) hi = v; }
+    }
+    const span = (hi - lo) || 1;
+    if (cmap) this.cInfo = { colormap: this.colorByOpt!.colormap ?? "viridis", domain: [lo, hi], label: this.name };
+
+    // Instance buffer: base(2) + height(1) + color(3).
+    const inst = new Float32Array(n * 6);
+    this.positions = new Float32Array(n * 3); // bar tops, for hover picking
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = 0, maxY = 0;
+    const hw = this.width / 2;
+    for (let i = 0; i < n; i++) {
+      const px = x[i]!, pz = z[i]!, h = y[i]!;
+      inst[i * 6] = px; inst[i * 6 + 1] = pz; inst[i * 6 + 2] = h;
+      this.positions[i * 3] = px; this.positions[i * 3 + 1] = h; this.positions[i * 3 + 2] = pz;
+      let c: [number, number, number];
+      if (cmap && cvals) c = cmap((cvals[i]! - lo) / span);
+      else c = [base[0], base[1], base[2]];
+      inst[i * 6 + 3] = c[0]; inst[i * 6 + 4] = c[1]; inst[i * 6 + 5] = c[2];
+      if (px - hw < minX) minX = px - hw; if (px + hw > maxX) maxX = px + hw;
+      if (pz - hw < minZ) minZ = pz - hw; if (pz + hw > maxZ) maxZ = pz + hw;
+      if (h < minY) minY = h; if (h > maxY) maxY = h;
+    }
+    this.b3 = { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] };
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, inst, this.usage);
+  }
+
+  /** Stream new bar positions/heights (instances rebuilt). Call `plot.refresh()` after. */
+  setData(x: ArrayLike<number>, z: ArrayLike<number>, y: ArrayLike<number>): void {
+    this.build(x, z, y);
   }
 
   bounds3() { return this.count ? this.b3 : null; }

@@ -3,7 +3,48 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Photon Solid example</title>
+    <title>Photon · Solid — chart gallery</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #0b1020; color: #cbd5e1; }
+      header { padding: 16px 20px 4px; }
+      header h1 { margin: 0; font-size: 18px; }
+      header h1 b { color: #60a5fa; }
+      header p { margin: 4px 0 0; font-size: 13px; color: #94a3b8; }
+
+      /* Tab bar */
+      .tabs { display: flex; gap: 6px; padding: 12px 20px 0; }
+      .tab {
+        appearance: none; cursor: pointer;
+        font: 600 13px system-ui, sans-serif; color: #94a3b8;
+        background: #0e1526; border: 1px solid #1e293b; border-bottom: none;
+        padding: 8px 16px; border-radius: 8px 8px 0 0;
+      }
+      .tab:hover { color: #cbd5e1; }
+      .tab.active { color: #e2e8f0; background: #141d33; border-color: #334155; }
+      .tab .count { color: #475569; font-weight: 400; margin-left: 6px; }
+      .tab.active .count { color: #60a5fa; }
+      .tabbar-line { height: 1px; background: #1e293b; margin: 0 20px; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; padding: 16px 20px 40px; }
+      .panel { position: relative; border: 1px solid #1e293b; border-radius: 10px; background: #0e1526; overflow: hidden; }
+      .panel h2 { margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #e2e8f0; border-bottom: 1px solid #1e293b; }
+      .panel h2 span { color: #64748b; font-weight: 400; }
+      .chart { position: relative; height: 260px; }
+
+      /* FPS badge — absolute, top-left of a chart (Dynamic tab only). */
+      .fps {
+        position: absolute; top: 6px; left: 8px; z-index: 5; padding: 2px 7px; border-radius: 6px;
+        font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: #e2e8f0;
+        background: rgba(14,21,38,.7); border: 1px solid #1e293b; backdrop-filter: blur(3px);
+        pointer-events: none; font-variant-numeric: tabular-nums;
+      }
+      /* Map caption pinned bottom-right (attribution / hint). */
+      .cap { position: absolute; right: 6px; bottom: 6px; z-index: 5; padding: 2px 7px; border-radius: 6px;
+        font: 500 10.5px system-ui, sans-serif; color: #cbd5e1; background: rgba(14,21,38,.72); border: 1px solid #1e293b;
+        pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .panel input[type=file] { position: absolute; left: 8px; bottom: 8px; z-index: 6; font-size: 11px; color: #cbd5e1; max-width: 60%; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

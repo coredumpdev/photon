@@ -1,4 +1,4 @@
-export { Plot } from "./plot.js";
+export { Plot, linkX } from "./plot.js";
 export type {
   PlotOptions,
   AxisScaleOptions,
@@ -41,7 +41,9 @@ export type { StemOptions } from "./layers/stem.js";
 export { QuiverLayer } from "./layers/quiver.js";
 export type { QuiverOptions } from "./layers/quiver.js";
 export { CandlestickLayer } from "./layers/candlestick.js";
-export type { CandlestickOptions } from "./layers/candlestick.js";
+export type { CandlestickOptions, Candle, CandlestickData } from "./layers/candlestick.js";
+export { OhlcLayer } from "./layers/ohlc.js";
+export type { OhlcOptions } from "./layers/ohlc.js";
 export { PatchesLayer } from "./layers/patches.js";
 export type { PatchesOptions, Patch } from "./layers/patches.js";
 export { PieLayer } from "./layers/pie.js";
@@ -86,7 +88,7 @@ export { Axis } from "./axes/axis.js";
 export { autoTicks, defaultFormat, resolveTicks, withMinorTicks } from "./axes/ticks.js";
 
 // Scales
-export { LinearScale, LogScale, TimeScale, CategoricalScale, makeScale } from "./scales/scale.js";
+export { LinearScale, LogScale, TimeScale, CategoricalScale, OrdinalTimeScale, makeScale } from "./scales/scale.js";
 export type { Scale, ScaleType } from "./scales/scale.js";
 
 // Stats
@@ -94,7 +96,7 @@ export { histogram, boxStats, quantileSorted, kde, fft, spectrogram } from "./st
 export type { Histogram, BoxStats, Density, Spectrogram } from "./stats/index.js";
 
 // GL toolkit — building blocks for custom layers (used by @photonviz/map, etc.)
-export { createProgram, uniformLocations } from "./gl/program.js";
+export { createProgram, uniformLocations, bufferUsage } from "./gl/program.js";
 export {
   setTransformUniforms,
   TRANSFORM_GLSL,
@@ -114,4 +116,4 @@ export type { Theme, Layout, ResolvedAxisStyle, PlotTitleOptions } from "./rende
 export { parseColor, toColorCss } from "./gl/context.js";
 export type { AxisFrame } from "./gl/transform.js";
 
-export type { Tick, TicksSpec, AxisConfig, Dim, InteractionMode, Range, Bounds, Color } from "./types.js";
+export type { Tick, TicksSpec, AxisConfig, Dim, InteractionMode, Range, Bounds, Color, RenderType } from "./types.js";
