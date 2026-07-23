@@ -13,14 +13,16 @@
 // ===========================================================================
 import { ref } from "vue";
 import GalleryTab from "./GalleryTab.vue";
+import FinanceTab from "./FinanceTab.vue";
 import MapsTab from "./MapsTab.vue";
 
-type Tab = "static" | "dynamic" | "maps";
+type Tab = "static" | "dynamic" | "finance" | "maps";
 const tab = ref<Tab>("static");
 
 const tabs: Array<{ id: Tab; label: string; count: number }> = [
   { id: "static", label: "Static", count: 48 },
   { id: "dynamic", label: "Dynamic", count: 50 },
+  { id: "finance", label: "Finance", count: 8 },
   { id: "maps", label: "Maps", count: 3 },
 ];
 </script>
@@ -32,6 +34,7 @@ const tabs: Array<{ id: Tab; label: string; count: number }> = [
       Three tabs, one <code>@photonviz/vue</code> component tree.
       <b>Static</b>: the full catalog (hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit).
       <b>Dynamic</b>: the same catalog streaming live via <code>requestAnimationFrame</code>, each panel with an FPS badge.
+      <b>Finance</b>: Heikin-Ashi, Renko, Bollinger, volume profile, depth + a linkX-ed RSI/MACD dashboard.
       <b>Maps</b>: offline vector basemaps.
     </p>
   </header>
@@ -52,6 +55,7 @@ const tabs: Array<{ id: Tab; label: string; count: number }> = [
   <!-- Static is mounted while visible; Dynamic/Maps mount lazily on first show. -->
   <GalleryTab v-if="tab === 'static'" :dynamic="false" />
   <GalleryTab v-else-if="tab === 'dynamic'" :dynamic="true" />
+  <FinanceTab v-else-if="tab === 'finance'" />
   <MapsTab v-else-if="tab === 'maps'" />
 </template>
 

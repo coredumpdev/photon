@@ -21,14 +21,17 @@ import {
   Area,
   Bar,
   Bar3D,
+  Bollinger,
   Box,
   Candlestick,
   Contour,
   Contour3D,
+  Depth,
   ErrorBar,
   GeoJson,
   Graph,
   Heatmap,
+  HeikinAshi,
   Hexbin,
   Image,
   Isosurface,
@@ -46,11 +49,16 @@ import {
   PolarScatter,
   Quiver,
   Quiver3D,
+  Renko,
   Scatter,
   Stem,
   Surface,
   Volume,
+  VolumeProfile,
   YAxis,
+  firstFinite,
+  macd,
+  rsi,
   usePlot,
   usePlot3D,
   usePolarPlot,
@@ -2711,6 +2719,152 @@ function DynamicTab({ running }: { running: boolean }) {
 }
 
 // ============================================================================
+// FINANCE TAB — specialist finance charts built on the finance module
+// (indicators + transforms). All panels are STATIC (no FPS badges); the linked
+// dashboard is pan/zoom-synced with linkX. Mirrors vanilla's buildFinance().
+// ============================================================================
+type FinData = {
+  N: number;
+  times: number[];
+  idx: Float64Array;
+  o: Float64Array;
+  h: Float64Array;
+  l: Float64Array;
+  c: Float64Array;
+  vol: Float64Array;
+  bids: [number, number][];
+  asks: [number, number][];
+};
+
+function useFinanceData(): FinData {
+  return useMemo(() => {
+    const { rand, gaussian } = makeRng(42);
+    const N = 90;
+    const times = businessDays(N, Date.UTC(2024, 0, 1));
+    const idx = Float64Array.from({ length: N }, (_, i) => i);
+    const o = new Float64Array(N);
+    const h = new Float64Array(N);
+    const l = new Float64Array(N);
+    const c = new Float64Array(N);
+    const vol = new Float64Array(N);
+    let price = 100;
+    for (let i = 0; i < N; i++) {
+      const open = price;
+      const close = open + gaussian(0, 2.2);
+      o[i] = open;
+      c[i] = close;
+      h[i] = Math.max(open, close) + Math.abs(gaussian(0, 1.2));
+      l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1.2));
+      vol[i] = 20 + Math.abs(close - open) * 6 + rand() * 12;
+      price = close;
+    }
+    // Synthesize a cumulative order book around the last price.
+    const mid = c[N - 1]!;
+    const bids: [number, number][] = [];
+    const asks: [number, number][] = [];
+    for (let i = 1; i <= 20; i++) {
+      bids.push([mid - i * 0.5, 5 + rand() * 20]);
+      asks.push([mid + i * 0.5, 5 + rand() * 20]);
+    }
+    return { N, times, idx, o, h, l, c, vol, bids, asks };
+  }, []);
+}
+
+/** Linked dashboard: price candlesticks + RSI(14) + MACD(12/26/9), linkX-synced. */
+function FinanceLinked({ d }: { d: FinData }) {
+  const priceOpts = useMemo<PlotOptions>(
+    () => ({ theme: "dark", scales: { x: { type: "ordinal-time", times: d.times } }, showToolbar: false }),
+    [d.times],
+  );
+  const rsiOpts = useMemo<PlotOptions>(
+    () => ({ theme: "dark", scales: { x: { type: "ordinal-time", times: d.times }, y: { domain: [0, 100] } }, showToolbar: false }),
+    [d.times],
+  );
+  const macdOpts = useMemo<PlotOptions>(
+    () => ({ theme: "dark", scales: { x: { type: "ordinal-time", times: d.times } }, showToolbar: false }),
+    [d.times],
+  );
+  const [priceRef, priceP] = usePlot(priceOpts);
+  const [rsiRef, rsiP] = usePlot(rsiOpts);
+  const [macdRef, macdP] = usePlot(macdOpts);
+
+  useEffect(() => {
+    if (!priceP || !rsiP || !macdP) return;
+    const { idx, o, h, l, c } = d;
+    // Slice a series past its warm-up NaNs (indicators return leading NaN).
+    const trim = (y: Float64Array): { x: Float64Array; y: Float64Array } => {
+      const s = Math.max(0, firstFinite(y));
+      return { x: idx.subarray(s), y: y.subarray(s) };
+    };
+
+    priceP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c, renderType: "static" });
+    priceP.render();
+
+    const r = trim(rsi(c, 14));
+    rsiP.addLine({ x: r.x, y: r.y, color: "#f472b6", width: 1.5, name: "RSI", renderType: "static" });
+    rsiP.addAnnotation({ type: "span", dim: "y", value: 70, color: "#475569", dash: [4, 4] });
+    rsiP.addAnnotation({ type: "span", dim: "y", value: 30, color: "#475569", dash: [4, 4] });
+    rsiP.render();
+
+    const m = macd(c, 12, 26, 9);
+    const hist = trim(m.histogram);
+    macdP.addBar({ x: hist.x, y: hist.y, width: 0.7, color: "#64748b", renderType: "static" });
+    const ml = trim(m.macd);
+    const sl = trim(m.signal);
+    macdP.addLine({ x: ml.x, y: ml.y, color: "#60a5fa", width: 1.5, name: "MACD", renderType: "static" });
+    macdP.addLine({ x: sl.x, y: sl.y, color: "#f59e0b", width: 1.5, name: "signal", renderType: "static" });
+    macdP.render();
+
+    const detach = linkX([priceP, rsiP, macdP]);
+    return () => detach();
+  }, [priceP, rsiP, macdP, d]);
+
+  return (
+    <>
+      <PanelShell title="Linked · price" subtitle="candles · drag to pan">
+        <div ref={priceRef} style={S.fill} />
+      </PanelShell>
+      <PanelShell title="Linked · RSI(14)" subtitle="70 / 30 guides">
+        <div ref={rsiRef} style={S.fill} />
+      </PanelShell>
+      <PanelShell title="Linked · MACD" subtitle="12/26/9">
+        <div ref={macdRef} style={S.fill} />
+      </PanelShell>
+    </>
+  );
+}
+
+function FinanceTab() {
+  const d = useFinanceData();
+  return (
+    <div style={S.grid}>
+      <SPanel title="Heikin-Ashi" subtitle="smoothed candles" options={{ scales: { x: { type: "ordinal-time", times: d.times } }, showToolbar: false }}>
+        <HeikinAshi x={d.idx} open={d.o} high={d.h} low={d.l} close={d.c} />
+      </SPanel>
+
+      <SPanel title="Renko" subtitle="brickSize 2 · wickless" options={{ showToolbar: false }}>
+        <Renko close={d.c} brickSize={2} />
+      </SPanel>
+
+      <SPanel title="Bollinger Bands" subtitle="20 · 2σ" options={{ scales: { x: { type: "ordinal-time", times: d.times } }, showToolbar: false }}>
+        <Candlestick x={d.idx} open={d.o} high={d.h} low={d.l} close={d.c} renderType="static" />
+        <Bollinger x={d.idx} close={d.c} period={20} k={2} bandColor="rgba(167,139,250,0.14)" />
+      </SPanel>
+
+      <SPanel title="Volume profile" subtitle="volume by price · POC" options={{ showToolbar: false }}>
+        <VolumeProfile price={d.c} volume={d.vol} bins={24} color="#3b82f6" pocColor="#f59e0b" />
+      </SPanel>
+
+      <SPanel title="Depth chart" subtitle="cumulative order book" options={{ showToolbar: false }}>
+        <Depth bids={d.bids} asks={d.asks} />
+      </SPanel>
+
+      <FinanceLinked d={d} />
+    </div>
+  );
+}
+
+// ============================================================================
 // MAPS TAB — offline GeoJSON world + a vector basemap. No FPS badges.
 // ============================================================================
 const adminStyle: MapStyle = {
@@ -2814,17 +2968,18 @@ function MapsTab() {
 // built while display:none would size to 0). Visited tabs stay mounted; the
 // Dynamic tab's rAF pauses whenever it is not the active tab.
 // ============================================================================
-type Tab = "static" | "dynamic" | "maps";
+type Tab = "static" | "dynamic" | "finance" | "maps";
 
 const TABS: Array<{ id: Tab; label: string; count: number }> = [
   { id: "static", label: "Static", count: 49 },
   { id: "dynamic", label: "Dynamic", count: DYN2D.length + DYN_POLAR.length + DYN3D.length + 2 },
+  { id: "finance", label: "Finance", count: 8 },
   { id: "maps", label: "Maps", count: 3 },
 ];
 
 export function App() {
   const [active, setActive] = useState<Tab>("static");
-  const [seen, setSeen] = useState<Record<Tab, boolean>>({ static: true, dynamic: false, maps: false });
+  const [seen, setSeen] = useState<Record<Tab, boolean>>({ static: true, dynamic: false, finance: false, maps: false });
 
   const go = (t: Tab) => {
     setActive(t);
@@ -2840,8 +2995,9 @@ export function App() {
         <p style={S.sub}>
           Three tabs via React components. <b>Static</b>: the full catalog with <code>renderType="static"</code>. <b>Dynamic</b>: the
           same types with <code>renderType="dynamic"</code>, streaming live at ~60fps (imperative <code>usePlot</code> + per-panel FPS
-          badge), plus a <code>linkX</code>-ed finance dashboard. <b>Maps</b>: offline vector basemaps. Dynamic and Maps mount lazily on
-          first activation.
+          badge), plus a <code>linkX</code>-ed finance dashboard. <b>Finance</b>: indicators + transforms (Heikin-Ashi, Renko, Bollinger,
+          volume profile, depth) and a <code>linkX</code>-ed price / RSI / MACD dashboard. <b>Maps</b>: offline vector basemaps. Dynamic,
+          Finance and Maps mount lazily on first activation.
         </p>
       </header>
 
@@ -2857,6 +3013,7 @@ export function App() {
 
       <section style={{ display: active === "static" ? "block" : "none" }}>{seen.static && <StaticTab />}</section>
       <section style={{ display: active === "dynamic" ? "block" : "none" }}>{seen.dynamic && <DynamicTab running={active === "dynamic"} />}</section>
+      <section style={{ display: active === "finance" ? "block" : "none" }}>{seen.finance && <FinanceTab />}</section>
       <section style={{ display: active === "maps" ? "block" : "none" }}>{seen.maps && <MapsTab />}</section>
     </main>
   );

@@ -19,8 +19,20 @@ import {
   QuiverLayer,
   ScatterLayer,
   StemLayer,
+  addBollinger,
+  addDepth,
+  addHeikinAshi,
+  addRenko,
+  addVolumeProfile,
   type AreaOptions,
   type BarOptions,
+  type BollingerHandle,
+  type BollingerOptions,
+  type DepthHandle,
+  type DepthOptions,
+  type HeikinAshiOptions,
+  type RenkoOptions,
+  type VolumeProfileOptions,
   type BoxOptions,
   type CandlestickOptions,
   type ContourOptions,
@@ -609,6 +621,133 @@ export function Annotation(props: AnnotationProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Finance
+//
+// Convenience chart builders from the core finance module. Each composes one or
+// more existing layers from a transform/indicator, so — like the static layers
+// above — they are rebuilt from scratch on any (structural) prop change, and
+// every layer they create is removed on cleanup.
+// ---------------------------------------------------------------------------
+
+export type HeikinAshiProps = HeikinAshiOptions;
+
+/** Heikin-Ashi candles (smoothed OHLC). Static (rebuilt on change). */
+export function HeikinAshi(props: HeikinAshiProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<CandlestickLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = addHeikinAshi(plot, props);
+    layer.current = l;
+    plot.render();
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    plot,
+    props.x,
+    props.open,
+    props.high,
+    props.low,
+    props.close,
+    props.width,
+    props.upColor,
+    props.downColor,
+    props.wickWidth,
+    props.name,
+    props.yAxis,
+    props.renderType,
+  ]);
+  return null;
+}
+
+export type RenkoProps = RenkoOptions;
+
+/** Renko bricks (wickless candles at successive indices). Static. */
+export function Renko(props: RenkoProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<CandlestickLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = addRenko(plot, props);
+    layer.current = l;
+    plot.render();
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.close, props.brickSize, props.upColor, props.downColor, props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type VolumeProfileProps = VolumeProfileOptions;
+
+/** Volume-by-price histogram (horizontal bars). Static. */
+export function VolumeProfile(props: VolumeProfileProps) {
+  const plot = useContext(PlotContext);
+  const layer = useRef<BarLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = addVolumeProfile(plot, props);
+    layer.current = l;
+    plot.render();
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.price, props.volume, props.bins, props.color, props.pocColor, props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type BollingerProps = BollingerOptions;
+
+/** Bollinger Bands: an optional shaded band plus upper/middle/lower lines. Static. */
+export function Bollinger(props: BollingerProps) {
+  const plot = useContext(PlotContext);
+  const handle = useRef<BollingerHandle | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const h = addBollinger(plot, props);
+    handle.current = h;
+    plot.render();
+    return () => {
+      if (h.band) plot.removeLayer(h.band);
+      plot.removeLayer(h.upper);
+      plot.removeLayer(h.middle);
+      plot.removeLayer(h.lower);
+      handle.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.close, props.period, props.k, props.color, props.bandColor, props.width, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type DepthProps = DepthOptions;
+
+/** Order-book depth: cumulative bid/ask volume as two filled areas. Static. */
+export function Depth(props: DepthProps) {
+  const plot = useContext(PlotContext);
+  const handle = useRef<DepthHandle | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const h = addDepth(plot, props);
+    handle.current = h;
+    plot.render();
+    return () => {
+      plot.removeLayer(h.bid);
+      plot.removeLayer(h.ask);
+      handle.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.bids, props.asks, props.bidColor, props.askColor, props.yAxis, props.renderType]);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Polar plot
 //
 // A separate core class with its own container + context. `PolarPlot` has no
@@ -884,3 +1023,42 @@ export function Volume(props: VolumeProps) {
   }, [plot, props.values, props.dims, props.extent, props.colormap, props.domain, props.density, props.name]);
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Finance math re-exports
+//
+// The pure indicator/transform functions (and their result types) from
+// `@photonviz/core`, re-exported so React users can compute indicators without
+// a second import.
+// ---------------------------------------------------------------------------
+
+export {
+  sma,
+  ema,
+  wma,
+  rollingStd,
+  bollinger,
+  rsi,
+  macd,
+  vwap,
+  trueRange,
+  atr,
+  firstFinite,
+  heikinAshi,
+  renko,
+  lineBreak,
+  pointAndFigure,
+  volumeProfile,
+  depth,
+} from "@photonviz/core";
+export type {
+  BollingerBands,
+  Macd,
+  Ohlc as OhlcData,
+  OhlcArrays,
+  OhlcInput,
+  Brick,
+  PfColumn,
+  VolumeProfile as VolumeProfileResult,
+  DepthCurves,
+} from "@photonviz/core";

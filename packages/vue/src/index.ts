@@ -7,8 +7,18 @@ import {
   type BoxOptions,
   type CandlestickOptions,
   type ContourOptions,
+  type DepthOptions,
   type ErrorBarOptions,
   type HeatmapOptions,
+  type HeikinAshiOptions,
+  type RenkoOptions,
+  type VolumeProfileOptions,
+  type BollingerOptions,
+  addHeikinAshi,
+  addRenko,
+  addVolumeProfile,
+  addBollinger,
+  addDepth,
   type HexbinOptions,
   type Annotation as AnnotationSpec,
   type Bar3DOptions,
@@ -579,6 +589,153 @@ export const Annotation = defineComponent({
     return () => null;
   },
 });
+
+// ---------------------------------------------------------------------------
+// Finance — single-layer builders mirror Candlestick; multi-layer builders
+// (Bollinger/Depth) get a dedicated setup that removes every returned layer.
+// ---------------------------------------------------------------------------
+
+export const HeikinAshi = defineComponent({
+  name: "PhotonHeikinAshi",
+  props: {
+    x: arr(),
+    open: arr(),
+    high: arr(),
+    low: arr(),
+    close: arr(),
+    upColor: opt<HeikinAshiOptions["upColor"]>(),
+    downColor: opt<HeikinAshiOptions["downColor"]>(),
+    width: opt<number>(),
+    wickWidth: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => addHeikinAshi(p, { x: props.x, open: props.open, high: props.high, low: props.low, close: props.close, upColor: props.upColor, downColor: props.downColor, width: props.width, wickWidth: props.wickWidth, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
+      () => [props.x, props.open, props.high, props.low, props.close, props.upColor, props.downColor, props.width, props.wickWidth, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const Renko = defineComponent({
+  name: "PhotonRenko",
+  props: {
+    close: arr(),
+    brickSize: { type: Number, required: true },
+    upColor: opt<RenkoOptions["upColor"]>(),
+    downColor: opt<RenkoOptions["downColor"]>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => addRenko(p, { close: props.close, brickSize: props.brickSize, upColor: props.upColor, downColor: props.downColor, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
+      () => [props.close, props.brickSize, props.upColor, props.downColor, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+export const VolumeProfile = defineComponent({
+  name: "PhotonVolumeProfile",
+  props: {
+    price: arr(),
+    volume: arr(),
+    bins: opt<number>(),
+    color: opt<VolumeProfileOptions["color"]>(),
+    pocColor: opt<VolumeProfileOptions["pocColor"]>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    useLayer(
+      (p) => addVolumeProfile(p, { price: props.price, volume: props.volume, bins: props.bins, color: props.color, pocColor: props.pocColor, name: props.name, yAxis: props.yAxis, renderType: props.renderType }),
+      () => [props.price, props.volume, props.bins, props.color, props.pocColor, props.name, props.yAxis],
+      noData,
+      noUpdate,
+    );
+    return () => null;
+  },
+});
+
+/** Multi-layer builder: create on mount, remove every returned layer on unmount. */
+export const Bollinger = defineComponent({
+  name: "PhotonBollinger",
+  props: {
+    x: arr(),
+    close: arr(),
+    period: opt<number>(),
+    k: opt<number>(),
+    color: opt<BollingerOptions["color"]>(),
+    bandColor: opt<BollingerOptions["bandColor"]>(),
+    width: opt<number>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Bollinger> must be used inside <Plot>");
+    let layers: Layer[] = [];
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      const handle = addBollinger(p, { x: props.x, close: props.close, period: props.period, k: props.k, color: props.color, bandColor: props.bandColor, width: props.width, yAxis: props.yAxis, renderType: props.renderType });
+      layers = [handle.upper, handle.middle, handle.lower];
+      if (handle.band) layers.push(handle.band);
+      layers.forEach((l) => markRaw(l));
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p) layers.forEach((l) => p.removeLayer(l));
+      layers = [];
+    });
+    return () => null;
+  },
+});
+
+/** Multi-layer builder: create on mount, remove every returned layer on unmount. */
+export const Depth = defineComponent({
+  name: "PhotonDepth",
+  props: {
+    bids: { type: Array as unknown as PropType<DepthOptions["bids"]>, required: true },
+    asks: { type: Array as unknown as PropType<DepthOptions["asks"]>, required: true },
+    bidColor: opt<DepthOptions["bidColor"]>(),
+    askColor: opt<DepthOptions["askColor"]>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Depth> must be used inside <Plot>");
+    let layers: Layer[] = [];
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      const handle = addDepth(p, { bids: props.bids, asks: props.asks, bidColor: props.bidColor, askColor: props.askColor, yAxis: props.yAxis, renderType: props.renderType });
+      layers = [handle.bid, handle.ask];
+      layers.forEach((l) => markRaw(l));
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p) layers.forEach((l) => p.removeLayer(l));
+      layers = [];
+    });
+    return () => null;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Finance pure math — re-exported straight from core.
+// ---------------------------------------------------------------------------
+
+export {
+  sma, ema, wma, rollingStd, bollinger, rsi, macd, vwap, trueRange, atr,
+  firstFinite, heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth,
+} from "@photonviz/core";
 
 // ---------------------------------------------------------------------------
 // Polar plot — a separate core class with its own container + provide/inject.

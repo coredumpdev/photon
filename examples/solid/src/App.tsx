@@ -3,19 +3,24 @@ import {
   Area,
   Bar,
   Bar3D,
+  Bollinger,
   Box,
   Candlestick,
   Contour,
   Contour3D,
+  Depth,
   ErrorBar,
+  firstFinite,
   GeoJson,
   Graph,
   Heatmap,
+  HeikinAshi,
   Hexbin,
   Image,
   Isosurface,
   Line,
   Line3D,
+  macd,
   Map as MapLayer,
   Ohlc,
   Patches,
@@ -28,10 +33,13 @@ import {
   PolarScatter,
   Quiver,
   Quiver3D,
+  Renko,
+  rsi,
   Scatter,
   Stem,
   Surface,
   Volume,
+  VolumeProfile,
   YAxis,
 } from "@photonviz/solid";
 import {
@@ -2461,6 +2469,139 @@ function DynamicGrid(): JSX.Element {
 }
 
 // ============================================================================
+// FINANCE TAB — specialised finance charts + a linkX-synced indicator
+// dashboard. All STATIC (no FPS badges, no rAF). Mirrors vanilla buildFinance().
+// ============================================================================
+function FinanceGrid(): JSX.Element {
+  const { rand, gaussian } = makeRng(42);
+  const N = 90;
+  const times = businessDays(N, Date.UTC(2024, 0, 1));
+  const idx = Float64Array.from({ length: N }, (_, i) => i);
+  const o = new Float64Array(N);
+  const h = new Float64Array(N);
+  const l = new Float64Array(N);
+  const c = new Float64Array(N);
+  const vol = new Float64Array(N);
+  let price = 100;
+  for (let i = 0; i < N; i++) {
+    const open = price;
+    const close = open + gaussian(0, 2.2);
+    o[i] = open;
+    c[i] = close;
+    h[i] = Math.max(open, close) + Math.abs(gaussian(0, 1.2));
+    l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1.2));
+    vol[i] = 20 + Math.abs(close - open) * 6 + rand() * 12;
+    price = close;
+  }
+
+  // Slice a series past its warm-up NaNs (indicators return leading NaN).
+  const trim = (y: Float64Array): { x: Float64Array; y: Float64Array } => {
+    const s = Math.max(0, firstFinite(y));
+    return { x: idx.subarray(s), y: y.subarray(s) };
+  };
+
+  // Depth chart — synthesize a cumulative order book around the last price.
+  const mid = c[N - 1];
+  const bids: [number, number][] = [];
+  const asks: [number, number][] = [];
+  for (let i = 1; i <= 20; i++) {
+    bids.push([mid - i * 0.5, 5 + rand() * 20]);
+    asks.push([mid + i * 0.5, 5 + rand() * 20]);
+  }
+
+  // Indicators for the linked dashboard.
+  const rsiSeries = trim(rsi(c, 14));
+  const m = macd(c, 12, 26, 9);
+  const macdHist = trim(m.histogram);
+  const macdLine = trim(m.macd);
+  const macdSignal = trim(m.signal);
+
+  // Three linked panes: build each pane's layers imperatively in its `onReady`,
+  // then `linkX` all three once every core plot exists.
+  let priceP: CorePlot | null = null;
+  let rsiP: CorePlot | null = null;
+  let macdP: CorePlot | null = null;
+  const tryLink = () => {
+    if (priceP && rsiP && macdP) linkX([priceP, rsiP, macdP]);
+  };
+
+  return (
+    <>
+      <Panel title="Heikin-Ashi" subtitle="smoothed candles">
+        <Plot options={{ ...DARK, scales: { x: { type: "ordinal-time", times } }, showToolbar: false }}>
+          <HeikinAshi x={idx} open={o} high={h} low={l} close={c} />
+        </Plot>
+      </Panel>
+
+      <Panel title="Renko" subtitle="brickSize 2 · wickless">
+        <Plot options={{ ...DARK, showToolbar: false }}>
+          <Renko close={c} brickSize={2} />
+        </Plot>
+      </Panel>
+
+      <Panel title="Bollinger Bands" subtitle="20 · 2σ">
+        <Plot options={{ ...DARK, scales: { x: { type: "ordinal-time", times } }, showToolbar: false }}>
+          <Candlestick x={idx} open={o} high={h} low={l} close={c} />
+          <Bollinger x={idx} close={c} period={20} k={2} bandColor="rgba(167,139,250,0.14)" />
+        </Plot>
+      </Panel>
+
+      <Panel title="Volume profile" subtitle="volume by price · POC">
+        <Plot options={{ ...DARK, showToolbar: false }}>
+          <VolumeProfile price={c} volume={vol} bins={24} color="#3b82f6" pocColor="#f59e0b" />
+        </Plot>
+      </Panel>
+
+      <Panel title="Depth chart" subtitle="cumulative order book">
+        <Plot options={{ ...DARK, showToolbar: false }}>
+          <Depth bids={bids} asks={asks} />
+        </Plot>
+      </Panel>
+
+      <Panel title="Linked · price" subtitle="candles · drag to pan">
+        <Plot
+          options={{ ...DARK, scales: { x: { type: "ordinal-time", times } }, showToolbar: false }}
+          onReady={(p) => {
+            priceP = p;
+            p.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+            p.render();
+            tryLink();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Linked · RSI(14)" subtitle="70 / 30 guides">
+        <Plot
+          options={{ ...DARK, scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 100] } }, showToolbar: false }}
+          onReady={(p) => {
+            rsiP = p;
+            p.addLine({ x: rsiSeries.x, y: rsiSeries.y, color: "#f472b6", width: 1.5, name: "RSI" });
+            p.addAnnotation({ type: "span", dim: "y", value: 70, color: "#475569", dash: [4, 4] });
+            p.addAnnotation({ type: "span", dim: "y", value: 30, color: "#475569", dash: [4, 4] });
+            p.render();
+            tryLink();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Linked · MACD" subtitle="12/26/9">
+        <Plot
+          options={{ ...DARK, scales: { x: { type: "ordinal-time", times } }, showToolbar: false }}
+          onReady={(p) => {
+            macdP = p;
+            p.addBar({ x: macdHist.x, y: macdHist.y, width: 0.7, color: "#64748b" });
+            p.addLine({ x: macdLine.x, y: macdLine.y, color: "#60a5fa", width: 1.5, name: "MACD" });
+            p.addLine({ x: macdSignal.x, y: macdSignal.y, color: "#f59e0b", width: 1.5, name: "signal" });
+            p.render();
+            tryLink();
+          }}
+        />
+      </Panel>
+    </>
+  );
+}
+
+// ============================================================================
 // MAPS TAB — offline vector basemaps. No FPS badges.
 // ============================================================================
 
@@ -2556,9 +2697,9 @@ function MapsGrid(): JSX.Element {
 // mounted LAZILY (via <Show>) the first time their tab is shown, so their WebGL
 // plots size correctly (a plot built while display:none sizes to 0).
 // ============================================================================
-type Tab = "static" | "dynamic" | "maps";
+type Tab = "static" | "dynamic" | "finance" | "maps";
 
-const COUNTS: Record<Tab, number> = { static: 46, dynamic: 48, maps: 3 };
+const COUNTS: Record<Tab, number> = { static: 46, dynamic: 48, finance: 8, maps: 3 };
 
 export function App(): JSX.Element {
   const [tab, setTab] = createSignal<Tab>("static");
@@ -2577,14 +2718,16 @@ export function App(): JSX.Element {
           <b>Photon</b> · Solid — WebGL2 chart gallery
         </h1>
         <p>
-          Three tabs, declarative Solid wrappers. <b>Static</b>: the full chart catalog. <b>Dynamic</b>: the same
-          catalog streaming live at 60fps, each panel with an FPS badge. <b>Maps</b>: offline vector basemaps.
+          Four tabs, declarative Solid wrappers. <b>Static</b>: the full chart catalog. <b>Dynamic</b>: the same
+          catalog streaming live at 60fps, each panel with an FPS badge. <b>Finance</b>: Heikin-Ashi, Renko,
+          Bollinger, volume profile, depth + a linkX-synced RSI/MACD dashboard. <b>Maps</b>: offline vector basemaps.
         </p>
       </header>
 
       <div class="tabs">
         <TabButton id="static" label="Static" />
         <TabButton id="dynamic" label="Dynamic" />
+        <TabButton id="finance" label="Finance" />
         <TabButton id="maps" label="Maps" />
       </div>
       <div class="tabbar-line" />
@@ -2597,6 +2740,11 @@ export function App(): JSX.Element {
       <Show when={tab() === "dynamic"}>
         <div class="grid">
           <DynamicGrid />
+        </div>
+      </Show>
+      <Show when={tab() === "finance"}>
+        <div class="grid">
+          <FinanceGrid />
         </div>
       </Show>
       <Show when={tab() === "maps"}>

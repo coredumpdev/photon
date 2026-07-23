@@ -1,5 +1,7 @@
 <script lang="ts">
   import {
+    addBollinger,
+    addDepth,
     type SeriesSpec,
     type PolarSeriesSpec,
     type LayerSpec3D,
@@ -17,8 +19,11 @@
 
   import StatPanel from "./StatPanel.svelte";
   import DynPanel from "./DynPanel.svelte";
+  import ImpPanel from "./ImpPanel.svelte";
   import LinkedFinance from "./LinkedFinance.svelte";
+  import FinanceDashboard from "./FinanceDashboard.svelte";
   import type { LiveHandle } from "./live";
+  import type { Plot as CorePlotT } from "@photonviz/core";
 
   // ==========================================================================
   // Seeded RNG — identical gallery on every reload.
@@ -1100,15 +1105,71 @@
   };
 
   // ==========================================================================
+  // FINANCE — specialist finance charts (indicators + transforms). All STATIC,
+  // no FPS. Single-layer charts (Heikin-Ashi, Renko, Volume profile) go through
+  // the declarative use:plot SeriesSpec; multi-layer ones (Bollinger, Depth,
+  // linked RSI/MACD dashboard) are built imperatively with the core Plot.
+  // ==========================================================================
+  function buildFinanceData() {
+    seed = 42; // deterministic OHLCV regardless of earlier RNG use
+    const N = 90;
+    const times = businessDays(N, Date.UTC(2024, 0, 1));
+    const idx = Float64Array.from({ length: N }, (_, i) => i);
+    const o = new Float64Array(N), h = new Float64Array(N), l = new Float64Array(N), c = new Float64Array(N), vol = new Float64Array(N);
+    let price = 100;
+    for (let i = 0; i < N; i++) {
+      const open = price, close = open + gaussian(0, 2.2);
+      o[i] = open; c[i] = close;
+      h[i] = Math.max(open, close) + Math.abs(gaussian(0, 1.2));
+      l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1.2));
+      vol[i] = 20 + Math.abs(close - open) * 6 + rand() * 12;
+      price = close;
+    }
+    // Synthesize a cumulative order book around the last price for the depth chart.
+    const mid = c[N - 1]!;
+    const bids: [number, number][] = [], asks: [number, number][] = [];
+    for (let i = 1; i <= 20; i++) { bids.push([mid - i * 0.5, 5 + rand() * 20]); asks.push([mid + i * 0.5, 5 + rand() * 20]); }
+    return { N, times, idx, o, h, l, c, vol, bids, asks };
+  }
+  const fin = buildFinanceData();
+  const ordX = { type: "ordinal-time" as const, times: fin.times };
+
+  // Declarative single-layer finance panels.
+  const heikinCfg: PlotConfig = {
+    options: { theme: "dark", scales: { x: ordX }, showToolbar: false },
+    series: [{ type: "heikinAshi", x: fin.idx, open: fin.o, high: fin.h, low: fin.l, close: fin.c }],
+  };
+  const renkoCfg: PlotConfig = {
+    options: { theme: "dark", showToolbar: false },
+    series: [{ type: "renko", close: fin.c, brickSize: 2 }],
+  };
+  const volProfileCfg: PlotConfig = {
+    options: { theme: "dark", showToolbar: false },
+    series: [{ type: "volumeProfile", price: fin.c, volume: fin.vol, bins: 24, color: "#3b82f6", pocColor: "#f59e0b" }],
+  };
+
+  // Imperative multi-layer finance panels (candles + indicator overlays).
+  const bollingerOpts = { theme: "dark" as const, scales: { x: ordX }, showToolbar: false };
+  function buildBollinger(p: CorePlotT): void {
+    p.addCandlestick({ x: fin.idx, open: fin.o, high: fin.h, low: fin.l, close: fin.c });
+    addBollinger(p, { x: fin.idx, close: fin.c, period: 20, k: 2, bandColor: "rgba(167,139,250,0.14)" });
+  }
+  const depthOpts = { theme: "dark" as const, showToolbar: false };
+  function buildDepth(p: CorePlotT): void {
+    addDepth(p, { bids: fin.bids, asks: fin.asks });
+  }
+
+  // ==========================================================================
   // Tabs. Only the active tab is mounted ({#if}) so charts are always built into
   // a visible, sized container (a WebGL plot built while display:none sizes to
   // 0). Static is the default; switching away unmounts + cleans up (rAF/plots).
   // ==========================================================================
-  type Tab = "static" | "dynamic" | "maps";
+  type Tab = "static" | "dynamic" | "finance" | "maps";
   let activeTab: Tab = "static";
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: "static", label: "Static", count: statPanels.length },
     { id: "dynamic", label: "Dynamic", count: dynPanels.length + 1 },
+    { id: "finance", label: "Finance", count: 6 },
     { id: "maps", label: "Maps", count: 2 },
   ];
 </script>
@@ -1144,6 +1205,15 @@
       <DynPanel title={p.title} subtitle={p.subtitle} setup={p.setup} />
     {/each}
     <LinkedFinance />
+  </div>
+{:else if activeTab === "finance"}
+  <div class="grid">
+    <StatPanel title="Heikin-Ashi" subtitle="smoothed candles" kind="plot" cfg={heikinCfg} />
+    <StatPanel title="Renko" subtitle="brickSize 2 · wickless" kind="plot" cfg={renkoCfg} />
+    <ImpPanel title="Bollinger Bands" subtitle="20 · 2σ" options={bollingerOpts} build={buildBollinger} />
+    <StatPanel title="Volume profile" subtitle="volume by price · POC" kind="plot" cfg={volProfileCfg} />
+    <ImpPanel title="Depth chart" subtitle="cumulative order book" options={depthOpts} build={buildDepth} />
+    <FinanceDashboard times={fin.times} idx={fin.idx} open={fin.o} high={fin.h} low={fin.l} close={fin.c} />
   </div>
 {:else}
   <div class="grid">

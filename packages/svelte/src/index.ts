@@ -40,6 +40,12 @@ import {
   type VolumeOptions,
   type SurfaceOptions,
   type YAxisOptions,
+  addHeikinAshi,
+  addRenko,
+  addVolumeProfile,
+  type HeikinAshiOptions,
+  type RenkoOptions,
+  type VolumeProfileOptions,
 } from "@photonviz/core";
 import { addGeoJson, addMap, type GeoJsonOptions, type MapOptions } from "@photonviz/map";
 
@@ -57,6 +63,9 @@ export type SeriesSpec =
   | ({ type: "quiver" } & QuiverOptions)
   | ({ type: "candlestick" } & CandlestickOptions)
   | ({ type: "ohlc" } & OhlcOptions)
+  | ({ type: "heikinAshi" } & HeikinAshiOptions)
+  | ({ type: "renko" } & RenkoOptions)
+  | ({ type: "volumeProfile" } & VolumeProfileOptions)
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
@@ -90,6 +99,9 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "quiver": return p.addQuiver(s);
     case "candlestick": return p.addCandlestick(s);
     case "ohlc": return p.addOhlc(s);
+    case "heikinAshi": return addHeikinAshi(p, s);
+    case "renko": return addRenko(p, s);
+    case "volumeProfile": return addVolumeProfile(p, s);
     case "pie": return p.addPie(s);
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
@@ -114,6 +126,9 @@ function updateSeries(layer: Layer, s: SeriesSpec): void {
     case "quiver": break; // static
     case "candlestick": break; // static
     case "ohlc": break; // static
+    case "heikinAshi": break; // static
+    case "renko": break; // static
+    case "volumeProfile": break; // static
     case "pie": break; // static
     case "patches": break; // static
     case "image": break; // static
@@ -256,3 +271,37 @@ export function plot3d(node: HTMLElement, config: Plot3DConfig) {
     },
   };
 }
+
+// --- Finance -----------------------------------------------------------------
+
+// Multi-layer builders (Bollinger, Depth) don't fit the one-series=one-Layer
+// model, so they're exposed imperatively: call them against a core Plot.
+export {
+  addBollinger,
+  addDepth,
+  type BollingerOptions,
+  type DepthOptions,
+} from "@photonviz/core";
+
+// Pure finance math (transforms + indicators). Note `heikinAshi`, `renko` and
+// `volumeProfile` here are the transform functions — distinct from the
+// `add*` chart builders wired into SeriesSpec above.
+export {
+  sma,
+  ema,
+  wma,
+  rollingStd,
+  bollinger,
+  rsi,
+  macd,
+  vwap,
+  trueRange,
+  atr,
+  firstFinite,
+  heikinAshi,
+  renko,
+  lineBreak,
+  pointAndFigure,
+  volumeProfile,
+  depth,
+} from "@photonviz/core";

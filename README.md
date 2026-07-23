@@ -35,12 +35,13 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 
 - ⚡ **Fast** — instanced WebGL2 rendering + min/max decimation (GPU above 200k pts); millions of points stay interactive. LUT-backed colormaps, benchmarked (`pnpm bench`).
 - 🔬 **Scientific** — linear/log/time **and categorical** scales, custom ticks, multiple Y axes, error-free float precision for timestamps.
-- 📈 **Batteries included** — line, step, scatter (marker glyphs), bar (grouped/stacked/horizontal), area (+ stacked), histogram, box, violin, heatmap, contour, hexbin, spectrogram, **pie/donut**, **patches/polygons**, **graph/network**, **image**, **annotations** (span/band/box/label), polar, and a full **3D** suite.
+- 📈 **Batteries included** — line, step, scatter (marker glyphs), bar (grouped/stacked/horizontal), area (+ stacked), histogram, box, violin, heatmap, contour, hexbin, spectrogram, **candlestick/OHLC**, **pie/donut**, **patches/polygons**, **graph/network**, **image**, **annotations** (span/band/box/label), polar, and a full **3D** suite.
+- 💹 **Finance** — Heikin-Ashi, Renko, Bollinger, volume profile, depth, plus indicators (SMA/EMA/RSI/MACD/VWAP/ATR), a gap-collapsing `ordinal-time` axis, and `linkX` linked panes.
 - 🎨 **Fully styleable** — Bokeh-like flat props: `background`, `title`, `legend`, and per-axis line/tick/label/grid color, font & label rotation.
 - 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers.
 - 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.
 - 🗺️ **Maps** — [`@photonviz/map`](./packages/map) renders a Web Mercator vector basemap **from scratch** (MVT + PMTiles + GeoJSON), works **fully offline**, no Mapbox / MapLibre / Leaflet.
-- 🌊 **Streaming-ready** — `setData()` re-uploads GPU buffers for real-time dashboards.
+- 🌊 **Streaming-ready** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
 - 🖼️ **Many charts, one context** — a single shared WebGL2 context backs every chart, so a page can hold dozens without exhausting the browser's context limit.
 
 ## Gallery
@@ -187,10 +188,38 @@ export default class Chart extends Component {
 | Pie / Donut | `plot.addPie({ values, innerRadius?, colormap? })` | Wedges (set `equalAspect`) |
 | Patches | `plot.addPatches({ patches, colormap? })` | Filled polygons (earcut), choropleth |
 | Graph | `plot.addGraph({ edges, nodes? })` | Node-link; auto force layout |
+| Candlestick / OHLC | `plot.addCandlestick({ x, open, high, low, close })` · `plot.addOhlc(...)` | Up/down candles or bars; live via `updateLast` / `appendCandle` |
 | Annotations | `plot.addAnnotation({ type: "span" \| "band" \| "box" \| "label", … })` | Canvas2D overlay |
 | Spectrogram | `plot.addHeatmapSpectrogram(signal, { fftSize, hop, sampleRate })` | STFT → heatmap |
 
 Colormaps: `viridis`, `plasma`, `coolwarm`, `grayscale`.
+
+### Finance
+
+Specialist charts + technical indicators, built on the core layers — plus a
+gap-collapsing session axis and linked panes:
+
+```ts
+import {
+  addHeikinAshi, addRenko, addBollinger, addVolumeProfile, addDepth,
+  rsi, macd, linkX,
+} from "@photonviz/core";
+
+addHeikinAshi(plot, { x, open, high, low, close });   // smoothed candles
+addRenko(plot, { close, brickSize: 2 });              // fixed-size bricks (time discarded)
+addBollinger(plot, { x, close, period: 20, k: 2 });   // shaded band + 3 lines
+addVolumeProfile(plot, { price, volume, bins: 24 });  // volume-by-price (horizontal) + POC
+addDepth(plot, { bids, asks });                       // cumulative order book
+
+// Indicators are pure arrays → overlay a line, or drop into a linked sub-pane:
+const r = rsi(close, 14), m = macd(close);            // + sma · ema · wma · vwap · atr · bollinger
+linkX([pricePlot, rsiPlot, macdPlot]);                // synced pan/zoom + crosshair
+```
+
+The **`ordinal-time`** x-axis plots bars at integer indices and collapses market
+gaps (weekends, overnight) while still labelling calendar dates:
+`scales: { x: { type: "ordinal-time", times } }`. Transforms `renko`, `heikinAshi`,
+`volumeProfile`, `lineBreak`, `pointAndFigure`, `depth` are exported directly too.
 
 ### Styling & config — Bokeh-like flat props
 
@@ -290,17 +319,21 @@ plot.setAxis("y", { addTicks: [{ value: 42, label: "threshold" }] }); // overlay
 
 ## Scales & interaction
 
-- **Scales** — `linear`, `log` (decade ticks + minors, GPU log transform), `time` (calendar ticks; large epoch timestamps handled with per-layer reference offsets).
+- **Scales** — `linear`, `log` (decade ticks + minors, GPU log transform), `time` (calendar ticks; large epoch timestamps handled with per-layer reference offsets), `categorical` (factor bands), and `ordinal-time` (finance/session axis that collapses market gaps).
 - **Toolbar** — home + pan / box-zoom / X-only / Y-only zoom.
 - **Box zoom** maps the selection rectangle exactly onto the axes; **drag an axis strip** to pan just that axis; **hover** for crosshair + per-series tooltips.
+- **Linked panes** — `linkX([a, b, …])` syncs pan/zoom and the crosshair across plots (price + volume + RSI/MACD dashboards).
 
 ## Streaming
 
 Every chart shares one WebGL2 context (blitted into each chart's own canvas), so
-a page can hold **many** live charts. Line/scatter/bar/area expose `setData`:
+a page can hold **many** live charts. **Every** layer (2D + 3D) exposes `setData`,
+and candlesticks/OHLC add `updateLast` (cheap forming-bar update) + `appendCandle`.
+Declare intent with `renderType: "static" | "dynamic"` — a buffer-usage hint
+(`GL_STATIC_DRAW` vs `GL_DYNAMIC_DRAW`); default `"static"`.
 
 ```ts
-const line = plot.addLine({ x, y });
+const line = plot.addLine({ x, y, renderType: "dynamic" });
 function frame() {
   y.copyWithin(0, 1); y[y.length - 1] = nextSample();  // scroll
   line.setData(x, y);
@@ -360,6 +393,8 @@ are labeled [`good first issue`](https://github.com/coredumpdev/photon/labels/go
 - [x] React / Vue / Svelte / **Solid** / **Gea** bindings (every chart type, polar, 3D, and maps)
 - [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation, LUT colormaps
 - [x] Vector maps — `@photonviz/map` (MVT + PMTiles + GeoJSON, offline, feature picking)
+- [x] Candlestick/OHLC, `setData`/`renderType` streaming on every layer, linked panes (`linkX`)
+- [x] Finance — Heikin-Ashi, Renko, Bollinger, volume profile, depth + indicators (SMA/EMA/RSI/MACD/VWAP/ATR), `ordinal-time` axis
 - [ ] Map text labels (glyph atlas + collision)
 - [ ] WebGPU backend exploration
 

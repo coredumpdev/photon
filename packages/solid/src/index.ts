@@ -11,6 +11,16 @@ import {
   PolarPlot as CorePolarPlot,
   QuiverLayer,
   StemLayer,
+  addHeikinAshi,
+  addRenko,
+  addVolumeProfile,
+  addBollinger,
+  addDepth,
+  type HeikinAshiOptions,
+  type RenkoOptions,
+  type VolumeProfileOptions,
+  type BollingerOptions,
+  type DepthOptions,
   type AreaOptions,
   type BarOptions,
   type BoxOptions,
@@ -607,6 +617,126 @@ export function Annotation(props: AnnotationProps): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
+// Finance
+//
+// HeikinAshi / Renko / VolumeProfile are single-layer, so they mirror
+// Candlestick via `bindStatic` with the matching `add*` builder. Bollinger and
+// Depth build several layers at once, so each gets a small dedicated binder
+// that removes every returned layer on cleanup.
+// ---------------------------------------------------------------------------
+
+export type HeikinAshiProps = HeikinAshiOptions;
+
+/** Heikin-Ashi candlesticks (smoothed OHLC). Static. */
+export function HeikinAshi(props: HeikinAshiProps): JSX.Element {
+  const plot = usePlot();
+  bindStatic<CandlestickLayer>(
+    plot,
+    () => [
+      props.x,
+      props.open,
+      props.high,
+      props.low,
+      props.close,
+      props.upColor,
+      props.downColor,
+      props.width,
+      props.wickWidth,
+      props.name,
+      props.yAxis,
+      props.renderType,
+    ],
+    (p) => addHeikinAshi(p, props),
+  );
+  return null;
+}
+
+export type RenkoProps = RenkoOptions;
+
+/** Renko bricks from a close series. Static. */
+export function Renko(props: RenkoProps): JSX.Element {
+  const plot = usePlot();
+  bindStatic<CandlestickLayer>(
+    plot,
+    () => [props.close, props.brickSize, props.upColor, props.downColor, props.name, props.yAxis, props.renderType],
+    (p) => addRenko(p, props),
+  );
+  return null;
+}
+
+export type VolumeProfileProps = VolumeProfileOptions;
+
+/** Horizontal volume-by-price histogram with a POC highlight. Static. */
+export function VolumeProfile(props: VolumeProfileProps): JSX.Element {
+  const plot = usePlot();
+  bindStatic(
+    plot,
+    () => [props.price, props.volume, props.bins, props.color, props.pocColor, props.name, props.yAxis, props.renderType],
+    (p) => addVolumeProfile(p, props),
+  );
+  return null;
+}
+
+export type BollingerProps = BollingerOptions;
+
+/** Bollinger bands (upper/middle/lower plus an optional fill band). Static. */
+export function Bollinger(props: BollingerProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [
+        plot(),
+        props.x,
+        props.close,
+        props.period,
+        props.k,
+        props.color,
+        props.bandColor,
+        props.width,
+        props.yAxis,
+        props.renderType,
+      ],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const { band, upper, middle, lower } = addBollinger(p, props);
+        p.render();
+        onCleanup(() => {
+          if (band) p.removeLayer(band);
+          p.removeLayer(upper);
+          p.removeLayer(middle);
+          p.removeLayer(lower);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
+export type DepthProps = DepthOptions;
+
+/** A market-depth chart (cumulative bid/ask area curves). Static. */
+export function Depth(props: DepthProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.bids, props.asks, props.bidColor, props.askColor, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const { bid, ask } = addDepth(p, props);
+        p.render();
+        onCleanup(() => {
+          p.removeLayer(bid);
+          p.removeLayer(ask);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Polar plot
 //
 // A separate core class with its own container + context. `PolarPlot` has no
@@ -898,3 +1028,37 @@ export function Volume(props: VolumeProps): JSX.Element {
   );
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Finance — pure math re-exports
+//
+// Framework-agnostic indicator/transform helpers, re-exported verbatim from the
+// core so consumers can `import { sma, macd, … } from "@photonviz/solid"`.
+// ---------------------------------------------------------------------------
+
+export {
+  sma,
+  ema,
+  wma,
+  rollingStd,
+  bollinger,
+  rsi,
+  macd,
+  vwap,
+  trueRange,
+  atr,
+  firstFinite,
+  heikinAshi,
+  renko,
+  lineBreak,
+  pointAndFigure,
+  volumeProfile,
+  depth,
+} from "@photonviz/core";
+export type {
+  HeikinAshiOptions,
+  RenkoOptions,
+  VolumeProfileOptions,
+  BollingerOptions,
+  DepthOptions,
+} from "@photonviz/core";

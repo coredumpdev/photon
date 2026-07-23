@@ -1,6 +1,6 @@
 import { Component } from "@geajs/core";
 import { linkX } from "@photonviz/core";
-import { Plot, PolarPlot, Plot3D } from "@photonviz/gea";
+import { Plot, PolarPlot, Plot3D, addBollinger, addDepth, rsi, macd, firstFinite } from "@photonviz/gea";
 import {
   addMap, addGeoJson, xyzVectorSource, pmtilesSource, protomapsStyle,
   worldToLonLat, lonLatToWorld,
@@ -11,6 +11,7 @@ import { worldCountries } from "@photonviz/map/world";
 import { makeRng, jitter, businessDays } from "./data";
 import { buildStatic } from "./static-catalog";
 import { buildDynamic, type Updater } from "./dynamic-catalog";
+import { financeData } from "./finance-catalog";
 
 // Catalogs are built once at load. buildStatic() eagerly materializes all the
 // static data; buildDynamic() only builds the streaming *setup* closures — each
@@ -20,7 +21,25 @@ const D = buildDynamic();
 
 const STATIC_COUNT = S.plots2D.length + S.polars.length + S.plots3D.length;
 const DYNAMIC_COUNT = D.plots2D.length + D.polars.length + D.plots3D.length + 2; // + linked finance
+const FINANCE_COUNT = 8;
 const MAPS_COUNT = 3;
+
+// ---- Finance data + indicators (built once; static, no streaming) ----------
+const FIN = financeData();
+const FIN_ORD = { theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times: FIN.times } }, showToolbar: false };
+const FIN_PLAIN = { theme: "dark" as const, showToolbar: false };
+const FIN_RSI_OPTS = { theme: "dark" as const, scales: { x: { type: "ordinal-time" as const, times: FIN.times }, y: { domain: [0, 100] } }, showToolbar: false };
+
+/** Slice a series past its warm-up NaNs (indicators return leading NaN). */
+const finTrim = (y: Float64Array) => { const s = Math.max(0, firstFinite(y)); return { x: FIN.idx.subarray(s), y: y.subarray(s) }; };
+const FIN_RSI = finTrim(rsi(FIN.c, 14));
+const FIN_MACD = macd(FIN.c, 12, 26, 9);
+const FIN_HIST = finTrim(FIN_MACD.histogram);
+const FIN_MLINE = finTrim(FIN_MACD.macd);
+const FIN_SIG = finTrim(FIN_MACD.signal);
+
+// Linked-dashboard core plots (captured via onReady, joined once all three ready).
+let finLinked: any = {};
 
 // ============================================================================
 // Static tab — one panel per chart via the config-driven Gea components. Single
@@ -352,22 +371,130 @@ class MapsTab extends Component {
 }
 
 // ============================================================================
+// Finance tab — specialist charts on the finance module. All STATIC (no FPS).
+// Single-layer transforms (Heikin-Ashi / Renko / volume profile) render
+// declaratively via `series`; multi-layer overlays (Bollinger, Depth) and the
+// linkX-ed price/RSI/MACD dashboard are wired imperatively through onReady.
+// ============================================================================
+class FinanceTab extends Component {
+  created(): void { finLinked = {}; }
+
+  // Bollinger bands over the candlesticks (candles come from the declarative series).
+  onBollinger(plot: any): void {
+    addBollinger(plot, { x: FIN.idx, close: FIN.c, period: 20, k: 2, bandColor: "rgba(167,139,250,0.14)" });
+  }
+
+  // Depth chart from the synthesized cumulative order book.
+  onDepth(plot: any): void {
+    addDepth(plot, { bids: FIN.bids, asks: FIN.asks });
+  }
+
+  // Linked dashboard — capture each core plot, then join on the ordinal-time axis.
+  onLinkPrice(plot: any): void { finLinked.price = plot; this.linkReady(); }
+  onLinkRsi(plot: any): void { finLinked.rsi = plot; this.linkReady(); }
+  onLinkMacd(plot: any): void { finLinked.macd = plot; this.linkReady(); }
+  private linkReady(): void {
+    if (finLinked.price && finLinked.rsi && finLinked.macd) linkX([finLinked.price, finLinked.rsi, finLinked.macd]);
+  }
+
+  template() {
+    return (
+      <div class="grid">
+        <div class="panel">
+          <h2>Heikin-Ashi<span> — smoothed candles</span></h2>
+          <div class="chart">
+            <Plot options={FIN_ORD} series={[{ type: "heikinAshi", x: FIN.idx, open: FIN.o, high: FIN.h, low: FIN.l, close: FIN.c }]} />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Renko<span> — brickSize 2 · wickless</span></h2>
+          <div class="chart">
+            <Plot options={FIN_PLAIN} series={[{ type: "renko", close: FIN.c, brickSize: 2 }]} />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Bollinger Bands<span> — 20 · 2σ</span></h2>
+          <div class="chart">
+            <Plot options={FIN_ORD} series={[{ type: "candlestick", x: FIN.idx, open: FIN.o, high: FIN.h, low: FIN.l, close: FIN.c }]} onReady={(p) => this.onBollinger(p)} />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Volume profile<span> — volume by price · POC</span></h2>
+          <div class="chart">
+            <Plot options={FIN_PLAIN} series={[{ type: "volumeProfile", price: FIN.c, volume: FIN.vol, bins: 24, color: "#3b82f6", pocColor: "#f59e0b" }]} />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Depth chart<span> — cumulative order book</span></h2>
+          <div class="chart">
+            <Plot options={FIN_PLAIN} onReady={(p) => this.onDepth(p)} />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Linked · price<span> — candles · drag to pan</span></h2>
+          <div class="chart">
+            <Plot options={FIN_ORD} series={[{ type: "candlestick", x: FIN.idx, open: FIN.o, high: FIN.h, low: FIN.l, close: FIN.c }]} onReady={(p) => this.onLinkPrice(p)} />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Linked · RSI(14)<span> — 70 / 30 guides</span></h2>
+          <div class="chart">
+            <Plot
+              options={FIN_RSI_OPTS}
+              series={[{ type: "line", x: FIN_RSI.x, y: FIN_RSI.y, color: "#f472b6", width: 1.5, name: "RSI" }]}
+              annotations={[
+                { type: "span", dim: "y", value: 70, color: "#475569", dash: [4, 4] },
+                { type: "span", dim: "y", value: 30, color: "#475569", dash: [4, 4] },
+              ]}
+              onReady={(p) => this.onLinkRsi(p)}
+            />
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Linked · MACD<span> — 12/26/9</span></h2>
+          <div class="chart">
+            <Plot
+              options={FIN_ORD}
+              series={[
+                { type: "bar", x: FIN_HIST.x, y: FIN_HIST.y, width: 0.7, color: "#64748b" },
+                { type: "line", x: FIN_MLINE.x, y: FIN_MLINE.y, color: "#60a5fa", width: 1.5, name: "MACD" },
+                { type: "line", x: FIN_SIG.x, y: FIN_SIG.y, color: "#f59e0b", width: 1.5, name: "signal" },
+              ]}
+              onReady={(p) => this.onLinkMacd(p)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ============================================================================
 // App shell — three tabs, one grid each. Static is default and built on load;
 // Dynamic and Maps mount LAZILY the first time their tab is activated so their
 // WebGL charts are built while visible (a plot built under display:none sizes
 // to 0). Built tabs stay mounted (just hidden) so switching back is instant.
 // ============================================================================
 export default class App extends Component {
-  activeTab: "static" | "dynamic" | "maps" = "static";
+  activeTab: "static" | "dynamic" | "finance" | "maps" = "static";
   builtDynamic = false;
+  builtFinance = false;
   builtMaps = false;
 
-  activate(name: "static" | "dynamic" | "maps"): void {
+  activate(name: "static" | "dynamic" | "finance" | "maps"): void {
     // Make the tab visible first, then mount its charts on the next frame — so a
     // lazily-built plot never initializes while its section is still display:none
     // (a WebGL plot built hidden sizes to 0).
     this.activeTab = name;
     if (name === "dynamic" && !this.builtDynamic) requestAnimationFrame(() => { this.builtDynamic = true; });
+    if (name === "finance" && !this.builtFinance) requestAnimationFrame(() => { this.builtFinance = true; });
     if (name === "maps" && !this.builtMaps) requestAnimationFrame(() => { this.builtMaps = true; });
   }
 
@@ -382,6 +509,7 @@ export default class App extends Component {
         <div class="tabs">
           <button class={this.activeTab === "static" ? "tab active" : "tab"} click={() => this.activate("static")}>Static<span class="count">{STATIC_COUNT}</span></button>
           <button class={this.activeTab === "dynamic" ? "tab active" : "tab"} click={() => this.activate("dynamic")}>Dynamic<span class="count">{DYNAMIC_COUNT}</span></button>
+          <button class={this.activeTab === "finance" ? "tab active" : "tab"} click={() => this.activate("finance")}>Finance<span class="count">{FINANCE_COUNT}</span></button>
           <button class={this.activeTab === "maps" ? "tab active" : "tab"} click={() => this.activate("maps")}>Maps<span class="count">{MAPS_COUNT}</span></button>
         </div>
         <div class="tabbar-line"></div>
@@ -391,6 +519,9 @@ export default class App extends Component {
         </section>
         <section class={this.activeTab === "dynamic" ? "tabpanel active" : "tabpanel"}>
           {this.builtDynamic ? <DynamicTab active={this.activeTab === "dynamic"} /> : null}
+        </section>
+        <section class={this.activeTab === "finance" ? "tabpanel active" : "tabpanel"}>
+          {this.builtFinance ? <FinanceTab /> : null}
         </section>
         <section class={this.activeTab === "maps" ? "tabpanel active" : "tabpanel"}>
           {this.builtMaps ? <MapsTab /> : null}

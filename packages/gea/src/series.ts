@@ -11,6 +11,7 @@ import type {
   ErrorBarOptions,
   GraphInput,
   HeatmapOptions,
+  HeikinAshiOptions,
   HexbinOptions,
   ImageOptions,
   IsosurfaceOptions,
@@ -30,13 +31,16 @@ import type {
   PolarSeries,
   Quiver3DOptions,
   QuiverOptions,
+  RenkoOptions,
   ScatterLayer,
   ScatterOptions,
   StemOptions,
   SurfaceOptions,
   VolumeOptions,
+  VolumeProfileOptions,
   YAxisOptions,
 } from "@photonviz/core";
+import { addHeikinAshi, addRenko, addVolumeProfile } from "@photonviz/core";
 import { addGeoJson, addMap, type GeoJsonOptions, type MapOptions } from "@photonviz/map";
 
 /** Base container sizing, applied imperatively (gea's `style` attr wants an object). */
@@ -62,6 +66,9 @@ export type SeriesSpec =
   | ({ type: "quiver" } & QuiverOptions)
   | ({ type: "candlestick" } & CandlestickOptions)
   | ({ type: "ohlc" } & OhlcOptions)
+  | ({ type: "heikinAshi" } & HeikinAshiOptions)
+  | ({ type: "renko" } & RenkoOptions)
+  | ({ type: "volumeProfile" } & VolumeProfileOptions)
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
@@ -88,6 +95,9 @@ export function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "quiver": return p.addQuiver(s);
     case "candlestick": return p.addCandlestick(s);
     case "ohlc": return p.addOhlc(s);
+    case "heikinAshi": return addHeikinAshi(p, s);
+    case "renko": return addRenko(p, s);
+    case "volumeProfile": return addVolumeProfile(p, s);
     case "pie": return p.addPie(s);
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);

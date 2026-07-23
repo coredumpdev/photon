@@ -1,4 +1,7 @@
-import { Plot, Plot3D, PolarPlot, linkX } from "@photonviz/core";
+import {
+  Plot, Plot3D, PolarPlot, linkX,
+  rsi, macd, firstFinite, addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth,
+} from "@photonviz/core";
 import {
   addMap, addGeoJson, xyzVectorSource, pmtilesSource, protomapsStyle,
   worldToLonLat, lonLatToWorld, type MapStyle, type MapLayer,
@@ -14,6 +17,7 @@ import { worldCountries } from "@photonviz/map/world";
 const gridStatic = document.getElementById("grid-static")!;
 const gridDynamic = document.getElementById("grid-dynamic")!;
 const gridMaps = document.getElementById("grid-maps")!;
+const gridFinance = document.getElementById("grid-finance")!;
 
 // FPS badges — only Dynamic-tab panels register one (top-left of the chart).
 const fpsBadges: HTMLElement[] = [];
@@ -1194,12 +1198,101 @@ function buildMaps(grid: HTMLElement): void {
 // ============================================================================
 // Lazy tab building + switching.
 // ============================================================================
-const built = { static: false, dynamic: false, maps: false };
+// ============================ FINANCE PANELS ===============================
+// Specialist finance charts built on the finance module (indicators + transforms).
+function buildFinance(grid: HTMLElement): void {
+  reseed();
+  const N = 90;
+  const times = businessDays(N, Date.UTC(2024, 0, 1));
+  const idx = Float64Array.from({ length: N }, (_, i) => i);
+  const o = new Float64Array(N), h = new Float64Array(N), l = new Float64Array(N), c = new Float64Array(N), vol = new Float64Array(N);
+  let price = 100;
+  for (let i = 0; i < N; i++) {
+    const open = price, close = open + gaussian(0, 2.2);
+    o[i] = open; c[i] = close;
+    h[i] = Math.max(open, close) + Math.abs(gaussian(0, 1.2));
+    l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1.2));
+    vol[i] = 20 + Math.abs(close - open) * 6 + rand() * 12;
+    price = close;
+  }
+  // Slice a series past its warm-up NaNs (indicators return leading NaN).
+  const trim = (y: Float64Array): { x: Float64Array; y: Float64Array } => {
+    const s = Math.max(0, firstFinite(y));
+    return { x: idx.subarray(s), y: y.subarray(s) };
+  };
+
+  // Heikin-Ashi — smoothed candles on the gap-collapsing session axis.
+  const ha = new Plot(panel(grid, "Heikin-Ashi", "smoothed candles"), {
+    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
+  });
+  addHeikinAshi(ha, { x: idx, open: o, high: h, low: l, close: c });
+  ha.render();
+
+  // Renko — fixed-size bricks (time discarded).
+  const rk = new Plot(panel(grid, "Renko", "brickSize 2 · wickless"), { theme: "dark", showToolbar: false });
+  addRenko(rk, { close: c, brickSize: 2 });
+  rk.render();
+
+  // Bollinger Bands over the candles.
+  const bb = new Plot(panel(grid, "Bollinger Bands", "20 · 2σ"), {
+    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
+  });
+  bb.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+  addBollinger(bb, { x: idx, close: c, period: 20, k: 2, bandColor: "rgba(167,139,250,0.14)" });
+  bb.render();
+
+  // Volume profile — volume by price (horizontal), POC highlighted.
+  const vp = new Plot(panel(grid, "Volume profile", "volume by price · POC"), { theme: "dark", showToolbar: false });
+  addVolumeProfile(vp, { price: c, volume: vol, bins: 24, color: "#3b82f6", pocColor: "#f59e0b" });
+  vp.render();
+
+  // Depth chart — synthesize a cumulative order book around the last price.
+  const mid = c[N - 1]!;
+  const bids: [number, number][] = [], asks: [number, number][] = [];
+  for (let i = 1; i <= 20; i++) { bids.push([mid - i * 0.5, 5 + rand() * 20]); asks.push([mid + i * 0.5, 5 + rand() * 20]); }
+  const dp = new Plot(panel(grid, "Depth chart", "cumulative order book"), { theme: "dark", showToolbar: false });
+  addDepth(dp, { bids, asks });
+  dp.render();
+
+  // Linked dashboard: price + RSI(14) + MACD, all synced on the ordinal-time axis.
+  const priceP = new Plot(panel(grid, "Linked · price", "candles · drag to pan"), {
+    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
+  });
+  priceP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
+  priceP.render();
+
+  const rsiP = new Plot(panel(grid, "Linked · RSI(14)", "70 / 30 guides"), {
+    theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 100] } }, showToolbar: false,
+  });
+  const r = trim(rsi(c, 14));
+  rsiP.addLine({ x: r.x, y: r.y, color: "#f472b6", width: 1.5, name: "RSI" });
+  rsiP.addAnnotation({ type: "span", dim: "y", value: 70, color: "#475569", dash: [4, 4] });
+  rsiP.addAnnotation({ type: "span", dim: "y", value: 30, color: "#475569", dash: [4, 4] });
+  rsiP.render();
+
+  const m = macd(c, 12, 26, 9);
+  const macdP = new Plot(panel(grid, "Linked · MACD", "12/26/9"), {
+    theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
+  });
+  const hist = trim(m.histogram);
+  macdP.addBar({ x: hist.x, y: hist.y, width: 0.7, color: "#64748b" });
+  const ml = trim(m.macd), sl = trim(m.signal);
+  macdP.addLine({ x: ml.x, y: ml.y, color: "#60a5fa", width: 1.5, name: "MACD" });
+  macdP.addLine({ x: sl.x, y: sl.y, color: "#f59e0b", width: 1.5, name: "signal" });
+  macdP.render();
+
+  linkX([priceP, rsiP, macdP]);
+}
+
+const built = { static: false, dynamic: false, maps: false, finance: false };
 
 function buildStatic(): void { reseed(); for (const b of CHARTS) b(gridStatic, false); }
 function buildDynamic(): void { reseed(); for (const b of CHARTS) b(gridDynamic, true); buildLinkedFinance(gridDynamic); }
 
-function activate(name: "static" | "dynamic" | "maps"): void {
+type TabName = "static" | "dynamic" | "finance" | "maps";
+const gridOf: Record<TabName, HTMLElement> = { static: gridStatic, dynamic: gridDynamic, finance: gridFinance, maps: gridMaps };
+
+function activate(name: TabName): void {
   for (const t of document.querySelectorAll<HTMLElement>(".tab")) t.classList.toggle("active", t.dataset.tab === name);
   for (const s of document.querySelectorAll<HTMLElement>(".tabpanel")) s.classList.toggle("active", s.id === `panel-${name}`);
 
@@ -1207,16 +1300,16 @@ function activate(name: "static" | "dynamic" | "maps"): void {
     built[name] = true;
     if (name === "static") buildStatic();
     else if (name === "dynamic") buildDynamic();
+    else if (name === "finance") buildFinance(gridFinance);
     else buildMaps(gridMaps);
     // Reflect the panel count in the tab label.
-    const grid = name === "static" ? gridStatic : name === "dynamic" ? gridDynamic : gridMaps;
-    document.getElementById(`count-${name}`)!.textContent = String(grid.children.length);
+    document.getElementById(`count-${name}`)!.textContent = String(gridOf[name].children.length);
   }
   dynamicActive = name === "dynamic";
 }
 
 for (const t of document.querySelectorAll<HTMLElement>(".tab")) {
-  t.addEventListener("click", () => activate(t.dataset.tab as "static" | "dynamic" | "maps"));
+  t.addEventListener("click", () => activate(t.dataset.tab as TabName));
 }
 
 // Static is the default and is visible on load, so build it immediately.

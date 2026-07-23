@@ -107,6 +107,23 @@ export {
 export { earcut } from "./geo/earcut.js";
 
 // Color
+// --- Finance: TA indicators, chart transforms, and Plot builders -------------
+export {
+  sma, ema, wma, rollingStd, bollinger, rsi, macd, vwap, trueRange, atr, firstFinite,
+} from "./finance/indicators.js";
+export type { BollingerBands, Macd } from "./finance/indicators.js";
+export {
+  heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth,
+} from "./finance/transforms.js";
+export type {
+  Ohlc, OhlcArrays, Brick, PfColumn, VolumeProfile, DepthCurves,
+} from "./finance/transforms.js";
+export { addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth } from "./finance/charts.js";
+export type {
+  HeikinAshiOptions, RenkoOptions, VolumeProfileOptions, BollingerOptions, BollingerHandle,
+  DepthOptions, DepthHandle, OhlcInput,
+} from "./finance/charts.js";
+
 export { colormap, colormapLUT } from "./color/colormap.js";
 export type { ColormapName, RGB } from "./color/colormap.js";
 
