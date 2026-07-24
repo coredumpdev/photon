@@ -11,6 +11,7 @@
   <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/dm/@photonviz/core?color=cb3837" alt="downloads"/></a>
   <a href="https://bundlephobia.com/package/@photonviz/core"><img src="https://img.shields.io/bundlephobia/minzip/@photonviz/core?label=minzip" alt="size"/></a>
   · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
+  · <a href="https://coredumpdev.github.io/photon/llms-full.txt">Docs for AI agents</a>
 </p>
 
 <p align="center">

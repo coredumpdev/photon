@@ -10,6 +10,7 @@
   <a href="https://www.npmjs.com/package/@photonviz/react"><img src="https://img.shields.io/npm/v/@photonviz/react?color=cb3837&logo=npm" alt="npm"/></a>
   <a href="https://www.npmjs.com/package/@photonviz/react"><img src="https://img.shields.io/npm/dm/@photonviz/react?color=cb3837" alt="downloads"/></a>
   · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
+  · <a href="https://coredumpdev.github.io/photon/llms-full.txt">Docs for AI agents</a>
 </p>
 
 <p align="center">

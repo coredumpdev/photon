@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/gea",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Gea (@geajs/core) bindings for Photon — WebGL2 scientific plotting",
   "type": "module",
   "main": "./dist/index.mjs",
