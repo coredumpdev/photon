@@ -1,6 +1,6 @@
 {
   "name": "@photonviz/wc",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Web Components (custom elements) for Photon — WebGL2 scientific plotting in plain HTML, Angular, or any framework",
   "type": "module",
   "main": "./dist/index.js",
