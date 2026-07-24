@@ -641,7 +641,7 @@ export class Plot {
   }
 
   /**
-   * Register a layer built outside core (e.g. `@photonviz/map`). Use with
+   * Register a layer built outside core (a custom WebGL2 `Layer`). Use with
    * {@link context} to construct the layer against this plot's WebGL2 context.
    */
   add<T extends Layer>(layer: T): T {
@@ -1539,8 +1539,11 @@ export class Plot {
   private legendEntries(): Array<{ name: string; colorCss: string }> {
     const out: Array<{ name: string; colorCss: string }> = [];
     for (const l of this.layers) {
-      const a = l as Partial<{ name: string; colorCss: string }>;
-      if (typeof a.name === "string" && a.name && typeof a.colorCss === "string") {
+      const a = l as Partial<{ name: string; colorCss: string; id: string }>;
+      // Skip layers left with their auto id (name === id) — only explicitly
+      // named series belong in the legend, so a builder's helper layers (fills,
+      // ICE curves, raw pre-smoothing lines) don't clutter it.
+      if (typeof a.name === "string" && a.name && a.name !== a.id && typeof a.colorCss === "string") {
         out.push({ name: a.name, colorCss: a.colorCss });
       }
     }

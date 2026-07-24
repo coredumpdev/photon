@@ -9,11 +9,20 @@
 
 <p align="center">
   <a href="https://github.com/coredumpdev/photon/actions/workflows/ci.yml"><img src="https://github.com/coredumpdev/photon/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/v/@photonviz/core?color=cb3837&logo=npm" alt="npm version"/></a>
+  <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/dm/@photonviz/core?color=cb3837" alt="npm downloads"/></a>
+  <a href="https://bundlephobia.com/package/@photonviz/core"><img src="https://img.shields.io/bundlephobia/minzip/@photonviz/core?label=core%20minzip" alt="bundle size"/></a>
   <img src="https://img.shields.io/badge/WebGL2-required-8b5cf6" alt="WebGL2"/>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/deps-zero-16a34a" alt="Zero dependencies"/>
   <img src="https://img.shields.io/badge/PRs-welcome-ff69b4" alt="PRs welcome"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"/>
+</p>
+
+<p align="center">
+  <b><a href="https://coredumpdev.github.io/photon/">▶ Live demo</a></b>
+  · <a href="https://coredumpdev.github.io/photon/playground/">Playground</a>
+  · <a href="https://coredumpdev.github.io/photon/llms-full.txt">Docs for AI agents</a>
 </p>
 
 <p align="center">
@@ -43,9 +52,7 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 - 🎨 **Fully styleable** — Bokeh-like flat props: `background`, `title`, `legend`, and per-axis line/tick/label/grid color, font & label rotation.
 - ♿ **Accessible** — plots expose `role="img"` with an auto-summarized `aria-label` (override via `ariaLabel` / `setAriaLabel()` / `describe()`).
 - 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers, plus framework-free **Web Components** (`@photonviz/wc`).
-- 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.
-- 🗺️ **Maps** — [`@photonviz/map`](./packages/map) renders a Web Mercator vector basemap **from scratch** (MVT + PMTiles + GeoJSON), works **fully offline**, no Mapbox / MapLibre / Leaflet.
-- 🌊 **Streaming-ready** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
+- 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.- 🌊 **Streaming-ready** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
 - 🖼️ **Many charts, one context** — a single shared WebGL2 context backs every chart, so a page can hold dozens without exhausting the browser's context limit.
 
 ## Gallery
@@ -62,8 +69,6 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 npm i @photonviz/core
 # framework bindings (optional)
 npm i @photonviz/react     # or @photonviz/vue, @photonviz/svelte, @photonviz/solid, @photonviz/gea
-# vector maps (optional)
-npm i @photonviz/map
 ```
 
 ## Quick start (vanilla core)
@@ -293,48 +298,6 @@ p.addVolume({ values, dims, colormap, density });                             //
 
 3D plots get a colorbar (colormapped layers), legend, canvas title, back-wall grid
 planes, and optional `autoRotate` — all as flat `Plot3DOptions`.
-
-## Maps — `@photonviz/map`
-
-A Web Mercator vector basemap rendered **from scratch** on the same WebGL2 context
-— MVT decoding, ear-clipping triangulation, thick lines with miter joins, tile
-math and rendering are all in this package. No Mapbox / MapLibre / Leaflet.
-
-<p align="center">
-  <img src="./assets/map.png" alt="Photon vector world map — Natural Earth countries triangulated and drawn on WebGL2, no map library" width="100%" />
-</p>
-
-```ts
-import { Plot } from "@photonviz/core";
-import { addMap, pmtilesSource, protomapsStyle, lonLatToWorld } from "@photonviz/map";
-
-const plot = new Plot(el, { equalAspect: true, boundedPan: true }); // plots in world coords
-const map = addMap(plot, {
-  source: pmtilesSource({ blob: file }),   // a local .pmtiles file → fully offline
-  style: protomapsStyle("dark"),
-});
-
-// overlay your own data (project lon/lat → world), and pick features on click
-plot.addScatter({ x: [lonLatToWorld(28.98, 41.01)[0]], y: [lonLatToWorld(28.98, 41.01)[1]] });
-const hit = map.pickFeature(worldX, worldY);   // { layer, properties } | null
-```
-
-- **Tile sources** — any XYZ `.pbf` endpoint (`xyzVectorSource`) or a single
-  **PMTiles** archive from a URL, a local **`File`/`Blob`** (offline), or in-memory
-  `data` (`pmtilesSource`). The whole planet lives in one range-served file.
-- **GeoJSON** — `addGeoJson(plot, { geojson })` renders a whole map from one file
-  (admin boundaries, etc.) — no tiles, no server, no key.
-- **Batteries-included world** — `import { worldCountries } from "@photonviz/map/world"`
-  ships a Natural Earth 10m basemap **embedded in the library** (opt-in subpath, so
-  the main entry stays tiny).
-- **Offline** — the local-file path reads byte ranges via `Blob.slice()`; bundle a
-  region `.pmtiles` for a fully offline desktop/mobile map.
-- **Interactive** — `equalAspect` (no distortion), `boundedPan`, feature picking,
-  thick roads/borders, styled by tile-layer + properties.
-
-Wrapped for every framework too: `<Map>` / `<GeoJson>` (React, Vue, Solid) and
-`{ type: "map" }` / `{ type: "geojson" }` series (Svelte, Gea).
-
 ## Custom ticks
 
 Scientific axes want *meaningful* positions, not "auto-pretty" ones:
@@ -380,9 +343,7 @@ function frame() {
 
 | Package | Description |
 | --- | --- |
-| [`@photonviz/core`](./packages/core) | WebGL2 rendering core, zero dependencies |
-| [`@photonviz/map`](./packages/map) | Web Mercator vector basemap (MVT / PMTiles / GeoJSON), zero dependencies |
-| [`@photonviz/react`](./packages/react) | React components + `usePlot` hook |
+| [`@photonviz/core`](./packages/core) | WebGL2 rendering core, zero dependencies || [`@photonviz/react`](./packages/react) | React components + `usePlot` hook |
 | [`@photonviz/vue`](./packages/vue) | Vue components (provide/inject) |
 | [`@photonviz/svelte`](./packages/svelte) | Svelte `use:plot` action |
 | [`@photonviz/solid`](./packages/solid) | Solid.js components (JSX-free source) |
@@ -406,10 +367,6 @@ pnpm example     # live gallery (vite)
 pnpm example:react   # React example  (also :vue, :svelte, :solid, :gea)
 ```
 
-The vanilla gallery also has dedicated pages: `/map.html` (vector tiles),
-`/geojson.html` (GeoJSON world), and `/pmtiles-offline.html` (pick a local
-`.pmtiles` → fully offline map).
-
 ## Contributing
 
 Contributions are very welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the
@@ -425,10 +382,8 @@ are labeled [`good first issue`](https://github.com/coredumpdev/photon/labels/go
 - [x] Bars — grouped / stacked / horizontal; stacked area; scatter marker glyphs
 - [x] 3D suite — surface (+wireframe), scatter, line, bars, quiver, contour, isosurface, **volume raymarch**
 - [x] 3D chrome — legend, colorbar, title, hover tooltip+ring, grid planes, reset, auto-rotate
-- [x] React / Vue / Svelte / **Solid** / **Gea** bindings (every chart type, polar, 3D, and maps)
-- [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation, LUT colormaps
-- [x] Vector maps — `@photonviz/map` (MVT + PMTiles + GeoJSON, offline, feature picking)
-- [x] Candlestick/OHLC, `setData`/`renderType` streaming on every layer, linked panes (`linkX`)
+- [x] React / Vue / Svelte / **Solid** / **Gea** bindings (every chart type, polar, and 3D)
+- [x] Line joins tuning (miter/bevel/round + miter limit), GPU-side decimation, LUT colormaps- [x] Candlestick/OHLC, `setData`/`renderType` streaming on every layer, linked panes (`linkX`)
 - [x] Finance — Heikin-Ashi, Renko, Bollinger, volume profile, depth + indicators (SMA/EMA/WMA/RSI/MACD/VWAP/ATR/Stochastic/Keltner/OBV/Ichimoku/ADX/SuperTrend/Fib), `ordinal-time` axis
 - [x] Image export — `toDataURL`/`toBlob`/`downloadImage`/`copyToClipboard` + toolbar download-PNG
 - [x] Interactive drawing tools — trendline/horizontal/ray/Fibonacci/rectangle, editable annotations

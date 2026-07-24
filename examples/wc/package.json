@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@photonviz/core": "workspace:*",
-    "@photonviz/map": "workspace:*",
     "@photonviz/wc": "workspace:*"
   },
   "devDependencies": {

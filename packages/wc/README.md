@@ -6,6 +6,12 @@
 
 **Web Components (custom elements) for [Photon](https://github.com/coredumpdev/photon) — GPU-accelerated WebGL2 charts.**
 
+<p>
+  <a href="https://www.npmjs.com/package/@photonviz/wc"><img src="https://img.shields.io/npm/v/@photonviz/wc?color=cb3837&logo=npm" alt="npm"/></a>
+  <a href="https://www.npmjs.com/package/@photonviz/wc"><img src="https://img.shields.io/npm/dm/@photonviz/wc?color=cb3837" alt="downloads"/></a>
+  · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
+</p>
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
 </p>
@@ -42,13 +48,11 @@ Each element gives itself `display:block` and a default height of `320px`; set t
 - **`<photon-plot>`** — Cartesian. Properties: `options` (`PlotOptions`), `series` (`SeriesSpec[]`), `yAxes` (`YAxisSpec[]`), `annotations` (`Annotation[]`).
 
   `series` is a discriminated union by `type`:
-  `line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `ohlc` · `pie` · `patches` · `image` · `graph` · `map` · `geojson`, plus **finance** `heikinAshi` · `renko` · `volumeProfile`.
+  `line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `ohlc` · `pie` · `patches` · `image` · `graph`, plus **finance** `heikinAshi` · `renko` · `volumeProfile`.
 
 - **`<photon-plot3d>`** — 3D. Properties: `options` (`Plot3DOptions`), `layers` — `surface` · `pointcloud` · `line3d` · `bar3d` · `quiver3d` · `contour3d` · `isosurface` · `volume`.
 
 - **`<photon-polar>`** — polar. Properties: `options` (`PolarOptions`), `series` — `line` · `scatter`.
-
-Maps use [`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map) sources (e.g. `xyzVectorSource`) in `{ type: "map" }` series.
 
 `defineElements()` is exported for manual registration (it is called automatically on import, guarded against double-define). The element classes `PhotonPlotElement`, `PhotonPlot3DElement`, and `PhotonPolarElement` are exported too.
 

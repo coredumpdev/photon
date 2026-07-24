@@ -35,9 +35,6 @@ importers:
       '@photonviz/gea':
         specifier: workspace:*
         version: link:../../packages/gea
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
     devDependencies:
       '@geajs/vite-plugin':
         specifier: ^1.4.1
@@ -48,6 +45,12 @@ importers:
       vite:
         specifier: ^8.0.0
         version: 8.1.5(esbuild@0.27.7)
+
+  examples/ml:
+    dependencies:
+      '@photonviz/core':
+        specifier: workspace:*
+        version: link:../../packages/core
 
   examples/playground:
     dependencies:
@@ -60,9 +63,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
       codemirror:
         specifier: ^6
         version: 6.0.2
@@ -79,9 +79,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
       '@photonviz/react':
         specifier: workspace:*
         version: link:../../packages/react
@@ -113,9 +110,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
       '@photonviz/solid':
         specifier: workspace:*
         version: link:../../packages/solid
@@ -138,9 +132,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
       '@photonviz/svelte':
         specifier: workspace:*
         version: link:../../packages/svelte
@@ -166,18 +157,12 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
 
   examples/vue:
     dependencies:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
       '@photonviz/vue':
         specifier: workspace:*
         version: link:../../packages/vue
@@ -203,9 +188,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../../packages/map
       '@photonviz/wc':
         specifier: workspace:*
         version: link:../../packages/wc
@@ -224,9 +206,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../map
     devDependencies:
       '@geajs/core':
         specifier: ^1.4.0
@@ -241,20 +220,11 @@ importers:
         specifier: ^0.3.1
         version: 0.3.1
 
-  packages/map:
-    dependencies:
-      '@photonviz/core':
-        specifier: workspace:*
-        version: link:../core
-
   packages/react:
     dependencies:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../map
     devDependencies:
       '@types/react':
         specifier: ^18.3.12
@@ -268,9 +238,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../map
     devDependencies:
       solid-js:
         specifier: ^1.9.3
@@ -281,9 +248,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../map
       svelte:
         specifier: '>=4'
         version: 5.56.7
@@ -293,9 +257,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../map
     devDependencies:
       vue:
         specifier: ^3.5.13
@@ -306,9 +267,6 @@ importers:
       '@photonviz/core':
         specifier: workspace:*
         version: link:../core
-      '@photonviz/map':
-        specifier: workspace:*
-        version: link:../map
 
 packages:
 

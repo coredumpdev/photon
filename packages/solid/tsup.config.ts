@@ -7,5 +7,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   target: "es2020",
-  external: ["solid-js", "solid-js/web", "@photonviz/core", "@photonviz/map"],
+  external: ["solid-js", "solid-js/web", "@photonviz/core"],
 });

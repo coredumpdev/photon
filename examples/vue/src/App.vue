@@ -1,29 +1,28 @@
 <script setup lang="ts">
 // ===========================================================================
-// Three-tab gallery shell.
+// Gallery shell.
 //   • Static  — the full catalog with render-type="static" (default, mounted
 //               immediately while visible).
 //   • Dynamic — the same catalog with render-type="dynamic", each panel
 //               animated by a shared rAF loop + a self-measuring FPS badge,
 //               plus a linkX-ed finance dashboard.
-//   • Maps    — offline vector basemaps, no FPS.
-// Each tab is rendered with v-if keyed on the active tab, so Dynamic and Maps
-// mount only the first time they are shown — a WebGL plot built while its
-// container is display:none would size to 0. Static is visible on load.
+// Each tab is rendered with v-if keyed on the active tab, so Dynamic mounts
+// only the first time it is shown — a WebGL plot built while its container is
+// display:none would size to 0. Static is visible on load.
 // ===========================================================================
 import { ref } from "vue";
 import GalleryTab from "./GalleryTab.vue";
 import FinanceTab from "./FinanceTab.vue";
-import MapsTab from "./MapsTab.vue";
+import MlTab from "./MlTab.vue";
 
-type Tab = "static" | "dynamic" | "finance" | "maps";
+type Tab = "static" | "dynamic" | "finance" | "ml";
 const tab = ref<Tab>("static");
 
 const tabs: Array<{ id: Tab; label: string; count: number }> = [
   { id: "static", label: "Static", count: 48 },
   { id: "dynamic", label: "Dynamic", count: 50 },
   { id: "finance", label: "Finance", count: 8 },
-  { id: "maps", label: "Maps", count: 3 },
+  { id: "ml", label: "ML", count: 12 },
 ];
 </script>
 
@@ -31,11 +30,11 @@ const tabs: Array<{ id: Tab; label: string; count: number }> = [
   <header>
     <h1><b>Photon</b> — Vue chart gallery</h1>
     <p>
-      Three tabs, one <code>@photonviz/vue</code> component tree.
+      Four tabs, one <code>@photonviz/vue</code> component tree.
       <b>Static</b>: the full catalog (hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit).
       <b>Dynamic</b>: the same catalog streaming live via <code>requestAnimationFrame</code>, each panel with an FPS badge.
       <b>Finance</b>: Heikin-Ashi, Renko, Bollinger, volume profile, depth + a linkX-ed RSI/MACD dashboard.
-      <b>Maps</b>: offline vector basemaps.
+      <b>ML</b>: training curves, confusion matrix, ROC/PR, embeddings, decision boundary, SHAP + more.
     </p>
   </header>
 
@@ -52,11 +51,11 @@ const tabs: Array<{ id: Tab; label: string; count: number }> = [
   </div>
   <div class="tabbar-line"></div>
 
-  <!-- Static is mounted while visible; Dynamic/Maps mount lazily on first show. -->
+  <!-- Static is mounted while visible; Dynamic mounts lazily on first show. -->
   <GalleryTab v-if="tab === 'static'" :dynamic="false" />
   <GalleryTab v-else-if="tab === 'dynamic'" :dynamic="true" />
   <FinanceTab v-else-if="tab === 'finance'" />
-  <MapsTab v-else-if="tab === 'maps'" />
+  <MlTab v-else-if="tab === 'ml'" />
 </template>
 
 <style>

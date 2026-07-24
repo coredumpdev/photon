@@ -60,8 +60,6 @@ import type {
   VolumeProfileOptions,
   YAxisOptions,
 } from "@photonviz/core";
-import { addGeoJson, addMap } from "@photonviz/map";
-import type { GeoJsonOptions, MapOptions } from "@photonviz/map";
 
 // --- Cartesian series --------------------------------------------------------
 
@@ -86,9 +84,7 @@ export type SeriesSpec =
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
-  | ({ type: "graph" } & GraphInput)
-  | ({ type: "map" } & MapOptions)
-  | ({ type: "geojson" } & GeoJsonOptions);
+  | ({ type: "graph" } & GraphInput);
 
 export interface YAxisSpec extends YAxisOptions {
   id: string;
@@ -116,8 +112,6 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
     case "graph": return p.addGraph(s);
-    case "map": return addMap(p, s);
-    case "geojson": return addGeoJson(p, s);
   }
 }
 
@@ -246,6 +240,9 @@ export class PhotonPlotElement extends HTMLElement {
     this.#plot.clearAnnotations();
     for (const a of this.#annotations) this.#plot.addAnnotation(a);
   }
+
+  /** The underlying core {@link CorePlot} once mounted — the imperative escape hatch for composed builders (ML metrics, finance overlays, …). */
+  get plot(): CorePlot | undefined { return this.#plot; }
 
   connectedCallback(): void { this.#mount(); }
   disconnectedCallback(): void { this.#unmount(); }
@@ -414,3 +411,13 @@ declare global {
     "photon-polar": PhotonPolarElement;
   }
 }
+
+// ML / deep-learning: pure metrics + reducers and the Plot builders that render
+// them (imperative use on a core Plot).
+export {
+  confusionMatrix, rocCurve, prCurve, calibrationCurve, emaSmooth,
+  pca, standardize, beeswarmLayout, ML_PALETTE,
+  addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
+  addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
+  addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
+} from "@photonviz/core";

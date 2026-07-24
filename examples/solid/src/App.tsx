@@ -1,4 +1,16 @@
 import {
+  addAttentionMap,
+  addCalibration,
+  addConfusionMatrix,
+  addDecisionBoundary,
+  addEmbedding,
+  addFeatureImportance,
+  addPartialDependence,
+  addPrCurve,
+  addRidgeline,
+  addRocCurve,
+  addShapBeeswarm,
+  addTrainingCurves,
   Annotation,
   Area,
   Bar,
@@ -11,7 +23,6 @@ import {
   Depth,
   ErrorBar,
   firstFinite,
-  GeoJson,
   Graph,
   Heatmap,
   HeikinAshi,
@@ -21,9 +32,9 @@ import {
   Line,
   Line3D,
   macd,
-  Map as MapLayer,
   Ohlc,
   Patches,
+  pca,
   Pie,
   Plot,
   Plot3D,
@@ -48,18 +59,6 @@ import {
   type Plot3D as CorePlot3D,
   type PolarPlot as CorePolarPlot,
 } from "@photonviz/core";
-import {
-  addMap,
-  pmtilesSource,
-  protomapsStyle,
-  worldToLonLat,
-  lonLatToWorld,
-  xyzVectorSource,
-  type MapLayer as CoreMapLayer,
-  type MapStyle,
-} from "@photonviz/map";
-// The world basemap is embedded in the library (Natural Earth 10m) — no fetch.
-import { worldCountries } from "@photonviz/map/world";
 import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 // ============================================================================
@@ -2620,104 +2619,300 @@ function FinanceGrid(): JSX.Element {
 }
 
 // ============================================================================
-// MAPS TAB — offline vector basemaps. No FPS badges.
+// ML TAB — deep-learning / model-eval chart pack. Each panel captures its core
+// Plot via `onReady` and calls an `addX(plot, opts)` builder. All STATIC (no
+// FPS badges, no rAF). Mirrors vanilla buildML().
 // ============================================================================
+function MLGrid(): JSX.Element {
+  const { rand, gaussian } = makeRng(42);
 
-const lonLatReadout = (x: number, y: number) => {
-  const [lon, lat] = worldToLonLat(x, y);
-  return [
-    { label: "lon", value: `${lon.toFixed(2)}°` },
-    { label: "lat", value: `${lat.toFixed(2)}°` },
-  ];
-};
-
-function MapsGrid(): JSX.Element {
-  // 1) GeoJSON world — fully offline (Natural Earth 10m embedded in the lib).
-  const adminStyle: MapStyle = {
-    background: [0.05, 0.09, 0.16, 1],
-    paint(_layer, type) {
-      if (type === "polygon") return { kind: "fill", color: [0.16, 0.2, 0.26, 1], outline: [0.5, 0.58, 0.68, 1], outlineWidth: 1.2 };
-      return { kind: "line", color: [0.5, 0.58, 0.68, 1], width: 1.2 };
-    },
-  };
-
-  // 2) Vector basemap — keyless MapLibre demo tiles + city overlay.
-  const source = xyzVectorSource({ url: "https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf", attribution: "© MapLibre demo tiles", maxZoom: 5 });
-  const oceanStyle: MapStyle = {
-    background: [0.05, 0.09, 0.16, 1],
-    paint(layer, type) {
-      if (layer === "countries") return type === "polygon" ? { kind: "fill", color: [0.16, 0.2, 0.26, 1] } : { kind: "line", color: [0.3, 0.36, 0.44, 1], width: 1 };
-      if (layer === "geolines") return { kind: "line", color: [0.2, 0.25, 0.32, 1], width: 1 };
-      return null;
-    },
-  };
-  const cities: Array<[string, number, number]> = [
-    ["Istanbul", 28.98, 41.01], ["Tokyo", 139.69, 35.69], ["New York", -74.0, 40.71],
-    ["São Paulo", -46.63, -23.55], ["Sydney", 151.21, -33.87], ["Cairo", 31.24, 30.04],
-  ];
-  const wx: number[] = [];
-  const wy: number[] = [];
-  for (const [, lon, lat] of cities) {
-    const [x, y] = lonLatToWorld(lon, lat);
-    wx.push(x);
-    wy.push(y);
+  // 1 — Training curves (EMA smoothing + best-epoch marker).
+  const E = 90;
+  const tcTrain = new Float64Array(E);
+  const tcVal = new Float64Array(E);
+  for (let e = 0; e < E; e++) {
+    tcTrain[e] = 2.4 * Math.exp(-e / 24) + 0.16 + Math.abs(gaussian(0, 0.05));
+    tcVal[e] = 2.4 * Math.exp(-e / 21) + 0.28 + Math.max(0, (e - 55) * 0.004) + Math.abs(gaussian(0, 0.09));
   }
 
-  // 3) PMTiles (offline) — guarded: only builds a map once a local file is picked.
-  const [pmCap, setPmCap] = createSignal("no network — pick a .pmtiles file →");
-  let pmPlot: CorePlot | null = null;
-  let pmMap: CoreMapLayer | null = null;
-  const onPmFile = (e: Event) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file || !pmPlot) return;
-    if (pmMap) {
-      pmMap.dispose();
-      pmMap = null;
+  // 2 — Confusion matrix (5 classes).
+  const C = 5;
+  const cmN = 600;
+  const yTrue = new Int32Array(cmN);
+  const yPred = new Int32Array(cmN);
+  for (let i = 0; i < cmN; i++) {
+    const t = Math.floor(rand() * C);
+    yTrue[i] = t;
+    yPred[i] = rand() < 0.82 ? t : Math.floor(rand() * C);
+  }
+
+  // Shared binary-classifier scores for ROC / PR / calibration (3, 4, 5).
+  const NB = 500;
+  const scores = new Float64Array(NB);
+  const labels = new Int32Array(NB);
+  for (let i = 0; i < NB; i++) {
+    const pos = rand() < 0.4 ? 1 : 0;
+    labels[i] = pos;
+    scores[i] = Math.min(1, Math.max(0, pos ? gaussian(0.68, 0.17) : gaussian(0.36, 0.17)));
+  }
+
+  // 6 — Embedding projector (high-D Gaussians → PCA 2-D).
+  const D = 12;
+  const K = 3;
+  const per = 90;
+  const emN = K * per;
+  const means: number[][] = Array.from({ length: K }, () => Array.from({ length: D }, () => gaussian(0, 2.4)));
+  const emData = new Float64Array(emN * D);
+  const emCls = new Int32Array(emN);
+  let er = 0;
+  for (let k = 0; k < K; k++)
+    for (let j = 0; j < per; j++, er++) {
+      emCls[er] = k;
+      for (let cc = 0; cc < D; cc++) emData[er * D + cc] = means[k]![cc]! + gaussian(0, 1);
     }
-    const src = pmtilesSource({ blob: file, attribution: `local: ${file.name}` });
-    pmMap = addMap(pmPlot, { source: src, style: protomapsStyle("dark") });
-    setPmCap(`local: ${file.name}`);
-  };
+  const proj = pca(emData, emN, D, 2);
+  const emX = new Float64Array(emN);
+  const emY = new Float64Array(emN);
+  for (let i = 0; i < emN; i++) {
+    emX[i] = proj.scores[i * 2]!;
+    emY[i] = proj.scores[i * 2 + 1]!;
+  }
+
+  // 7 — Decision boundary (field + training points).
+  const dbNx = 72;
+  const dbNy = 72;
+  const dbLo = -3;
+  const dbHi = 3;
+  const dbValues = new Float64Array(dbNx * dbNy);
+  for (let iy = 0; iy < dbNy; iy++)
+    for (let ix = 0; ix < dbNx; ix++) {
+      const x = dbLo + ((dbHi - dbLo) * ix) / (dbNx - 1);
+      const y = dbLo + ((dbHi - dbLo) * iy) / (dbNy - 1);
+      dbValues[iy * dbNx + ix] = 1 / (1 + Math.exp(-(1.6 - (x * x + y * y)) * 2.2));
+    }
+  const dbM = 220;
+  const dbPx = new Float64Array(dbM);
+  const dbPy = new Float64Array(dbM);
+  const dbPl = new Int32Array(dbM);
+  for (let i = 0; i < dbM; i++) {
+    const x = dbLo + rand() * (dbHi - dbLo);
+    const y = dbLo + rand() * (dbHi - dbLo);
+    dbPx[i] = x;
+    dbPy[i] = y;
+    const inside = x * x + y * y < 1.6;
+    dbPl[i] = (rand() < 0.9 ? inside : !inside) ? 1 : 0;
+  }
+
+  // 8 — Feature importance (sorted horizontal bars).
+  const fiNames = ["bmi", "s5", "bp", "age", "s3", "sex", "s1", "s6", "s4"];
+  const fiValues = fiNames.map(() => rand() * rand());
+
+  // 9 — SHAP beeswarm (per-sample impact, colored by feature value).
+  const shNames = ["bmi", "s5", "bp", "age", "s3", "sex"];
+  const shF = shNames.length;
+  const shN = 180;
+  const shap: number[][] = [];
+  const fval: number[][] = [];
+  for (let f = 0; f < shF; f++) {
+    const w = (shF - f) / shF;
+    const sv: number[] = [];
+    const fv: number[] = [];
+    for (let i = 0; i < shN; i++) {
+      const v = gaussian(0, 1);
+      fv.push(v);
+      sv.push(w * v * 0.6 + gaussian(0, 0.08));
+    }
+    shap.push(sv);
+    fval.push(fv);
+  }
+
+  // 10 — Partial dependence (+ ICE).
+  const G = 32;
+  const pdX = new Float64Array(G);
+  const pdPd = new Float64Array(G);
+  for (let i = 0; i < G; i++) {
+    const t = i / (G - 1);
+    pdX[i] = t;
+    pdPd[i] = 0.2 + 0.6 / (1 + Math.exp(-(t - 0.5) * 10));
+  }
+  const pdIce: number[][] = [];
+  for (let k = 0; k < 16; k++) {
+    const scale = 0.7 + rand() * 0.6;
+    const off = gaussian(0, 0.04);
+    pdIce.push(Array.from(pdPd, (v) => Math.min(1, Math.max(0, 0.2 + (v - 0.2) * scale + off + gaussian(0, 0.015)))));
+  }
+
+  // 11 — Attention map (transformer, causal, query × key).
+  const T = 11;
+  const amW: number[][] = [];
+  for (let q = 0; q < T; q++) {
+    const row: number[] = [];
+    let z = 0;
+    for (let k = 0; k <= q; k++) {
+      const bias = -Math.abs(q - k) * 0.55 + (k === 0 ? 0.9 : 0) + gaussian(0, 0.12);
+      const ex = Math.exp(bias);
+      row.push(ex);
+      z += ex;
+    }
+    for (let k = q + 1; k < T; k++) row.push(0);
+    for (let k = 0; k < T; k++) row[k]! /= z || 1;
+    amW.push(row);
+  }
+
+  // 12 — Ridgeline (weight distribution over epochs).
+  const rlEpochs = 8;
+  const rlGroups = Array.from({ length: rlEpochs }, (_, e) => {
+    const mean = 1.1 * Math.exp(-e / 3);
+    const sd = 0.45 * Math.exp(-e / 6) + 0.14;
+    return { label: `epoch ${e}`, values: Float64Array.from({ length: 320 }, () => gaussian(mean, sd)) };
+  });
 
   return (
     <>
-      <Panel title="GeoJSON world" subtitle="offline · Natural Earth 10m">
-        <Plot options={{ ...DARK, showToolbar: true, equalAspect: true, boundedPan: true, hoverReadout: lonLatReadout }}>
-          <GeoJson geojson={worldCountries} layer="admin" style={adminStyle} />
-        </Plot>
-        <div class="cap">© Natural Earth (public domain) · embedded</div>
-      </Panel>
-
-      <Panel title="Vector basemap" subtitle="addMap · MVT · city overlay">
-        <Plot options={{ ...DARK, showToolbar: true, equalAspect: true, crosshair: true, boundedPan: true, hoverReadout: lonLatReadout }}>
-          <MapLayer source={source} style={oceanStyle} bbox={[-175, -58, 190, 78]} />
-          <Scatter x={wx} y={wy} size={8} color="#f472b6" labels={cities.map(([name]) => name)} />
-        </Plot>
-        <div class="cap">© MapLibre demo tiles</div>
-      </Panel>
-
-      <Panel title="PMTiles (offline)" subtitle="pick a local .pmtiles file">
+      <Panel title="Training curves" subtitle="EMA smoothing">
         <Plot
-          options={{ ...DARK, showToolbar: true, equalAspect: true, boundedPan: true, crosshair: true, hoverReadout: lonLatReadout }}
+          options={{ ...DARK, showToolbar: false, legend: true }}
           onReady={(p) => {
-            pmPlot = p;
+            addTrainingCurves(p, {
+              series: [{ name: "train loss", y: tcTrain, color: "#60a5fa" }, { name: "val loss", y: tcVal, color: "#f472b6" }],
+              smoothing: 0.6,
+              showRaw: true,
+              best: "min",
+            });
+            p.render();
           }}
         />
-        <div class="cap">{pmCap()}</div>
-        <input type="file" accept=".pmtiles" onChange={onPmFile} />
+      </Panel>
+
+      <Panel title="Confusion matrix" subtitle="5 classes">
+        <Plot
+          options={{ ...DARK, showToolbar: false }}
+          onReady={(p) => {
+            addConfusionMatrix(p, { yTrue, yPred, classes: C, colormap: "viridis" });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="ROC curve" subtitle="AUC in legend">
+        <Plot
+          options={{ ...DARK, showToolbar: false, legend: true }}
+          onReady={(p) => {
+            addRocCurve(p, { scores, labels, fill: true, color: "#38bdf8" });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Precision–recall" subtitle="AP in legend">
+        <Plot
+          options={{ ...DARK, showToolbar: false, legend: true }}
+          onReady={(p) => {
+            addPrCurve(p, { scores, labels, fill: true });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Calibration" subtitle="reliability + ECE">
+        <Plot
+          options={{ ...DARK, showToolbar: false, legend: true }}
+          onReady={(p) => {
+            addCalibration(p, { scores, labels, bins: 10 });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Embedding (PCA)" subtitle="color by class">
+        <Plot
+          options={{ ...DARK, showToolbar: false, legend: true, pick: "xy" }}
+          onReady={(p) => {
+            addEmbedding(p, { x: emX, y: emY, labels: emCls, classNames: ["cats", "dogs", "birds"], size: 5 });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Decision boundary" subtitle="field + points">
+        <Plot
+          options={{ ...DARK, showToolbar: false, pick: "xy" }}
+          onReady={(p) => {
+            addDecisionBoundary(p, {
+              values: dbValues,
+              cols: dbNx,
+              rows: dbNy,
+              extent: { x: [dbLo, dbHi], y: [dbLo, dbHi] },
+              colormap: "coolwarm",
+              domain: [0, 1],
+              points: { x: dbPx, y: dbPy, labels: dbPl, classNames: ["outside", "inside"], palette: ["#0b1020", "#e5e7eb"], size: 5 },
+            });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Feature importance" subtitle="sorted">
+        <Plot
+          options={{ ...DARK, showToolbar: false }}
+          onReady={(p) => {
+            addFeatureImportance(p, { names: fiNames, values: fiValues, color: "#34d399", top: 9 });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="SHAP beeswarm" subtitle="impact by feature value">
+        <Plot
+          options={{ ...DARK, showToolbar: false }}
+          onReady={(p) => {
+            addShapBeeswarm(p, { values: shap, featureValues: fval, names: shNames, size: 4 });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Partial dependence" subtitle="PDP + ICE">
+        <Plot
+          options={{ ...DARK, showToolbar: false, legend: true }}
+          onReady={(p) => {
+            addPartialDependence(p, { x: pdX, pd: pdPd, ice: pdIce });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Attention map" subtitle="causal · query × key">
+        <Plot
+          options={{ ...DARK, showToolbar: false }}
+          onReady={(p) => {
+            addAttentionMap(p, { weights: amW, colormap: "viridis" });
+            p.render();
+          }}
+        />
+      </Panel>
+
+      <Panel title="Ridgeline" subtitle="weights over epochs">
+        <Plot
+          options={{ ...DARK, showToolbar: false }}
+          onReady={(p) => {
+            addRidgeline(p, { groups: rlGroups, overlap: 1.6, range: [-1.5, 2.5] });
+            p.render();
+          }}
+        />
       </Panel>
     </>
   );
 }
 
 // ============================================================================
-// App — three tabs. Static is the default (built on load). Dynamic + Maps are
+// App — four tabs. Static is the default (built on load). The others are
 // mounted LAZILY (via <Show>) the first time their tab is shown, so their WebGL
 // plots size correctly (a plot built while display:none sizes to 0).
 // ============================================================================
-type Tab = "static" | "dynamic" | "finance" | "maps";
+type Tab = "static" | "dynamic" | "finance" | "ml";
 
-const COUNTS: Record<Tab, number> = { static: 46, dynamic: 48, finance: 8, maps: 3 };
+const COUNTS: Record<Tab, number> = { static: 46, dynamic: 48, finance: 8, ml: 12 };
 
 export function App(): JSX.Element {
   const [tab, setTab] = createSignal<Tab>("static");
@@ -2738,7 +2933,8 @@ export function App(): JSX.Element {
         <p>
           Four tabs, declarative Solid wrappers. <b>Static</b>: the full chart catalog. <b>Dynamic</b>: the same
           catalog streaming live at 60fps, each panel with an FPS badge. <b>Finance</b>: Heikin-Ashi, Renko,
-          Bollinger, volume profile, depth + a linkX-synced RSI/MACD dashboard. <b>Maps</b>: offline vector basemaps.
+          Bollinger, volume profile, depth + a linkX-synced RSI/MACD dashboard. <b>ML</b>: training curves,
+          confusion matrix, ROC/PR, embeddings, decision boundary, SHAP + more.
         </p>
       </header>
 
@@ -2746,7 +2942,7 @@ export function App(): JSX.Element {
         <TabButton id="static" label="Static" />
         <TabButton id="dynamic" label="Dynamic" />
         <TabButton id="finance" label="Finance" />
-        <TabButton id="maps" label="Maps" />
+        <TabButton id="ml" label="ML" />
       </div>
       <div class="tabbar-line" />
 
@@ -2765,9 +2961,9 @@ export function App(): JSX.Element {
           <FinanceGrid />
         </div>
       </Show>
-      <Show when={tab() === "maps"}>
+      <Show when={tab() === "ml"}>
         <div class="grid">
-          <MapsGrid />
+          <MLGrid />
         </div>
       </Show>
     </main>

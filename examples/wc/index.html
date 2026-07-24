@@ -18,6 +18,8 @@
       .card { border: 1px solid #1e293b; border-radius: 10px; background: #0e1526; overflow: hidden; }
       .card h3 { margin: 0; padding: 9px 12px; font-size: 13px; font-weight: 600; color: #cbd5e1;
         border-bottom: 1px solid #1e293b; }
+      .section { grid-column: 1 / -1; margin: 10px 2px 0; font-size: 13px; font-weight: 700;
+        letter-spacing: .04em; text-transform: uppercase; color: #60a5fa; }
       photon-plot, photon-plot3d, photon-polar { display: block; }
     </style>
   </head>
@@ -36,6 +38,14 @@
       <div class="card"><h3>Pie</h3><photon-plot id="pie" theme="dark" height="240px"></photon-plot></div>
       <div class="card"><h3>Polar</h3><photon-polar id="polar" theme="dark" height="240px"></photon-polar></div>
       <div class="card"><h3>3D surface</h3><photon-plot3d id="surf" height="240px"></photon-plot3d></div>
+
+      <div class="section">ML / deep-learning</div>
+      <div class="card"><h3>Confusion matrix</h3><photon-plot id="cm" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>ROC curve</h3><photon-plot id="roc" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Embedding (PCA)</h3><photon-plot id="emb" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Training curves</h3><photon-plot id="train" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>SHAP beeswarm</h3><photon-plot id="shap" theme="dark" height="240px"></photon-plot></div>
+      <div class="card"><h3>Attention map</h3><photon-plot id="attn" theme="dark" height="240px"></photon-plot></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

@@ -1,0 +1,194 @@
+# Photon — full reference for LLMs
+
+GPU-accelerated (WebGL2) charting for the web. 40+ chart types across 2D, 3D,
+polar, finance, diagrams, and ML. Zero runtime dependencies, TypeScript-first.
+A single shared WebGL2 context backs every chart, so one page can hold dozens of
+live charts at 60fps.
+
+Packages (npm scope `@photonviz`):
+- `@photonviz/core` — the framework-agnostic engine. Everything below lives here.
+- `@photonviz/react`, `@photonviz/vue`, `@photonviz/svelte`, `@photonviz/solid`,
+  `@photonviz/gea` — thin framework wrappers.
+- `@photonviz/wc` — framework-free Web Components (`<photon-plot>` etc.).
+
+Requirements: WebGL2 (all evergreen browsers). ESM only. TypeScript types +
+dense JSDoc ship with every package — read the types to discover options.
+
+## Install
+
+```bash
+npm i @photonviz/core
+# optional framework bindings:
+npm i @photonviz/react   # or @photonviz/vue / @photonviz/svelte / @photonviz/solid / @photonviz/gea / @photonviz/wc
+```
+
+## Core concepts
+
+- A **Plot** owns a container element and a set of **layers**. `new Plot(el,
+  options)` creates it; `plot.addLine({ x, y })` etc. add layers; the plot
+  auto-fits and renders.
+- **Coordinates**: pass `x`/`y` as `number[]` or `Float64Array`. Data is uploaded
+  to GPU buffers offset by the first point (`xRef`/`yRef`) for float32 precision.
+- **Streaming**: create a layer with `renderType: "dynamic"`, then call
+  `layer.setData(x, y)` (or type-specific setters) and `plot.render()`.
+- **Composed charts** (finance, diagrams, ML) are free functions, not methods:
+  `addBollinger(plot, opts)`, `addTreemap(plot, opts)`, `addConfusionMatrix(plot,
+  opts)`. Import them from `@photonviz/core`.
+- **One shared GL context**: dozens of plots on a page are fine. Never keep a
+  reference to internal GPU programs; call `plot.destroy()` when unmounting.
+
+## Quick start
+
+```ts
+import { Plot } from "@photonviz/core";
+
+const plot = new Plot(document.getElementById("chart")!, { theme: "dark" });
+const x = Float64Array.from({ length: 500 }, (_, i) => i / 20);
+const y = x.map((v) => Math.sin(v) + 0.3 * Math.sin(v * 3));
+plot.addLine({ x, y, color: "#60a5fa", width: 2, name: "signal" });
+plot.render();
+```
+
+## PlotOptions (common)
+
+`new Plot(container, options)`:
+- `theme`: `"light" | "dark"` (or a Theme object).
+- `scales`: `{ x?: AxisScaleOptions, y?: AxisScaleOptions }` — see Scales.
+- `axes`: `{ x?: AxisConfig, y?: AxisConfig }` — titles, tick format, grid.
+- `title`: string or `{ text, ... }`.
+- `legend`: `true` or a `LegendOptions` object — shows **named** series only.
+- `interactive`: wheel-zoom + drag (default true). `mode`: `"pan"` (default) or box-zoom.
+- `hover`: crosshair + tooltip (default true). `pick`: `"x" | "y" | "xy"` (use `"xy"` for scatter/maps).
+- `showToolbar`: home + pan/box/X/Y-zoom buttons (default true).
+- `drawingTools`: add trendline/hline/ray/fib/rect drawing tools (default false).
+- `ariaLabel`: accessible label (auto-summarized if omitted).
+- `equalAspect`, `boundedPan`, `background`, `margin`, `hoverReadout`.
+
+## 2D layers (methods on Plot)
+
+Every layer accepts `renderType?: "static" | "dynamic"`, `name?`, `yAxis?`.
+
+- `plot.addLine({ x, y, color?, width?, step?, join?, dash?, decimate?, name? })`
+- `plot.addScatter({ x, y, size?, marker?, color?, colorBy?: { values, colormap?, domain? }, labels? })` — marker: `"circle"|"square"|"triangle"|"diamond"|"cross"|"plus"`.
+- `plot.addBar({ x, y, base?, width?, orientation?: "v"|"h", color?, colors? })`
+- `plot.addGroupedBars(opts)`, `plot.addStackedBars(opts)`
+- `plot.addArea({ x, y, base?, color? })`, `plot.addStackedArea(opts)`
+- `plot.addHeatmap({ values, cols, rows, extent: { x, y }, colormap?, domain? })` — row-major, row 0 at bottom.
+- `plot.addContour({ values, cols, rows, extent, levels?, colormap? })`
+- `plot.addHexbin({ x, y, radius?, colormap? })`
+- `plot.addBox({ groups, width? })` — Tukey box plot from `BoxGroup[]`.
+- `plot.addErrorBar({ x, y, yerr?/xerr?, ... })`, `plot.addStem({ x, y })`
+- `plot.addQuiver({ x, y, u, v, ... })` — vector field.
+- `plot.addCandlestick({ x, open, high, low, close, upColor?, downColor? })`, `plot.addOhlc(...)`
+- `plot.addPie({ values, colormap? })`
+- `plot.addPatches({ patches })` — arbitrary colored polygons.
+- `plot.addImage({ source, extent })`
+- `plot.addGraph({ nodes, edges, ... })` — force-directed graph (`forceLayout` exported).
+- `plot.addAnnotation(a)` where `a` is a `span | band | box | label | line | ray | fib`.
+- `plot.addHistogram(values, opts)` (uses `histogram` from stats).
+
+Streaming: `const l = plot.addLine({ x, y, renderType: "dynamic" }); l.setData(x2, y2); plot.render();`
+
+## Scales
+
+Set per axis via `scales: { x: { type, domain?, factors?, times? } }`:
+- `"linear"` (default), `"log"`, `"time"` (ms epoch), `"categorical"` (`factors: string[]`),
+  `"ordinal-time"` (finance session axis: plots at integer indices, collapses market
+  gaps, ticks snap to calendar dates — pass `times: number[]`).
+
+## Colormaps
+
+`colormap` option accepts: `"viridis" | "plasma" | "coolwarm" | "grayscale"`.
+`colormap(name)` → `(t)=>[r,g,b]`; `colormapLUT(name)` → Float32Array.
+
+## 3D — Plot3D
+
+```ts
+import { Plot3D } from "@photonviz/core";
+const p3 = new Plot3D(el, { axisLabels: { x, y, z }, autoRotate?, lightControls? });
+p3.addSurface({ values, cols, rows, extentX, extentZ, colormap?, wireframe? });
+```
+Layers: `addSurface`, `addPointCloud({ x, y, z, colorBy? })`, `addLine3D`, `addBar3D`,
+`addQuiver3D`, `addContour3D`, `addIsosurface({ values, dims, isoLevel })`,
+`addVolume({ values, dims, colormap?, density? })` (GPU raymarch). Orbit: drag;
+zoom: wheel. `marchingCubes(values, dims, isoLevel)` is exported (pure).
+
+## Polar — PolarPlot
+
+```ts
+import { PolarPlot } from "@photonviz/core";
+const pp = new PolarPlot(el, { maxRadius? });
+pp.addLine({ theta, r, closed? }); pp.addScatter({ theta, r });
+```
+
+## Finance
+
+Indicators (pure array→array): `sma, ema, wma, rollingStd, bollinger, rsi, macd,
+vwap, atr, trueRange, stochastic, keltner, obv, ichimoku, adx, superTrend,
+fibRetracements, firstFinite`.
+Transforms: `heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth`.
+Builders (compose layers on a Plot): `addHeikinAshi(plot, opts)`, `addRenko`,
+`addVolumeProfile`, `addBollinger`, `addDepth`. Use an `ordinal-time` x scale for
+gap-free session charts.
+
+## Diagrams (composed builders)
+
+`addTreemap(plot, { items })`, `addFunnel`, `addSunburst`, `addGauge`, `addSankey`,
+`addChord`, `addParallelCoordinates`. Pure `*Layout` functions are exported too.
+
+## ML / deep-learning
+
+Pure metrics: `confusionMatrix, rocCurve (AUC), prCurve (AP), calibrationCurve
+(ECE), emaSmooth`. Reducers: `pca(data, n, d, k?)`, `standardize`.
+Builders (compose layers on a Plot):
+- `addConfusionMatrix(plot, { yTrue, yPred, classes?, colormap?, normalize? })`
+- `addRocCurve(plot, { scores, labels, fill? })`, `addPrCurve`, `addCalibration`
+- `addEmbedding(plot, { x, y, labels?, classNames?, colorBy? })` — colored by class
+- `addDecisionBoundary(plot, { values, cols, rows, extent, points? })`
+- `addFeatureImportance(plot, { names, values, top? })`
+- `addShapBeeswarm(plot, { values, featureValues?, names })` (+ `beeswarmLayout`)
+- `addPartialDependence(plot, { x, pd, ice? })`
+- `addAttentionMap(plot, { weights, colormap? })`
+- `addTrainingCurves(plot, { series, smoothing?, best? })` — EMA smoothing + best epoch
+- `addRidgeline(plot, { groups, overlap? })` — distributions over time
+
+## Data + stats
+
+`parseCSV(text, opts)` → `{ columns, rows }`. `lttb(x, y, threshold)` — downsample.
+`histogram, boxStats, quantileSorted, kde, fft, spectrogram` (pure).
+
+## Framework wrappers
+
+Two shapes:
+1. **Component-based** (react/vue/solid) — one component per layer inside a `<Plot>`:
+   ```tsx
+   // React
+   import { Plot, Line, Scatter, YAxis } from "@photonviz/react";
+   <Plot options={{ theme: "dark" }}>
+     <Line x={x} y={y} color="#60a5fa" />
+     <Scatter x={x} y={y} size={4} />
+   </Plot>
+   ```
+   Imperative escape hatch to the core `Plot`: React `usePlot()`; Vue/Solid/Gea
+   `onReady={(plot) => …}`. Use it to call composed builders (finance/diagram/ML)
+   and anything not exposed as a component.
+2. **Series-spec based** (svelte/gea/wc) — a `series` array of `{ type, ...opts }`:
+   ```svelte
+   <!-- Svelte -->
+   <div use:plot={{ options: { theme: "dark" }, series: [{ type: "line", x, y }] }} />
+   ```
+   Web Components: `document.querySelector("photon-plot").series = [{ type: "line", x, y }]`;
+   reach the core Plot via the element's `.plot` getter.
+
+All wrappers re-export the pure functions + composed builders (indicators, ML
+metrics, `pca`, etc.) so you can compute/compose imperatively.
+
+## Gotchas
+
+- **WebGL2 is required.** No canvas-2D fallback.
+- **ESM only**; internal imports use `.js` specifiers even for `.ts` sources.
+- The **legend shows only explicitly `name`d series** — unnamed helper layers are hidden.
+- Heatmap `values` are **row-major with row 0 at the bottom**.
+- Call **`plot.destroy()`** (or the wrapper's unmount) to free GPU resources.
+- For scatter/graph hover, set `pick: "xy"` on the plot.
+- Streaming needs `renderType: "dynamic"` + `setData(...)` + `plot.render()`.

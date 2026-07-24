@@ -34,11 +34,6 @@
       .panel h2 { margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #e2e8f0; border-bottom: 1px solid #1e293b; }
       .panel h2 span { color: #64748b; font-weight: 400; }
       .chart { height: 260px; }
-      /* Small caption used by map panels (attribution / hint). */
-      .cap { position: absolute; right: 6px; bottom: 6px; z-index: 5; padding: 2px 7px; border-radius: 6px;
-        font: 500 10.5px system-ui, sans-serif; color: #cbd5e1; background: rgba(14,21,38,.72); border: 1px solid #1e293b;
-        pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .panel input[type=file] { position: absolute; left: 8px; bottom: 8px; z-index: 6; font-size: 11px; color: #cbd5e1; max-width: 60%; }
       /* Per-chart fullscreen button (top-right, shown on hover). */
       .fs-btn { position: absolute; top: 6px; right: 6px; z-index: 7; width: 24px; height: 24px; padding: 0;
         cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;
@@ -53,21 +48,21 @@
   <body>
     <header>
       <h1><b>Photon</b> — WebGL2 chart gallery</h1>
-      <p>Three tabs, one shared WebGL2 context. <b>Static</b>: the full chart catalog (hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit). <b>Dynamic</b>: the same catalog streaming live at 60fps, each panel with an FPS badge. <b>Maps</b>: offline vector basemaps.</p>
+      <p>One shared WebGL2 context. <b>Static</b>: the full chart catalog (hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit). <b>Dynamic</b>: the same catalog streaming live at 60fps, each panel with an FPS badge. <b>Finance</b>: candles + indicators. <b>ML</b>: metrics, embeddings, XAI, training.</p>
     </header>
 
     <div class="tabs">
       <button class="tab active" data-tab="static">Static<span class="count" id="count-static"></span></button>
       <button class="tab" data-tab="dynamic">Dynamic<span class="count" id="count-dynamic"></span></button>
       <button class="tab" data-tab="finance">Finance<span class="count" id="count-finance"></span></button>
-      <button class="tab" data-tab="maps">Maps<span class="count" id="count-maps"></span></button>
+      <button class="tab" data-tab="ml">ML<span class="count" id="count-ml"></span></button>
     </div>
     <div class="tabbar-line"></div>
 
     <section class="tabpanel active" id="panel-static"><div class="grid" id="grid-static"></div></section>
     <section class="tabpanel" id="panel-dynamic"><div class="grid" id="grid-dynamic"></div></section>
     <section class="tabpanel" id="panel-finance"><div class="grid" id="grid-finance"></div></section>
-    <section class="tabpanel" id="panel-maps"><div class="grid" id="grid-maps"></div></section>
+    <section class="tabpanel" id="panel-ml"><div class="grid" id="grid-ml"></div></section>
 
     <script type="module" src="./main.ts"></script>
   </body>

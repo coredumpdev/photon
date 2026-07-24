@@ -1,0 +1,39 @@
+# Photon
+
+> GPU-accelerated (WebGL2) charting for the web: 40+ chart types across 2D, 3D,
+> polar, finance, diagrams, and ML — zero runtime dependencies, TypeScript-first.
+> One shared WebGL2 context lets a single page hold dozens of live charts at 60fps.
+
+Photon is a pnpm-workspace monorepo published under the `@photonviz/*` scope.
+The core (`@photonviz/core`) is framework-agnostic; thin wrappers exist for
+React, Vue, Svelte, Solid, Gea, and framework-free Web Components. Everything is
+strongly typed with dense JSDoc, so an agent can drive the API straight from the
+type definitions.
+
+Key idioms an agent should know:
+- `new Plot(container, options)` then `plot.addLine({ x, y })`, `plot.addScatter(...)`, etc.
+- Composed charts (finance, diagrams, ML) are free functions: `addX(plot, opts)`.
+- Stream by creating a layer with `renderType: "dynamic"` and calling `layer.setData(...)` + `plot.render()`.
+- ESM only; internal imports use `.js` specifiers. WebGL2 is required.
+
+## Docs
+
+- [Full reference for LLMs](https://coredumpdev.github.io/photon/llms-full.txt): the complete, single-file API + recipes — fetch this to write correct Photon code.
+- [Repository README](https://github.com/coredumpdev/photon#readme): overview, feature tour, quick starts.
+- [Core README (`@photonviz/core`)](https://github.com/coredumpdev/photon/blob/master/packages/core/README.md): the engine + full chart catalog.
+- [AGENTS.md](https://github.com/coredumpdev/photon/blob/master/AGENTS.md): repo conventions for agents contributing to Photon itself.
+
+## Framework wrappers
+
+- [React (`@photonviz/react`)](https://github.com/coredumpdev/photon/blob/master/packages/react/README.md)
+- [Vue (`@photonviz/vue`)](https://github.com/coredumpdev/photon/blob/master/packages/vue/README.md)
+- [Svelte (`@photonviz/svelte`)](https://github.com/coredumpdev/photon/blob/master/packages/svelte/README.md)
+- [Solid (`@photonviz/solid`)](https://github.com/coredumpdev/photon/blob/master/packages/solid/README.md)
+- [Gea (`@photonviz/gea`)](https://github.com/coredumpdev/photon/blob/master/packages/gea/README.md)
+- [Web Components (`@photonviz/wc`)](https://github.com/coredumpdev/photon/blob/master/packages/wc/README.md)
+
+## Examples
+
+- [Live demo — chart gallery](https://coredumpdev.github.io/photon/): the full catalog, static + streaming, in one page.
+- [Playground](https://coredumpdev.github.io/photon/playground/): edit Photon code and see it render live.
+- [examples/ in the repo](https://github.com/coredumpdev/photon/tree/master/examples): one runnable app per framework.

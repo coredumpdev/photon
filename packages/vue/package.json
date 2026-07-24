@@ -22,8 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@photonviz/core": "workspace:*",
-    "@photonviz/map": "workspace:*"
+    "@photonviz/core": "workspace:*"
   },
   "peerDependencies": {
     "vue": ">=3.3"

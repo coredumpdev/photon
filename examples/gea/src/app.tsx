@@ -1,17 +1,12 @@
 import { Component } from "@geajs/core";
 import { linkX } from "@photonviz/core";
 import { Plot, PolarPlot, Plot3D, addBollinger, addDepth, rsi, macd, firstFinite } from "@photonviz/gea";
-import {
-  addMap, addGeoJson, xyzVectorSource, pmtilesSource, protomapsStyle,
-  worldToLonLat, lonLatToWorld,
-} from "@photonviz/map";
-// The world basemap is embedded in the library (Natural Earth 10m) — no fetch.
-import { worldCountries } from "@photonviz/map/world";
 
 import { makeRng, jitter, businessDays } from "./data";
 import { buildStatic } from "./static-catalog";
 import { buildDynamic, type Updater } from "./dynamic-catalog";
 import { financeData } from "./finance-catalog";
+import { buildML } from "./ml-catalog";
 
 // Catalogs are built once at load. buildStatic() eagerly materializes all the
 // static data; buildDynamic() only builds the streaming *setup* closures — each
@@ -22,7 +17,10 @@ const D = buildDynamic();
 const STATIC_COUNT = S.plots2D.length + S.polars.length + S.plots3D.length;
 const DYNAMIC_COUNT = D.plots2D.length + D.polars.length + D.plots3D.length + 2; // + linked finance
 const FINANCE_COUNT = 8;
-const MAPS_COUNT = 3;
+
+// ---- ML catalog (built once; static synthetic data, no streaming) ----------
+const ML = buildML();
+const ML_COUNT = ML.length;
 
 // ---- Finance data + indicators (built once; static, no streaming) ----------
 const FIN = financeData();
@@ -283,128 +281,6 @@ class DynamicTab extends Component {
 }
 
 // ============================================================================
-// Maps tab — offline vector basemaps. No FPS badges. Refs live module-scoped so
-// click-picking touches raw plots/layers.
-// ============================================================================
-let mapRefs: any = {};
-
-const readout = (x: number, y: number) => {
-  const [lon, lat] = worldToLonLat(x, y);
-  return [{ label: "lon", value: `${lon.toFixed(2)}°` }, { label: "lat", value: `${lat.toFixed(2)}°` }];
-};
-
-const GEO_OPTS = { theme: "dark" as const, showToolbar: true, equalAspect: true, boundedPan: true, hoverReadout: readout };
-const BASEMAP_OPTS = { theme: "dark" as const, showToolbar: true, equalAspect: true, crosshair: true, pick: "xy" as const, boundedPan: true, hoverReadout: readout };
-const PM_OPTS = { theme: "dark" as const, showToolbar: true, equalAspect: true, boundedPan: true, crosshair: true, hoverReadout: readout };
-
-class MapsTab extends Component {
-  geoCap = "© Natural Earth (public domain) · embedded";
-  mapCap = "© MapLibre demo tiles";
-  pmCap = "no network — pick a .pmtiles file →";
-
-  created(): void { mapRefs = {}; }
-
-  // 1) Offline GeoJSON world (Natural Earth 10m embedded in the library).
-  onGeo(plot: any): void {
-    const style = {
-      background: [0.05, 0.09, 0.16, 1],
-      paint(_layer: string, type: string) {
-        if (type === "polygon") return { kind: "fill", color: [0.16, 0.2, 0.26, 1], outline: [0.5, 0.58, 0.68, 1], outlineWidth: 1.2 };
-        return { kind: "line", color: [0.5, 0.58, 0.68, 1], width: 1.2 };
-      },
-    };
-    mapRefs.geoPlot = plot;
-    mapRefs.geoLayer = addGeoJson(plot, { geojson: worldCountries, layer: "admin", style });
-  }
-
-  onGeoClick(e: MouseEvent): void {
-    const { geoPlot, geoLayer } = mapRefs;
-    if (!geoPlot || !geoLayer) return;
-    const d = geoPlot.dataAt(e.clientX, e.clientY);
-    if (!d) return;
-    const hit = geoLayer.pickFeature(d.x, d.y);
-    this.geoCap = hit ? String(hit.properties.ADMIN ?? hit.properties.NAME ?? "—") : "© Natural Earth · embedded";
-  }
-
-  // 2) Vector basemap — keyless MapLibre demo tiles + city overlay.
-  onBasemap(plot: any): void {
-    const source = xyzVectorSource({ url: "https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf", attribution: "© MapLibre demo tiles", maxZoom: 5 });
-    const style = {
-      background: [0.05, 0.09, 0.16, 1],
-      paint(layer: string, type: string) {
-        if (layer === "countries") return type === "polygon" ? { kind: "fill", color: [0.16, 0.2, 0.26, 1] } : { kind: "line", color: [0.3, 0.36, 0.44, 1], width: 1 };
-        if (layer === "geolines") return { kind: "line", color: [0.2, 0.25, 0.32, 1], width: 1 };
-        return null;
-      },
-    };
-    const map = addMap(plot, { source, style, bbox: [-175, -58, 190, 78] });
-    const cities: Array<[string, number, number]> = [
-      ["Istanbul", 28.98, 41.01], ["Tokyo", 139.69, 35.69], ["New York", -74.0, 40.71],
-      ["São Paulo", -46.63, -23.55], ["Sydney", 151.21, -33.87], ["Cairo", 31.24, 30.04],
-    ];
-    const wx: number[] = [], wy: number[] = [];
-    for (const [, lon, lat] of cities) { const [x, y] = lonLatToWorld(lon, lat); wx.push(x); wy.push(y); }
-    plot.addScatter({ x: wx, y: wy, size: 8, color: "#f472b6", labels: cities.map(([name]) => name) });
-    this.mapCap = map.attribution;
-  }
-
-  // 3) PMTiles (offline) — guarded: only builds a map once the user picks a file.
-  onPm(plot: any): void { mapRefs.pmPlot = plot; }
-
-  onFile(e: Event): void {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file || !mapRefs.pmPlot) return;
-    if (mapRefs.pmMap) { mapRefs.pmMap.dispose(); mapRefs.pmMap = null; }
-    const source = pmtilesSource({ blob: file, attribution: `local: ${file.name}` });
-    mapRefs.pmMap = addMap(mapRefs.pmPlot, { source, style: protomapsStyle("dark") });
-    this.pmCap = `local: ${file.name}`;
-  }
-
-  onPmClick(e: MouseEvent): void {
-    const { pmPlot, pmMap } = mapRefs;
-    if (!pmPlot || !pmMap) return;
-    const d = pmPlot.dataAt(e.clientX, e.clientY);
-    if (!d) return;
-    const hit = pmMap.pickFeature(d.x, d.y);
-    if (hit) this.pmCap = `${hit.layer}: ${JSON.stringify(hit.properties)}`;
-  }
-
-  template() {
-    return (
-      <div class="grid">
-        <div class="panel">
-          <FsButton />
-          <h2>GeoJSON world<span> — offline · Natural Earth 10m</span></h2>
-          <div class="chart" click={(e: MouseEvent) => this.onGeoClick(e)}>
-            <Plot options={GEO_OPTS} onReady={(p) => this.onGeo(p)} />
-            <div class="cap">{this.geoCap}</div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <FsButton />
-          <h2>Vector basemap<span> — addMap · MVT · city overlay</span></h2>
-          <div class="chart">
-            <Plot options={BASEMAP_OPTS} onReady={(p) => this.onBasemap(p)} />
-            <div class="cap">{this.mapCap}</div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <FsButton />
-          <h2>PMTiles (offline)<span> — pick a local .pmtiles file</span></h2>
-          <div class="chart" click={(e: MouseEvent) => this.onPmClick(e)}>
-            <Plot options={PM_OPTS} onReady={(p) => this.onPm(p)} />
-            <div class="cap">{this.pmCap}</div>
-            <input class="file" type="file" accept=".pmtiles" change={(e: Event) => this.onFile(e)} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-}
-
-// ============================================================================
 // Finance tab — specialist charts on the finance module. All STATIC (no FPS).
 // Single-layer transforms (Heikin-Ashi / Renko / volume profile) render
 // declaratively via `series`; multi-layer overlays (Bollinger, Depth) and the
@@ -519,25 +395,48 @@ class FinanceTab extends Component {
 }
 
 // ============================================================================
-// App shell — three tabs, one grid each. Static is default and built on load;
-// Dynamic and Maps mount LAZILY the first time their tab is activated so their
+// ML tab — deep-learning charts on the ml module. All STATIC (no FPS). Every
+// panel is a composed ML builder (addConfusionMatrix / addEmbedding / …) wired
+// imperatively through onReady on the core Plot handle, from the ml catalog.
+// ============================================================================
+class MLTab extends Component {
+  template() {
+    return (
+      <div class="grid">
+        {ML.map((c) => (
+          <div class="panel" key={`ml-${c.title}`}>
+            <FsButton />
+            <h2>{c.title}{c.subtitle ? <span> — {c.subtitle}</span> : null}</h2>
+            <div class="chart">
+              <Plot options={c.options} onReady={(p) => c.setup(p)} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+}
+
+// ============================================================================
+// App shell — one grid per tab. Static is default and built on load; Dynamic,
+// Finance and ML mount LAZILY the first time their tab is activated so their
 // WebGL charts are built while visible (a plot built under display:none sizes
 // to 0). Built tabs stay mounted (just hidden) so switching back is instant.
 // ============================================================================
 export default class App extends Component {
-  activeTab: "static" | "dynamic" | "finance" | "maps" = "static";
+  activeTab: "static" | "dynamic" | "finance" | "ml" = "static";
   builtDynamic = false;
   builtFinance = false;
-  builtMaps = false;
+  builtMl = false;
 
-  activate(name: "static" | "dynamic" | "finance" | "maps"): void {
+  activate(name: "static" | "dynamic" | "finance" | "ml"): void {
     // Make the tab visible first, then mount its charts on the next frame — so a
     // lazily-built plot never initializes while its section is still display:none
     // (a WebGL plot built hidden sizes to 0).
     this.activeTab = name;
     if (name === "dynamic" && !this.builtDynamic) requestAnimationFrame(() => { this.builtDynamic = true; });
     if (name === "finance" && !this.builtFinance) requestAnimationFrame(() => { this.builtFinance = true; });
-    if (name === "maps" && !this.builtMaps) requestAnimationFrame(() => { this.builtMaps = true; });
+    if (name === "ml" && !this.builtMl) requestAnimationFrame(() => { this.builtMl = true; });
   }
 
   template() {
@@ -545,14 +444,14 @@ export default class App extends Component {
       <main>
         <header>
           <h1><b>Photon</b> · Gea — WebGL2 chart gallery</h1>
-          <p>Config-driven Gea components over one shared WebGL2 context. <b>Static</b>: the full chart catalog. <b>Dynamic</b>: the same catalog streaming live at 60fps, each panel with an FPS badge. <b>Maps</b>: offline vector basemaps.</p>
+          <p>Config-driven Gea components over one shared WebGL2 context. <b>Static</b>: the full chart catalog. <b>Dynamic</b>: the same catalog streaming live at 60fps, each panel with an FPS badge.</p>
         </header>
 
         <div class="tabs">
           <button class={this.activeTab === "static" ? "tab active" : "tab"} click={() => this.activate("static")}>Static<span class="count">{STATIC_COUNT}</span></button>
           <button class={this.activeTab === "dynamic" ? "tab active" : "tab"} click={() => this.activate("dynamic")}>Dynamic<span class="count">{DYNAMIC_COUNT}</span></button>
           <button class={this.activeTab === "finance" ? "tab active" : "tab"} click={() => this.activate("finance")}>Finance<span class="count">{FINANCE_COUNT}</span></button>
-          <button class={this.activeTab === "maps" ? "tab active" : "tab"} click={() => this.activate("maps")}>Maps<span class="count">{MAPS_COUNT}</span></button>
+          <button class={this.activeTab === "ml" ? "tab active" : "tab"} click={() => this.activate("ml")}>ML<span class="count">{ML_COUNT}</span></button>
         </div>
         <div class="tabbar-line"></div>
 
@@ -565,8 +464,8 @@ export default class App extends Component {
         <section class={this.activeTab === "finance" ? "tabpanel active" : "tabpanel"}>
           {this.builtFinance ? <FinanceTab /> : null}
         </section>
-        <section class={this.activeTab === "maps" ? "tabpanel active" : "tabpanel"}>
-          {this.builtMaps ? <MapsTab /> : null}
+        <section class={this.activeTab === "ml" ? "tabpanel active" : "tabpanel"}>
+          {this.builtMl ? <MLTab /> : null}
         </section>
       </main>
     );

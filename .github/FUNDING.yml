@@ -1,0 +1,4 @@
+# Enable the "Sponsor" button on GitHub. Fill in whichever apply and delete the
+# rest. `github` requires GitHub Sponsors to be enabled for the account/org.
+github: [coredumpdev]
+# custom: ["https://…"]

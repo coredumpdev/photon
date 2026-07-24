@@ -17,7 +17,8 @@
     "example:solid": "pnpm --filter @photonviz/example-solid dev",
     "example:gea": "pnpm --filter @photonviz/example-gea dev",
     "example:playground": "pnpm --filter @photonviz/example-playground dev",
-    "example:wc": "pnpm --filter @photonviz/example-wc dev"
+    "example:wc": "pnpm --filter @photonviz/example-wc dev",
+    "example:ml": "pnpm --filter @photonviz/example-ml dev"
   },
   "devDependencies": {
     "playwright": "^1.61.1",

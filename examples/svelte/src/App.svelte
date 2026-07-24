@@ -2,6 +2,9 @@
   import {
     addBollinger,
     addDepth,
+    addTrainingCurves, addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
+    addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
+    addPartialDependence, addAttentionMap, addRidgeline, pca,
     type SeriesSpec,
     type PolarSeriesSpec,
     type LayerSpec3D,
@@ -14,8 +17,6 @@
     Plot3D as CorePlot3D,
     PolarPlot as CorePolarPlot,
   } from "@photonviz/core";
-  import { xyzVectorSource, worldToLonLat, type MapStyle } from "@photonviz/map";
-  import { worldCountries } from "@photonviz/map/world";
 
   import StatPanel from "./StatPanel.svelte";
   import DynPanel from "./DynPanel.svelte";
@@ -1067,44 +1068,6 @@
   ];
 
   // ==========================================================================
-  // MAPS — offline embedded world (GeoJSON) + keyless demo vector basemap.
-  // Declarative via use:plot. No FPS badges.
-  // ==========================================================================
-  const lonLat = (x: number, y: number) => {
-    const [lon, lat] = worldToLonLat(x, y);
-    return [
-      { label: "lon", value: `${lon.toFixed(2)}°` },
-      { label: "lat", value: `${lat.toFixed(2)}°` },
-    ];
-  };
-
-  const adminStyle: MapStyle = {
-    background: [0.05, 0.09, 0.16, 1],
-    paint(_layer, type) {
-      if (type === "polygon") return { kind: "fill", color: [0.16, 0.2, 0.26, 1], outline: [0.5, 0.58, 0.68, 1], outlineWidth: 1.2 };
-      return { kind: "line", color: [0.5, 0.58, 0.68, 1], width: 1.2 };
-    },
-  };
-  const geojsonCfg: PlotConfig = {
-    options: { theme: "dark", showToolbar: true, equalAspect: true, boundedPan: true, hoverReadout: lonLat },
-    series: [{ type: "geojson", geojson: worldCountries, layer: "admin", style: adminStyle }],
-  };
-
-  const oceanStyle: MapStyle = {
-    background: [0.05, 0.09, 0.16, 1],
-    paint(layer, type) {
-      if (layer === "countries") return type === "polygon" ? { kind: "fill", color: [0.16, 0.2, 0.26, 1] } : { kind: "line", color: [0.3, 0.36, 0.44, 1], width: 1 };
-      if (layer === "geolines") return { kind: "line", color: [0.2, 0.25, 0.32, 1], width: 1 };
-      return null;
-    },
-  };
-  const basemapSource = xyzVectorSource({ url: "https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf", attribution: "© MapLibre demo tiles", maxZoom: 5 });
-  const basemapCfg: PlotConfig = {
-    options: { theme: "dark", showToolbar: true, equalAspect: true, crosshair: true, boundedPan: true, hoverReadout: lonLat },
-    series: [{ type: "map", source: basemapSource, style: oceanStyle, bbox: [-175, -58, 190, 78] }],
-  };
-
-  // ==========================================================================
   // FINANCE — specialist finance charts (indicators + transforms). All STATIC,
   // no FPS. Single-layer charts (Heikin-Ashi, Renko, Volume profile) go through
   // the declarative use:plot SeriesSpec; multi-layer ones (Bollinger, Depth,
@@ -1160,27 +1123,199 @@
   }
 
   // ==========================================================================
+  // ML / deep-learning — composed ML builders (addConfusionMatrix / addEmbedding
+  // / …) over a core Plot. All STATIC, no FPS. Every panel is imperative (built
+  // via ImpPanel), mirroring the finance Bollinger / Depth panels. Synthetic
+  // data is generated once, deterministically, up front.
+  // ==========================================================================
+  function buildMLData() {
+    seed = 42; // deterministic synthetic data regardless of earlier RNG use
+
+    // 1 — Training curves (EMA smoothing + best-epoch marker).
+    const E = 90;
+    const train = new Float64Array(E), val = new Float64Array(E);
+    for (let e = 0; e < E; e++) {
+      train[e] = 2.4 * Math.exp(-e / 24) + 0.16 + Math.abs(gaussian(0, 0.05));
+      val[e] = 2.4 * Math.exp(-e / 21) + 0.28 + Math.max(0, (e - 55) * 0.004) + Math.abs(gaussian(0, 0.09));
+    }
+
+    // 2 — Confusion matrix (5 classes, 82% accurate).
+    const C = 5, cn = 600;
+    const yTrue = new Int32Array(cn), yPred = new Int32Array(cn);
+    for (let i = 0; i < cn; i++) {
+      const t = Math.floor(rand() * C);
+      yTrue[i] = t;
+      yPred[i] = rand() < 0.82 ? t : Math.floor(rand() * C);
+    }
+
+    // Shared binary-classifier scores for ROC / PR / calibration.
+    const NB = 500;
+    const scores = new Float64Array(NB), labels = new Int32Array(NB);
+    for (let i = 0; i < NB; i++) {
+      const pos = rand() < 0.4 ? 1 : 0;
+      labels[i] = pos;
+      scores[i] = Math.min(1, Math.max(0, pos ? gaussian(0.68, 0.17) : gaussian(0.36, 0.17)));
+    }
+
+    // 6 — Embedding projector (high-D Gaussians → PCA 2-D).
+    const D = 12, K = 3, per = 90, eN = K * per;
+    const means: number[][] = Array.from({ length: K }, () => Array.from({ length: D }, () => gaussian(0, 2.4)));
+    const edata = new Float64Array(eN * D);
+    const cls = new Int32Array(eN);
+    let r = 0;
+    for (let k = 0; k < K; k++) for (let j = 0; j < per; j++, r++) {
+      cls[r] = k;
+      for (let c = 0; c < D; c++) edata[r * D + c] = means[k]![c]! + gaussian(0, 1);
+    }
+    const proj = pca(edata, eN, D, 2);
+    const ex = new Float64Array(eN), ey = new Float64Array(eN);
+    for (let i = 0; i < eN; i++) { ex[i] = proj.scores[i * 2]!; ey[i] = proj.scores[i * 2 + 1]!; }
+
+    // 7 — Decision boundary (radial field + noisy training points).
+    const nx = 72, ny = 72, lo = -3, hi = 3;
+    const field = new Float64Array(nx * ny);
+    for (let iy = 0; iy < ny; iy++) for (let ix = 0; ix < nx; ix++) {
+      const x = lo + ((hi - lo) * ix) / (nx - 1), y = lo + ((hi - lo) * iy) / (ny - 1);
+      field[iy * nx + ix] = 1 / (1 + Math.exp(-(1.6 - (x * x + y * y)) * 2.2));
+    }
+    const M = 220;
+    const dpx = new Float64Array(M), dpy = new Float64Array(M), dpl = new Int32Array(M);
+    for (let i = 0; i < M; i++) {
+      const x = lo + rand() * (hi - lo), y = lo + rand() * (hi - lo);
+      dpx[i] = x; dpy[i] = y;
+      const inside = x * x + y * y < 1.6;
+      dpl[i] = (rand() < 0.9 ? inside : !inside) ? 1 : 0; // 10% label noise
+    }
+
+    // 8 — Feature importance (skewed toward small).
+    const fiNames = ["bmi", "s5", "bp", "age", "s3", "sex", "s1", "s6", "s4"];
+    const fiValues = fiNames.map(() => rand() * rand());
+
+    // 9 — SHAP beeswarm (per-sample impact, correlated with feature value).
+    const shapNames = ["bmi", "s5", "bp", "age", "s3", "sex"];
+    const F = shapNames.length, sN = 180;
+    const shap: number[][] = [], fval: number[][] = [];
+    for (let f = 0; f < F; f++) {
+      const w = (F - f) / F; // decreasing importance
+      const sv: number[] = [], fv: number[] = [];
+      for (let i = 0; i < sN; i++) {
+        const v = gaussian(0, 1);
+        fv.push(v);
+        sv.push(w * v * 0.6 + gaussian(0, 0.08));
+      }
+      shap.push(sv); fval.push(fv);
+    }
+
+    // 10 — Partial dependence (+ ICE lines).
+    const G = 32;
+    const pdx = new Float64Array(G), pd = new Float64Array(G);
+    for (let i = 0; i < G; i++) { const t = i / (G - 1); pdx[i] = t; pd[i] = 0.2 + 0.6 / (1 + Math.exp(-(t - 0.5) * 10)); }
+    const ice: number[][] = [];
+    for (let k = 0; k < 16; k++) {
+      const scale = 0.7 + rand() * 0.6, off = gaussian(0, 0.04);
+      ice.push(Array.from(pd, (v) => Math.min(1, Math.max(0, 0.2 + (v - 0.2) * scale + off + gaussian(0, 0.015)))));
+    }
+
+    // 11 — Attention map (transformer, causal mask, query × key).
+    const T = 11;
+    const attn: number[][] = [];
+    for (let q = 0; q < T; q++) {
+      const row: number[] = [];
+      let z = 0;
+      for (let k = 0; k <= q; k++) {
+        const bias = -Math.abs(q - k) * 0.55 + (k === 0 ? 0.9 : 0) + gaussian(0, 0.12);
+        const e = Math.exp(bias); row.push(e); z += e;
+      }
+      for (let k = q + 1; k < T; k++) row.push(0);
+      for (let k = 0; k < T; k++) row[k]! /= z || 1;
+      attn.push(row);
+    }
+
+    // 12 — Ridgeline (weight distribution tightening over epochs).
+    const epochs = 8;
+    const ridge = Array.from({ length: epochs }, (_, e) => {
+      const mean = 1.1 * Math.exp(-e / 3), sd = 0.45 * Math.exp(-e / 6) + 0.14;
+      return { label: `epoch ${e}`, values: Float64Array.from({ length: 320 }, () => gaussian(mean, sd)) };
+    });
+
+    return {
+      train, val, C, yTrue, yPred, scores, labels,
+      ex, ey, cls, nx, ny, lo, hi, field, dpx, dpy, dpl,
+      fiNames, fiValues, shapNames, shap, fval, pdx, pd, ice, attn, ridge,
+    };
+  }
+  const ml = buildMLData();
+
+  const mlBase = { theme: "dark" as const, showToolbar: false };
+  const mlLegend = { ...mlBase, legend: true };
+  const mlPick = { ...mlBase, pick: "xy" as const };
+  const mlLegendPick = { ...mlBase, legend: true, pick: "xy" as const };
+
+  function buildTrainingCurves(p: CorePlotT): void {
+    addTrainingCurves(p, {
+      series: [{ name: "train loss", y: ml.train, color: "#60a5fa" }, { name: "val loss", y: ml.val, color: "#f472b6" }],
+      smoothing: 0.6, showRaw: true, best: "min",
+    });
+  }
+  function buildConfusionMatrix(p: CorePlotT): void {
+    addConfusionMatrix(p, { yTrue: ml.yTrue, yPred: ml.yPred, classes: ml.C, colormap: "viridis" });
+  }
+  function buildRoc(p: CorePlotT): void {
+    addRocCurve(p, { scores: ml.scores, labels: ml.labels, fill: true, color: "#38bdf8" });
+  }
+  function buildPr(p: CorePlotT): void {
+    addPrCurve(p, { scores: ml.scores, labels: ml.labels, fill: true });
+  }
+  function buildCalibration(p: CorePlotT): void {
+    addCalibration(p, { scores: ml.scores, labels: ml.labels, bins: 10 });
+  }
+  function buildEmbedding(p: CorePlotT): void {
+    addEmbedding(p, { x: ml.ex, y: ml.ey, labels: ml.cls, classNames: ["cats", "dogs", "birds"], size: 5 });
+  }
+  function buildDecisionBoundary(p: CorePlotT): void {
+    addDecisionBoundary(p, {
+      values: ml.field, cols: ml.nx, rows: ml.ny, extent: { x: [ml.lo, ml.hi], y: [ml.lo, ml.hi] }, colormap: "coolwarm", domain: [0, 1],
+      points: { x: ml.dpx, y: ml.dpy, labels: ml.dpl, classNames: ["outside", "inside"], palette: ["#0b1020", "#e5e7eb"], size: 5 },
+    });
+  }
+  function buildFeatureImportance(p: CorePlotT): void {
+    addFeatureImportance(p, { names: ml.fiNames, values: ml.fiValues, color: "#34d399", top: 9 });
+  }
+  function buildShapBeeswarm(p: CorePlotT): void {
+    addShapBeeswarm(p, { values: ml.shap, featureValues: ml.fval, names: ml.shapNames, size: 4 });
+  }
+  function buildPartialDependence(p: CorePlotT): void {
+    addPartialDependence(p, { x: ml.pdx, pd: ml.pd, ice: ml.ice });
+  }
+  function buildAttentionMap(p: CorePlotT): void {
+    addAttentionMap(p, { weights: ml.attn, colormap: "viridis" });
+  }
+  function buildRidgeline(p: CorePlotT): void {
+    addRidgeline(p, { groups: ml.ridge, overlap: 1.6, range: [-1.5, 2.5] });
+  }
+
+  // ==========================================================================
   // Tabs. Only the active tab is mounted ({#if}) so charts are always built into
   // a visible, sized container (a WebGL plot built while display:none sizes to
   // 0). Static is the default; switching away unmounts + cleans up (rAF/plots).
   // ==========================================================================
-  type Tab = "static" | "dynamic" | "finance" | "maps";
+  type Tab = "static" | "dynamic" | "finance" | "ml";
   let activeTab: Tab = "static";
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: "static", label: "Static", count: statPanels.length },
     { id: "dynamic", label: "Dynamic", count: dynPanels.length + 1 },
     { id: "finance", label: "Finance", count: 6 },
-    { id: "maps", label: "Maps", count: 2 },
+    { id: "ml", label: "ML", count: 12 },
   ];
 </script>
 
 <header>
   <h1><b>Photon</b> · Svelte — WebGL2 chart gallery</h1>
   <p>
-    Three tabs, built with the <code>@photonviz/svelte</code> actions.
+    Built with the <code>@photonviz/svelte</code> actions.
     <b>Static</b>: the full catalog (hover, box/X/Y zoom, drag an axis to pan · 3D: drag to orbit).
     <b>Dynamic</b>: the same catalog streaming live at ~60fps, each panel with an FPS badge.
-    <b>Maps</b>: offline vector basemaps.
+    <b>Finance</b> and <b>ML</b>: specialist chart builders.
   </p>
 </header>
 
@@ -1215,10 +1350,20 @@
     <ImpPanel title="Depth chart" subtitle="cumulative order book" options={depthOpts} build={buildDepth} />
     <FinanceDashboard times={fin.times} idx={fin.idx} open={fin.o} high={fin.h} low={fin.l} close={fin.c} />
   </div>
-{:else}
+{:else if activeTab === "ml"}
   <div class="grid">
-    <StatPanel title="GeoJSON world" subtitle="offline · Natural Earth 10m" kind="plot" cfg={geojsonCfg} />
-    <StatPanel title="Vector basemap" subtitle="addMap · MVT demo tiles" kind="plot" cfg={basemapCfg} />
+    <ImpPanel title="Training curves" subtitle="EMA smoothing" options={mlLegend} build={buildTrainingCurves} />
+    <ImpPanel title="Confusion matrix" subtitle="5 classes" options={mlBase} build={buildConfusionMatrix} />
+    <ImpPanel title="ROC curve" subtitle="AUC in legend" options={mlLegend} build={buildRoc} />
+    <ImpPanel title="Precision–recall" subtitle="AP in legend" options={mlLegend} build={buildPr} />
+    <ImpPanel title="Calibration" subtitle="reliability + ECE" options={mlLegend} build={buildCalibration} />
+    <ImpPanel title="Embedding (PCA)" subtitle="color by class" options={mlLegendPick} build={buildEmbedding} />
+    <ImpPanel title="Decision boundary" subtitle="field + points" options={mlPick} build={buildDecisionBoundary} />
+    <ImpPanel title="Feature importance" subtitle="sorted" options={mlBase} build={buildFeatureImportance} />
+    <ImpPanel title="SHAP beeswarm" subtitle="impact by feature value" options={mlBase} build={buildShapBeeswarm} />
+    <ImpPanel title="Partial dependence" subtitle="PDP + ICE" options={mlLegend} build={buildPartialDependence} />
+    <ImpPanel title="Attention map" subtitle="causal · query × key" options={mlBase} build={buildAttentionMap} />
+    <ImpPanel title="Ridgeline" subtitle="weights over epochs" options={mlBase} build={buildRidgeline} />
   </div>
 {/if}
 

@@ -47,7 +47,6 @@ import {
   type VolumeOptions,
   type YAxisOptions,
 } from "@photonviz/core";
-import { addGeoJson, addMap, type GeoJsonOptions, type MapOptions } from "@photonviz/map";
 import {
   defineComponent,
   h,
@@ -195,45 +194,6 @@ export const Area = defineComponent({
       () => [props.color, props.name, props.yAxis],
       () => [props.x, props.y, props.base],
       (l) => l.setData(props.x, props.y, props.base),
-    );
-    return () => null;
-  },
-});
-
-export const Map = defineComponent({
-  name: "PhotonMap",
-  props: {
-    source: { type: Object as PropType<MapOptions["source"]>, required: true },
-    style: opt<MapOptions["style"]>(),
-    bbox: opt<MapOptions["bbox"]>(),
-    maxTiles: opt<number>(),
-    yAxis: opt<string>(),
-  },
-  setup(props) {
-    useLayer(
-      (p) => addMap(p, { source: props.source, style: props.style, bbox: props.bbox, maxTiles: props.maxTiles, yAxis: props.yAxis }),
-      () => [props.source, props.style, props.bbox, props.maxTiles, props.yAxis],
-      () => [],
-      () => {},
-    );
-    return () => null;
-  },
-});
-
-export const GeoJson = defineComponent({
-  name: "PhotonGeoJson",
-  props: {
-    geojson: { type: Object as PropType<GeoJsonOptions["geojson"]>, required: true },
-    style: opt<GeoJsonOptions["style"]>(),
-    layer: opt<string>(),
-    yAxis: opt<string>(),
-  },
-  setup(props) {
-    useLayer(
-      (p) => addGeoJson(p, { geojson: props.geojson, style: props.style, layer: props.layer, yAxis: props.yAxis }),
-      () => [props.geojson, props.style, props.layer, props.yAxis],
-      () => [],
-      () => {},
     );
     return () => null;
   },
@@ -736,6 +696,16 @@ export {
   sma, ema, wma, rollingStd, bollinger, rsi, macd, vwap, trueRange, atr,
   firstFinite, heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth,
   stochastic, keltner, obv, ichimoku, adx, superTrend, fibRetracements,
+} from "@photonviz/core";
+
+// ML / deep-learning: pure metrics + reducers and the Plot builders that render
+// them (imperative use on a core Plot, like the finance helpers above).
+export {
+  confusionMatrix, rocCurve, prCurve, calibrationCurve, emaSmooth,
+  pca, standardize, beeswarmLayout, ML_PALETTE,
+  addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
+  addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
+  addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
 } from "@photonviz/core";
 
 // ---------------------------------------------------------------------------

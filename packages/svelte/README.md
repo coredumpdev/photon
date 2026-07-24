@@ -6,6 +6,12 @@
 
 **Svelte bindings for [Photon](https://github.com/coredumpdev/photon) — GPU-accelerated WebGL2 charts.**
 
+<p>
+  <a href="https://www.npmjs.com/package/@photonviz/svelte"><img src="https://img.shields.io/npm/v/@photonviz/svelte?color=cb3837&logo=npm" alt="npm"/></a>
+  <a href="https://www.npmjs.com/package/@photonviz/svelte"><img src="https://img.shields.io/npm/dm/@photonviz/svelte?color=cb3837" alt="downloads"/></a>
+  · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
+</p>
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
 </p>
@@ -41,7 +47,7 @@ npm i @photonviz/core @photonviz/svelte
 
 The `plot` action's `series` is a discriminated union by `type`:
 
-`line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `ohlc` · `pie` · `patches` · `image` · `graph` · `map` · `geojson`
+`line` · `scatter` · `bar` · `area` · `heatmap` · `box` · `hexbin` · `contour` · `errorbar` · `stem` · `quiver` · `candlestick` · `ohlc` · `pie` · `patches` · `image` · `graph`
 
 **Finance** series — `heikinAshi` · `renko` · `volumeProfile`. Multi-layer `addBollinger` / `addDepth` and the indicators (`rsi`, `macd`, `sma`, `ema`, `wma`, `vwap`, `atr`, `stochastic`, `keltner`, `obv`, `ichimoku`, `adx`, `superTrend`, `fibRetracements`) are re-exported for imperative use on a core `Plot`. Every series options object accepts `renderType`; use the `ordinal-time` x scale for gap-free session charts.
 
@@ -50,8 +56,6 @@ The toolbar includes a one-click download-PNG button; the underlying core `Plot`
 Separate actions:
 - **`polarPlot`** — polar `line` / `scatter` series.
 - **`plot3d`** — `surface` / `pointcloud` / `line3d` / `bar3d` / `quiver3d` / `contour3d` / `isosurface` / `volume` layers.
-
-Maps use [`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map) sources (e.g. `xyzVectorSource`) in `{ type: "map" }` series.
 
 ## License
 

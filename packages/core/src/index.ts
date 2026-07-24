@@ -96,7 +96,7 @@ export type { Scale, ScaleType } from "./scales/scale.js";
 export { histogram, boxStats, quantileSorted, kde, fft, spectrogram } from "./stats/index.js";
 export type { Histogram, BoxStats, Density, Spectrogram } from "./stats/index.js";
 
-// GL toolkit — building blocks for custom layers (used by @photonviz/map, etc.)
+// GL toolkit — building blocks for custom layers.
 export { createProgram, uniformLocations, bufferUsage } from "./gl/program.js";
 export {
   setTransformUniforms,
@@ -128,6 +128,11 @@ export { addHeikinAshi, addRenko, addVolumeProfile, addBollinger, addDepth } fro
 export { parseCSV } from "./data/csv.js";
 export type { Table, CSVOptions } from "./data/csv.js";
 export { lttb } from "./data/downsample.js";
+
+// --- ML / deep-learning: metrics, reducers, and Plot builders ----------------
+export * from "./ml/metrics.js";
+export * from "./ml/reduce.js";
+export * from "./ml/charts.js";
 
 // --- Charts: hierarchy / flow / composition diagrams -------------------------
 export * from "./charts/treemap.js";

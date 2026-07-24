@@ -74,14 +74,6 @@ import {
   type YAxisOptions,
 } from "@photonviz/core";
 import {
-  addGeoJson,
-  addMap,
-  type GeoJsonLayer,
-  type GeoJsonOptions,
-  type MapLayer,
-  type MapOptions,
-} from "@photonviz/map";
-import {
   createContext,
   useContext,
   useEffect,
@@ -227,44 +219,6 @@ export function Area({ x, y, base, color, name, yAxis, renderType }: AreaProps) 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [x, y, base]);
-  return null;
-}
-
-export type MapProps = MapOptions;
-
-/** A Web Mercator vector-tile basemap (from `@photonviz/map`). */
-export function Map({ source, style, bbox, maxTiles, yAxis, onUpdate }: MapProps) {
-  const plot = useContext(PlotContext);
-  const layer = useRef<MapLayer | null>(null);
-  useEffect(() => {
-    if (!plot) return;
-    const l = addMap(plot, { source, style, bbox, maxTiles, yAxis, onUpdate });
-    layer.current = l;
-    return () => {
-      plot.removeLayer(l);
-      layer.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, source, style, bbox, maxTiles, yAxis]);
-  return null;
-}
-
-export type GeoJsonProps = GeoJsonOptions;
-
-/** A static vector layer rendered from a GeoJSON FeatureCollection. */
-export function GeoJson({ geojson, style, layer: layerName, yAxis }: GeoJsonProps) {
-  const plot = useContext(PlotContext);
-  const layer = useRef<GeoJsonLayer | null>(null);
-  useEffect(() => {
-    if (!plot) return;
-    const l = addGeoJson(plot, { geojson, style, layer: layerName, yAxis });
-    layer.current = l;
-    return () => {
-      plot.removeLayer(l);
-      layer.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, geojson, style, layerName, yAxis]);
   return null;
 }
 
@@ -1068,4 +1022,14 @@ export type {
   PfColumn,
   VolumeProfile as VolumeProfileResult,
   DepthCurves,
+} from "@photonviz/core";
+
+// ML / deep-learning: pure metrics + reducers and the Plot builders that render
+// them (imperative use on a core Plot, like the finance helpers above).
+export {
+  confusionMatrix, rocCurve, prCurve, calibrationCurve, emaSmooth,
+  pca, standardize, beeswarmLayout, ML_PALETTE,
+  addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
+  addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
+  addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
 } from "@photonviz/core";

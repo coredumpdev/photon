@@ -41,7 +41,6 @@ import type {
   YAxisOptions,
 } from "@photonviz/core";
 import { addHeikinAshi, addRenko, addVolumeProfile } from "@photonviz/core";
-import { addGeoJson, addMap, type GeoJsonOptions, type MapOptions } from "@photonviz/map";
 
 /** Base container sizing, applied imperatively (gea's `style` attr wants an object). */
 export function applyContainerStyle(el: HTMLElement, style?: string): void {
@@ -72,9 +71,7 @@ export type SeriesSpec =
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
-  | ({ type: "graph" } & GraphInput)
-  | ({ type: "map" } & MapOptions)
-  | ({ type: "geojson" } & GeoJsonOptions);
+  | ({ type: "graph" } & GraphInput);
 
 export interface YAxisSpec extends YAxisOptions {
   id: string;
@@ -102,8 +99,6 @@ export function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
     case "graph": return p.addGraph(s);
-    case "map": return addMap(p, s);
-    case "geojson": return addGeoJson(p, s);
   }
 }
 

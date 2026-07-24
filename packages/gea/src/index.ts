@@ -40,3 +40,12 @@ export {
   volumeProfile,
   depth,
 } from "@photonviz/core"
+
+// ML / deep-learning: pure metrics + reducers and Plot builders (imperative use).
+export {
+  confusionMatrix, rocCurve, prCurve, calibrationCurve, emaSmooth,
+  pca, standardize, beeswarmLayout, ML_PALETTE,
+  addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
+  addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
+  addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
+} from "@photonviz/core"

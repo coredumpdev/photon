@@ -1,11 +1,10 @@
 import * as photon from "@photonviz/core";
-import * as photonMap from "@photonviz/map";
 import { EditorView, basicSetup } from "codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 
 // ---------------------------------------------------------------------------
-// Presets — each is a self-contained snippet run with (container, photon, map).
+// Presets — each is a self-contained snippet run with (container, photon).
 // Streaming snippets guard their rAF loop with `container.isConnected` so an
 // old loop stops as soon as the runner swaps in a fresh container.
 // ---------------------------------------------------------------------------
@@ -117,6 +116,63 @@ pp.addScatter({
   r: Float64Array.from({ length: B }, () => 0.2 + Math.random() * 0.75),
   color: "#22d3ee", size: 6,
 });`,
+
+  "Confusion matrix": `// Confusion matrix from true/predicted labels — heatmap + per-cell counts.
+const C = 5, N = 600;
+const yTrue = new Int32Array(N), yPred = new Int32Array(N);
+for (let i = 0; i < N; i++) {
+  const t = Math.floor(Math.random() * C);
+  yTrue[i] = t;
+  yPred[i] = Math.random() < 0.82 ? t : Math.floor(Math.random() * C); // 82% accurate
+}
+const plot = new photon.Plot(container, { theme: "dark", showToolbar: false });
+photon.addConfusionMatrix(plot, { yTrue, yPred, classes: C, colormap: "viridis" });
+plot.render();`,
+
+  "ROC curve": `// ROC curve + AUC for a binary classifier's scores (chance diagonal dashed).
+const gauss = (m, sd) => m + sd * Math.sqrt(-2 * Math.log(Math.random() || 1e-9)) * Math.cos(2 * Math.PI * Math.random());
+const N = 500;
+const scores = new Float64Array(N), labels = new Int32Array(N);
+for (let i = 0; i < N; i++) {
+  const pos = Math.random() < 0.4 ? 1 : 0;
+  labels[i] = pos;
+  scores[i] = Math.min(1, Math.max(0, pos ? gauss(0.7, 0.16) : gauss(0.35, 0.16)));
+}
+const plot = new photon.Plot(container, { theme: "dark", legend: true, showToolbar: false });
+photon.addRocCurve(plot, { scores, labels, fill: true });
+plot.render();`,
+
+  "Embedding (PCA)": `// 3 high-dim Gaussian blobs → PCA → 2-D scatter colored by class.
+const gauss = (m, sd) => m + sd * Math.sqrt(-2 * Math.log(Math.random() || 1e-9)) * Math.cos(2 * Math.PI * Math.random());
+const D = 12, K = 3, per = 90, N = K * per;
+const means = Array.from({ length: K }, () => Array.from({ length: D }, () => gauss(0, 2.4)));
+const data = new Float64Array(N * D);
+const cls = new Int32Array(N);
+let r = 0;
+for (let k = 0; k < K; k++) for (let j = 0; j < per; j++, r++) {
+  cls[r] = k;
+  for (let c = 0; c < D; c++) data[r * D + c] = means[k][c] + gauss(0, 1);
+}
+const proj = photon.pca(data, N, D, 2);
+const xs = new Float64Array(N), ys = new Float64Array(N);
+for (let i = 0; i < N; i++) { xs[i] = proj.scores[i * 2]; ys[i] = proj.scores[i * 2 + 1]; }
+const plot = new photon.Plot(container, { theme: "dark", legend: true, pick: "xy", showToolbar: false });
+photon.addEmbedding(plot, { x: xs, y: ys, labels: cls, classNames: ["cats", "dogs", "birds"], size: 5 });
+plot.render();`,
+
+  "Training curves": `// Train/val loss with TensorBoard-style EMA smoothing + best-epoch marker.
+const E = 90;
+const train = new Float64Array(E), val = new Float64Array(E);
+for (let e = 0; e < E; e++) {
+  train[e] = 2.4 * Math.exp(-e / 24) + 0.16 + Math.random() * 0.05;
+  val[e] = 2.4 * Math.exp(-e / 21) + 0.28 + Math.max(0, (e - 55) * 0.004) + Math.random() * 0.09;
+}
+const plot = new photon.Plot(container, { theme: "dark", legend: true, showToolbar: false });
+photon.addTrainingCurves(plot, {
+  series: [{ name: "train loss", y: train, color: "#60a5fa" }, { name: "val loss", y: val, color: "#f472b6" }],
+  smoothing: 0.6, showRaw: true, best: "min",
+});
+plot.render();`,
 };
 
 const PRESET_NAMES = Object.keys(PRESETS);
@@ -165,8 +221,8 @@ function run(code: string): void {
   previewEl.append(container);
 
   try {
-    const fn = new Function("container", "photon", "map", code);
-    fn(container, photon, photonMap);
+    const fn = new Function("container", "photon", code);
+    fn(container, photon);
     setStatus("ok", "✓ ran");
   } catch (err) {
     const e = err as Error;

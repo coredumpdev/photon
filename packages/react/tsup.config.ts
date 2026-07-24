@@ -7,5 +7,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   target: "es2020",
-  external: ["react", "react/jsx-runtime", "@photonviz/core", "@photonviz/map"],
+  external: ["react", "react/jsx-runtime", "@photonviz/core"],
 });

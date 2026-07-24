@@ -6,6 +6,12 @@
 
 **React bindings for [Photon](https://github.com/coredumpdev/photon) — GPU-accelerated WebGL2 charts.**
 
+<p>
+  <a href="https://www.npmjs.com/package/@photonviz/react"><img src="https://img.shields.io/npm/v/@photonviz/react?color=cb3837&logo=npm" alt="npm"/></a>
+  <a href="https://www.npmjs.com/package/@photonviz/react"><img src="https://img.shields.io/npm/dm/@photonviz/react?color=cb3837" alt="downloads"/></a>
+  · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
+</p>
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
 </p>
@@ -46,8 +52,6 @@ export function Chart({ x, y }: { x: Float64Array; y: Float64Array }) {
 **Polar** — `PolarPlot` with `PolarLine` / `PolarScatter`.
 **3D** — `Plot3D` with `Surface` / `PointCloud` / `Line3D` / `Bar3D` / `Quiver3D` / `Contour3D` / `Isosurface` / `Volume`.
 **Finance** — `HeikinAshi` / `Renko` / `Bollinger` / `VolumeProfile` / `Depth`, plus re-exported indicators (`rsi`, `macd`, `sma`, `ema`, `wma`, `vwap`, `atr`, `stochastic`, `keltner`, `obv`, `ichimoku`, `adx`, `superTrend`, `fibRetracements`).
-**Maps** ([`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map)) — `Map` / `GeoJson`.
-
 Every layer accepts `renderType="static" | "dynamic"`; pass new typed arrays to stream.
 
 Imperative escape hatch: `const [ref, plot] = usePlot(options)` gives you the underlying core `Plot` — including image export (`plot.downloadImage()` / `toDataURL()` / `toBlob()` / `copyToClipboard()`); the toolbar also has a one-click download-PNG button.

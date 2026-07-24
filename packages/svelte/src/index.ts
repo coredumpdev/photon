@@ -47,7 +47,6 @@ import {
   type RenkoOptions,
   type VolumeProfileOptions,
 } from "@photonviz/core";
-import { addGeoJson, addMap, type GeoJsonOptions, type MapOptions } from "@photonviz/map";
 
 export type SeriesSpec =
   | ({ type: "line" } & LineOptions)
@@ -69,9 +68,7 @@ export type SeriesSpec =
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
-  | ({ type: "graph" } & GraphInput)
-  | ({ type: "map" } & MapOptions)
-  | ({ type: "geojson" } & GeoJsonOptions);
+  | ({ type: "graph" } & GraphInput);
 
 export interface YAxisSpec extends YAxisOptions {
   id: string;
@@ -106,8 +103,6 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
     case "graph": return p.addGraph(s);
-    case "map": return addMap(p, s);
-    case "geojson": return addGeoJson(p, s);
   }
 }
 
@@ -133,8 +128,6 @@ function updateSeries(layer: Layer, s: SeriesSpec): void {
     case "patches": break; // static
     case "image": break; // static
     case "graph": break; // static
-    case "map": break; // basemap streams tiles itself
-    case "geojson": break; // static
   }
 }
 
@@ -311,4 +304,14 @@ export {
   pointAndFigure,
   volumeProfile,
   depth,
+} from "@photonviz/core";
+
+// ML / deep-learning: pure metrics + reducers and the Plot builders that render
+// them (imperative use on a core Plot, like the finance helpers above).
+export {
+  confusionMatrix, rocCurve, prCurve, calibrationCurve, emaSmooth,
+  pca, standardize, beeswarmLayout, ML_PALETTE,
+  addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
+  addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
+  addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
 } from "@photonviz/core";

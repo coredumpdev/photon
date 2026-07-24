@@ -8,15 +8,6 @@ import {
   type PolarOptions,
 } from "@photonviz/core";
 import {
-  lonLatToWorld,
-  pmtilesSource,
-  protomapsStyle,
-  worldToLonLat,
-  xyzVectorSource,
-  type MapStyle,
-} from "@photonviz/map";
-import { worldCountries } from "@photonviz/map/world";
-import {
   Annotation,
   Area,
   Bar,
@@ -28,7 +19,6 @@ import {
   Contour3D,
   Depth,
   ErrorBar,
-  GeoJson,
   Graph,
   Heatmap,
   HeikinAshi,
@@ -37,7 +27,6 @@ import {
   Isosurface,
   Line,
   Line3D,
-  Map,
   Ohlc,
   Patches,
   Pie,
@@ -56,8 +45,21 @@ import {
   Volume,
   VolumeProfile,
   YAxis,
+  addAttentionMap,
+  addCalibration,
+  addConfusionMatrix,
+  addDecisionBoundary,
+  addEmbedding,
+  addFeatureImportance,
+  addPartialDependence,
+  addPrCurve,
+  addRidgeline,
+  addRocCurve,
+  addShapBeeswarm,
+  addTrainingCurves,
   firstFinite,
   macd,
+  pca,
   rsi,
   usePlot,
   usePlot3D,
@@ -70,7 +72,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -164,32 +165,7 @@ const S: Record<string, CSSProperties> = {
     pointerEvents: "none",
     fontVariantNumeric: "tabular-nums",
   },
-  cap: {
-    position: "absolute",
-    right: 6,
-    bottom: 6,
-    zIndex: 5,
-    padding: "2px 7px",
-    borderRadius: 6,
-    font: "500 10.5px system-ui, sans-serif",
-    color: "#cbd5e1",
-    background: "rgba(14,21,38,.72)",
-    border: "1px solid #1e293b",
-    pointerEvents: "none",
-    maxWidth: "70%",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  file: { position: "absolute", left: 8, bottom: 8, zIndex: 6, fontSize: 11, color: "#cbd5e1", maxWidth: "60%" },
   fill: { width: "100%", height: "100%" },
-  placeholder: {
-    display: "grid",
-    placeItems: "center",
-    height: "100%",
-    fontSize: 12,
-    color: "#64748b",
-  },
 };
 
 function tabStyle(activeTab: boolean): CSSProperties {
@@ -2878,121 +2854,360 @@ function FinanceTab() {
 }
 
 // ============================================================================
-// MAPS TAB — offline GeoJSON world + a vector basemap. No FPS badges.
+// ML TAB — deep-learning / model-eval charts built on the ML module. Every
+// builder is imperative (addX(plot, opts) on a core Plot), so each panel grabs
+// its Plot via usePlot and runs the builder once on mount. Mirrors vanilla's
+// buildML() — same 12 charts, titles, and order.
 // ============================================================================
-const adminStyle: MapStyle = {
-  background: [0.05, 0.09, 0.16, 1],
-  paint(_layer, type) {
-    if (type === "polygon") return { kind: "fill", color: [0.16, 0.2, 0.26, 1], outline: [0.5, 0.58, 0.68, 1], outlineWidth: 1.2 };
-    return { kind: "line", color: [0.5, 0.58, 0.68, 1], width: 1.2 };
-  },
-};
 
-const oceanStyle: MapStyle = {
-  background: [0.05, 0.09, 0.16, 1],
-  paint(layer, type) {
-    if (layer === "countries") return type === "polygon" ? { kind: "fill", color: [0.16, 0.2, 0.26, 1] } : { kind: "line", color: [0.3, 0.36, 0.44, 1], width: 1 };
-    if (layer === "geolines") return { kind: "line", color: [0.2, 0.25, 0.32, 1], width: 1 };
-    return null;
-  },
-};
-
-const lonLatReadout = (x: number, y: number) => {
-  const [lon, lat] = worldToLonLat(x, y);
-  return [
-    { label: "lon", value: `${lon.toFixed(2)}°` },
-    { label: "lat", value: `${lat.toFixed(2)}°` },
-  ];
-};
-
-function PmtilesPanel() {
-  const [source, setSource] = useState<ReturnType<typeof pmtilesSource> | null>(null);
-  const [name, setName] = useState("");
-  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setName(file.name);
-    setSource(pmtilesSource({ blob: file, attribution: `local: ${file.name}` }));
-  };
+/** Imperative panel: a PanelShell wrapping a usePlot'd Plot; `setup` runs once. */
+function MLPanel({
+  title,
+  subtitle,
+  options,
+  setup,
+}: {
+  title: string;
+  subtitle: string;
+  options?: PlotOptions;
+  setup: (p: CorePlot) => void;
+}) {
+  const [ref, plot] = usePlot({ theme: "dark", showToolbar: false, ...options });
+  useEffect(() => {
+    if (!plot) return;
+    setup(plot);
+    plot.render();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot]);
   return (
-    <PanelShell title="PMTiles (offline)" subtitle="pick a local .pmtiles file">
-      {source ? (
-        <Plot options={{ theme: "dark", showToolbar: true, equalAspect: true, boundedPan: true, crosshair: true, hoverReadout: lonLatReadout }}>
-          <Map source={source} style={protomapsStyle("dark")} />
-        </Plot>
-      ) : (
-        <div style={S.placeholder}>no network — pick a .pmtiles file →</div>
-      )}
-      <input type="file" accept=".pmtiles" onChange={onFile} style={S.file} />
-      <div style={S.cap}>{name ? `local: ${name}` : "offline vector tiles"}</div>
+    <PanelShell title={title} subtitle={subtitle}>
+      <div ref={ref} style={S.fill} />
     </PanelShell>
   );
 }
 
-function MapsTab() {
-  const demoSource = useMemo(
-    () => xyzVectorSource({ url: "https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf", attribution: "© MapLibre demo tiles", maxZoom: 5 }),
-    [],
-  );
-  const cities = useMemo(() => {
-    const list: Array<[string, number, number]> = [
-      ["Istanbul", 28.98, 41.01],
-      ["Tokyo", 139.69, 35.69],
-      ["New York", -74.0, 40.71],
-      ["São Paulo", -46.63, -23.55],
-      ["Sydney", 151.21, -33.87],
-      ["Cairo", 31.24, 30.04],
-    ];
-    const x: number[] = [];
-    const y: number[] = [];
-    for (const [, lon, lat] of list) {
-      const [wx, wy] = lonLatToWorld(lon, lat);
-      x.push(wx);
-      y.push(wy);
-    }
-    return { x, y, labels: list.map(([n]) => n) };
-  }, []);
+type MLData = {
+  train: Float64Array;
+  val: Float64Array;
+  classes: number;
+  yTrue: Int32Array;
+  yPred: Int32Array;
+  scores: Float64Array;
+  labels: Int32Array;
+  emb: { x: Float64Array; y: Float64Array; cls: Int32Array };
+  db: {
+    values: Float64Array;
+    nx: number;
+    ny: number;
+    extent: { x: Pair; y: Pair };
+    px: Float64Array;
+    py: Float64Array;
+    pl: Int32Array;
+  };
+  fi: { names: string[]; values: number[] };
+  shap: { values: number[][]; featureValues: number[][]; names: string[] };
+  pdp: { x: Float64Array; pd: Float64Array; ice: number[][] };
+  attn: number[][];
+  ridge: Array<{ label: string; values: Float64Array }>;
+};
 
+function useMLData(): MLData {
+  return useMemo(() => {
+    const { rand, gaussian } = makeRng(42);
+
+    // 1 — Training curves (val dips then slightly overfits after ~epoch 55).
+    const E = 90;
+    const train = new Float64Array(E);
+    const val = new Float64Array(E);
+    for (let e = 0; e < E; e++) {
+      train[e] = 2.4 * Math.exp(-e / 24) + 0.16 + Math.abs(gaussian(0, 0.05));
+      val[e] = 2.4 * Math.exp(-e / 21) + 0.28 + Math.max(0, (e - 55) * 0.004) + Math.abs(gaussian(0, 0.09));
+    }
+
+    // 2 — Confusion matrix (5 classes, 82% accurate).
+    const classes = 5;
+    const Ncm = 600;
+    const yTrue = new Int32Array(Ncm);
+    const yPred = new Int32Array(Ncm);
+    for (let i = 0; i < Ncm; i++) {
+      const t = Math.floor(rand() * classes);
+      yTrue[i] = t;
+      yPred[i] = rand() < 0.82 ? t : Math.floor(rand() * classes);
+    }
+
+    // ROC / PR / calibration share one binary classifier's scores.
+    const NB = 500;
+    const scores = new Float64Array(NB);
+    const labels = new Int32Array(NB);
+    for (let i = 0; i < NB; i++) {
+      const pos = rand() < 0.4 ? 1 : 0;
+      labels[i] = pos;
+      scores[i] = Math.min(1, Math.max(0, pos ? gaussian(0.68, 0.17) : gaussian(0.36, 0.17)));
+    }
+
+    // 6 — Embedding projector (high-D Gaussians → PCA 2-D).
+    const D = 12;
+    const K = 3;
+    const per = 90;
+    const Nemb = K * per;
+    const means: number[][] = Array.from({ length: K }, () => Array.from({ length: D }, () => gaussian(0, 2.4)));
+    const data = new Float64Array(Nemb * D);
+    const cls = new Int32Array(Nemb);
+    let r = 0;
+    for (let k = 0; k < K; k++)
+      for (let j = 0; j < per; j++, r++) {
+        cls[r] = k;
+        for (let c = 0; c < D; c++) data[r * D + c] = means[k]![c]! + gaussian(0, 1);
+      }
+    const proj = pca(data, Nemb, D, 2);
+    const ex = new Float64Array(Nemb);
+    const ey = new Float64Array(Nemb);
+    for (let i = 0; i < Nemb; i++) {
+      ex[i] = proj.scores[i * 2]!;
+      ey[i] = proj.scores[i * 2 + 1]!;
+    }
+
+    // 7 — Decision boundary (radial P(class 1) field + noisy training points).
+    const nx = 72;
+    const ny = 72;
+    const lo = -3;
+    const hi = 3;
+    const dbValues = new Float64Array(nx * ny);
+    for (let iy = 0; iy < ny; iy++)
+      for (let ix = 0; ix < nx; ix++) {
+        const x = lo + ((hi - lo) * ix) / (nx - 1);
+        const y = lo + ((hi - lo) * iy) / (ny - 1);
+        dbValues[iy * nx + ix] = 1 / (1 + Math.exp(-(1.6 - (x * x + y * y)) * 2.2));
+      }
+    const M = 220;
+    const px = new Float64Array(M);
+    const py = new Float64Array(M);
+    const pl = new Int32Array(M);
+    for (let i = 0; i < M; i++) {
+      const x = lo + rand() * (hi - lo);
+      const y = lo + rand() * (hi - lo);
+      px[i] = x;
+      py[i] = y;
+      const inside = x * x + y * y < 1.6;
+      pl[i] = (rand() < 0.9 ? inside : !inside) ? 1 : 0;
+    }
+
+    // 8 — Feature importance (skewed toward small).
+    const fiNames = ["bmi", "s5", "bp", "age", "s3", "sex", "s1", "s6", "s4"];
+    const fiValues = fiNames.map(() => rand() * rand());
+
+    // 9 — SHAP beeswarm (impact correlates with feature value).
+    const shapNames = ["bmi", "s5", "bp", "age", "s3", "sex"];
+    const F = shapNames.length;
+    const Nsh = 180;
+    const shap: number[][] = [];
+    const fval: number[][] = [];
+    for (let f = 0; f < F; f++) {
+      const w = (F - f) / F;
+      const sv: number[] = [];
+      const fv: number[] = [];
+      for (let i = 0; i < Nsh; i++) {
+        const v = gaussian(0, 1);
+        fv.push(v);
+        sv.push(w * v * 0.6 + gaussian(0, 0.08));
+      }
+      shap.push(sv);
+      fval.push(fv);
+    }
+
+    // 10 — Partial dependence (+ ICE).
+    const G = 32;
+    const pdX = new Float64Array(G);
+    const pd = new Float64Array(G);
+    for (let i = 0; i < G; i++) {
+      const t = i / (G - 1);
+      pdX[i] = t;
+      pd[i] = 0.2 + 0.6 / (1 + Math.exp(-(t - 0.5) * 10));
+    }
+    const ice: number[][] = [];
+    for (let k = 0; k < 16; k++) {
+      const scale = 0.7 + rand() * 0.6;
+      const off = gaussian(0, 0.04);
+      ice.push(Array.from(pd, (v) => Math.min(1, Math.max(0, 0.2 + (v - 0.2) * scale + off + gaussian(0, 0.015)))));
+    }
+
+    // 11 — Attention map (transformer, causal mask, query × key).
+    const T = 11;
+    const attn: number[][] = [];
+    for (let q = 0; q < T; q++) {
+      const row: number[] = [];
+      let z = 0;
+      for (let k = 0; k <= q; k++) {
+        const bias = -Math.abs(q - k) * 0.55 + (k === 0 ? 0.9 : 0) + gaussian(0, 0.12);
+        const ev = Math.exp(bias);
+        row.push(ev);
+        z += ev;
+      }
+      for (let k = q + 1; k < T; k++) row.push(0);
+      for (let k = 0; k < T; k++) row[k]! /= z || 1;
+      attn.push(row);
+    }
+
+    // 12 — Ridgeline (weight distribution tightening over epochs).
+    const epochs = 8;
+    const ridge = Array.from({ length: epochs }, (_, e) => {
+      const mean = 1.1 * Math.exp(-e / 3);
+      const sd = 0.45 * Math.exp(-e / 6) + 0.14;
+      return { label: `epoch ${e}`, values: Float64Array.from({ length: 320 }, () => gaussian(mean, sd)) };
+    });
+
+    return {
+      train,
+      val,
+      classes,
+      yTrue,
+      yPred,
+      scores,
+      labels,
+      emb: { x: ex, y: ey, cls },
+      db: { values: dbValues, nx, ny, extent: { x: [lo, hi] as Pair, y: [lo, hi] as Pair }, px, py, pl },
+      fi: { names: fiNames, values: fiValues },
+      shap: { values: shap, featureValues: fval, names: shapNames },
+      pdp: { x: pdX, pd, ice },
+      attn,
+      ridge,
+    };
+  }, []);
+}
+
+function MLTab() {
+  const d = useMLData();
   return (
     <div style={S.grid}>
-      <PanelShell title="GeoJSON world" subtitle="offline · Natural Earth 10m">
-        <Plot options={{ theme: "dark", showToolbar: true, equalAspect: true, boundedPan: true, hoverReadout: lonLatReadout }}>
-          <GeoJson geojson={worldCountries} layer="admin" style={adminStyle} />
-        </Plot>
-        <div style={S.cap}>© Natural Earth (public domain) · embedded</div>
-      </PanelShell>
+      <MLPanel
+        title="Training curves"
+        subtitle="EMA smoothing"
+        options={{ legend: true }}
+        setup={(p) =>
+          addTrainingCurves(p, {
+            series: [
+              { name: "train loss", y: d.train, color: "#60a5fa" },
+              { name: "val loss", y: d.val, color: "#f472b6" },
+            ],
+            smoothing: 0.6,
+            showRaw: true,
+            best: "min",
+          })
+        }
+      />
 
-      <PanelShell title="Vector basemap" subtitle="addMap · MVT · city overlay">
-        <Plot options={{ theme: "dark", showToolbar: true, equalAspect: true, crosshair: true, boundedPan: true, hoverReadout: lonLatReadout }}>
-          <Map source={demoSource} style={oceanStyle} bbox={[-175, -58, 190, 78]} />
-          <Scatter x={cities.x} y={cities.y} size={8} color="#f472b6" labels={cities.labels} />
-        </Plot>
-        <div style={S.cap}>© MapLibre demo tiles</div>
-      </PanelShell>
+      <MLPanel
+        title="Confusion matrix"
+        subtitle="5 classes"
+        setup={(p) => addConfusionMatrix(p, { yTrue: d.yTrue, yPred: d.yPred, classes: d.classes, colormap: "viridis" })}
+      />
 
-      <PmtilesPanel />
+      <MLPanel
+        title="ROC curve"
+        subtitle="AUC in legend"
+        options={{ legend: true }}
+        setup={(p) => addRocCurve(p, { scores: d.scores, labels: d.labels, fill: true, color: "#38bdf8" })}
+      />
+
+      <MLPanel
+        title="Precision–recall"
+        subtitle="AP in legend"
+        options={{ legend: true }}
+        setup={(p) => addPrCurve(p, { scores: d.scores, labels: d.labels, fill: true })}
+      />
+
+      <MLPanel
+        title="Calibration"
+        subtitle="reliability + ECE"
+        options={{ legend: true }}
+        setup={(p) => addCalibration(p, { scores: d.scores, labels: d.labels, bins: 10 })}
+      />
+
+      <MLPanel
+        title="Embedding (PCA)"
+        subtitle="color by class"
+        options={{ legend: true, pick: "xy" }}
+        setup={(p) =>
+          addEmbedding(p, { x: d.emb.x, y: d.emb.y, labels: d.emb.cls, classNames: ["cats", "dogs", "birds"], size: 5 })
+        }
+      />
+
+      <MLPanel
+        title="Decision boundary"
+        subtitle="field + points"
+        options={{ pick: "xy" }}
+        setup={(p) =>
+          addDecisionBoundary(p, {
+            values: d.db.values,
+            cols: d.db.nx,
+            rows: d.db.ny,
+            extent: d.db.extent,
+            colormap: "coolwarm",
+            domain: [0, 1],
+            points: {
+              x: d.db.px,
+              y: d.db.py,
+              labels: d.db.pl,
+              classNames: ["outside", "inside"],
+              palette: ["#0b1020", "#e5e7eb"],
+              size: 5,
+            },
+          })
+        }
+      />
+
+      <MLPanel
+        title="Feature importance"
+        subtitle="sorted"
+        setup={(p) => addFeatureImportance(p, { names: d.fi.names, values: d.fi.values, color: "#34d399", top: 9 })}
+      />
+
+      <MLPanel
+        title="SHAP beeswarm"
+        subtitle="impact by feature value"
+        setup={(p) => addShapBeeswarm(p, { values: d.shap.values, featureValues: d.shap.featureValues, names: d.shap.names, size: 4 })}
+      />
+
+      <MLPanel
+        title="Partial dependence"
+        subtitle="PDP + ICE"
+        options={{ legend: true }}
+        setup={(p) => addPartialDependence(p, { x: d.pdp.x, pd: d.pdp.pd, ice: d.pdp.ice })}
+      />
+
+      <MLPanel
+        title="Attention map"
+        subtitle="causal · query × key"
+        setup={(p) => addAttentionMap(p, { weights: d.attn, colormap: "viridis" })}
+      />
+
+      <MLPanel
+        title="Ridgeline"
+        subtitle="weights over epochs"
+        setup={(p) => addRidgeline(p, { groups: d.ridge, overlap: 1.6, range: [-1.5, 2.5] })}
+      />
     </div>
   );
 }
 
 // ============================================================================
-// App — three lazily-built tabs. Static is the default and mounts on load;
-// Dynamic and Maps mount only once their tab is first activated (a WebGL plot
-// built while display:none would size to 0). Visited tabs stay mounted; the
+// App — lazily-built tabs. Static is the default and mounts on load;
+// Dynamic, Finance and ML mount only once their tab is first activated (a WebGL
+// plot built while display:none would size to 0). Visited tabs stay mounted; the
 // Dynamic tab's rAF pauses whenever it is not the active tab.
 // ============================================================================
-type Tab = "static" | "dynamic" | "finance" | "maps";
+type Tab = "static" | "dynamic" | "finance" | "ml";
 
 const TABS: Array<{ id: Tab; label: string; count: number }> = [
   { id: "static", label: "Static", count: 49 },
   { id: "dynamic", label: "Dynamic", count: DYN2D.length + DYN_POLAR.length + DYN3D.length + 2 },
   { id: "finance", label: "Finance", count: 8 },
-  { id: "maps", label: "Maps", count: 3 },
+  { id: "ml", label: "ML", count: 12 },
 ];
 
 export function App() {
   const [active, setActive] = useState<Tab>("static");
-  const [seen, setSeen] = useState<Record<Tab, boolean>>({ static: true, dynamic: false, finance: false, maps: false });
+  const [seen, setSeen] = useState<Record<Tab, boolean>>({ static: true, dynamic: false, finance: false, ml: false });
 
   const go = (t: Tab) => {
     setActive(t);
@@ -3006,11 +3221,11 @@ export function App() {
           <b style={{ color: "#60a5fa" }}>Photon</b> · React — WebGL2 chart gallery
         </h1>
         <p style={S.sub}>
-          Three tabs via React components. <b>Static</b>: the full catalog with <code>renderType="static"</code>. <b>Dynamic</b>: the
+          Four tabs via React components. <b>Static</b>: the full catalog with <code>renderType="static"</code>. <b>Dynamic</b>: the
           same types with <code>renderType="dynamic"</code>, streaming live at ~60fps (imperative <code>usePlot</code> + per-panel FPS
           badge), plus a <code>linkX</code>-ed finance dashboard. <b>Finance</b>: indicators + transforms (Heikin-Ashi, Renko, Bollinger,
-          volume profile, depth) and a <code>linkX</code>-ed price / RSI / MACD dashboard. <b>Maps</b>: offline vector basemaps. Dynamic,
-          Finance and Maps mount lazily on first activation.
+          volume profile, depth) and a <code>linkX</code>-ed price / RSI / MACD dashboard. <b>ML</b>: model-eval charts (confusion matrix,
+          ROC / PR, calibration, PCA embedding, SHAP, attention). Dynamic, Finance and ML mount lazily on first activation.
         </p>
       </header>
 
@@ -3027,7 +3242,7 @@ export function App() {
       <section style={{ display: active === "static" ? "block" : "none" }}>{seen.static && <StaticTab />}</section>
       <section style={{ display: active === "dynamic" ? "block" : "none" }}>{seen.dynamic && <DynamicTab running={active === "dynamic"} />}</section>
       <section style={{ display: active === "finance" ? "block" : "none" }}>{seen.finance && <FinanceTab />}</section>
-      <section style={{ display: active === "maps" ? "block" : "none" }}>{seen.maps && <MapsTab />}</section>
+      <section style={{ display: active === "ml" ? "block" : "none" }}>{seen.ml && <MLTab />}</section>
     </main>
   );
 }

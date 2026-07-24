@@ -6,6 +6,13 @@
 
 **GPU-accelerated scientific plotting for the web — WebGL2, zero dependencies.**
 
+<p>
+  <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/v/@photonviz/core?color=cb3837&logo=npm" alt="npm"/></a>
+  <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/dm/@photonviz/core?color=cb3837" alt="downloads"/></a>
+  <a href="https://bundlephobia.com/package/@photonviz/core"><img src="https://img.shields.io/bundlephobia/minzip/@photonviz/core?label=minzip" alt="size"/></a>
+  · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
+</p>
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/streaming.gif" alt="Live streaming WebGL2 charts at 60fps" width="100%" />
 </p>
@@ -24,8 +31,6 @@ npm i @photonviz/core
 ```
 
 > Framework bindings: [`@photonviz/react`](https://www.npmjs.com/package/@photonviz/react) · [`@photonviz/vue`](https://www.npmjs.com/package/@photonviz/vue) · [`@photonviz/svelte`](https://www.npmjs.com/package/@photonviz/svelte) · [`@photonviz/solid`](https://www.npmjs.com/package/@photonviz/solid) · [`@photonviz/gea`](https://www.npmjs.com/package/@photonviz/gea) · framework-free [`@photonviz/wc`](https://www.npmjs.com/package/@photonviz/wc) Web Components
-> Vector maps: [`@photonviz/map`](https://www.npmjs.com/package/@photonviz/map)
-
 ## Quick start
 
 ```ts
