@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "packages/core/src/index.ts"
+  ],
+  "tsconfig": "packages/core/tsconfig.json",
+  "plugin": [
+    "typedoc-plugin-markdown"
+  ],
+  "out": "docs/api",
+  "readme": "docs/api-intro.md",
+  "githubPages": false,
+  "hidePageHeader": true,
+  "hideBreadcrumbs": true,
+  "useCodeBlocks": true,
+  "expandObjects": true,
+  "parametersFormat": "table",
+  "excludeInternal": true,
+  "sort": [
+    "alphabetical"
+  ],
+  "entryFileName": "index",
+  "mergeReadme": true
+}

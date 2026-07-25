@@ -7,3 +7,18 @@ coverage/
 
 # Local agent guidance (not published)
 CLAUDE.md
+
+# Python bridge
+python/.venv/
+python/dist/
+python/build/
+python/src/*.egg-info/
+python/src/photonviz/static/widget.js
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Docs site (VitePress cache + TypeDoc output)
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/api/

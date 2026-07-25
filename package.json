@@ -10,6 +10,7 @@
     "typecheck": "pnpm -r --filter \"./packages/*\" exec tsc --noEmit",
     "test": "vitest run",
     "bench": "pnpm --filter @photonviz/core bench",
+    "build:python": "pnpm --filter @photonviz/core build && tsup --config python/tsup.config.ts",
     "example": "vite examples/vanilla",
     "example:react": "pnpm --filter @photonviz/example-react dev",
     "example:vue": "pnpm --filter @photonviz/example-vue dev",
@@ -18,13 +19,20 @@
     "example:gea": "pnpm --filter @photonviz/example-gea dev",
     "example:playground": "pnpm --filter @photonviz/example-playground dev",
     "example:wc": "pnpm --filter @photonviz/example-wc dev",
-    "example:ml": "pnpm --filter @photonviz/example-ml dev"
+    "example:ml": "pnpm --filter @photonviz/example-ml dev",
+    "docs:dev": "DOCS_BASE=/ vitepress dev docs",
+    "docs:api": "typedoc",
+    "docs:build": "pnpm build && pnpm docs:api && vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
     "playwright": "^1.61.1",
     "tsup": "^8.3.5",
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
+    "vitepress": "^1.6.4",
     "vitest": "^2.1.8"
   },
   "packageManager": "pnpm@9.15.0"

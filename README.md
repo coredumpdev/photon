@@ -20,7 +20,8 @@
 </p>
 
 <p align="center">
-  <b><a href="https://coredumpdev.github.io/photon/">▶ Live demo</a></b>
+  <b><a href="https://coredumpdev.github.io/photon/docs/">📖 Documentation</a></b>
+  · <a href="https://coredumpdev.github.io/photon/">▶ Live demo</a>
   · <a href="https://coredumpdev.github.io/photon/playground/">Playground</a>
   · <a href="https://coredumpdev.github.io/photon/llms-full.txt">Docs for AI agents</a>
 </p>
@@ -47,13 +48,40 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 - 📈 **Batteries included** — line, step, scatter (marker glyphs), bar (grouped/stacked/horizontal), area (+ stacked), histogram, box, violin, heatmap, contour, hexbin, spectrogram, **candlestick/OHLC**, **pie/donut**, **patches/polygons**, **graph/network**, **image**, **annotations** (span/band/box/label), polar, and a full **3D** suite.
 - 💹 **Finance** — Heikin-Ashi, Renko, Bollinger, volume profile, depth, a deep indicator set (SMA/EMA/WMA/RSI/MACD/VWAP/ATR + Stochastic/Keltner/OBV/Ichimoku/ADX/SuperTrend/Fibonacci), a gap-collapsing `ordinal-time` axis, and `linkX` linked panes.
 - 📊 **Diagrams** — treemap, funnel, sunburst, gauge, sankey, chord, and parallel-coordinates builders — hierarchy, flow, and composition charts on the same GPU pipeline.
+- 🧠 **Model architecture** — draw the layers of a **PyTorch / Keras / scikit-learn / ONNX** model: a Netron-style DAG in 2D (skip connections routed around the trunk) or cuboids sized by each layer's output tensor in 3D. Adapters are pure functions; the layout is exported too.
 - ✏️ **Interactive drawing tools** — opt-in trendline / horizontal / ray / Fibonacci / rectangle tools; drawings are editable (drag handles, relabel, recolor, delete) — great for annotating price charts.
 - 🖼️ **Image export** — every plot has `toDataURL()` / `toBlob()` / `downloadImage()` / `copyToClipboard()`, plus a one-click download-PNG button on the toolbar.
 - 🎨 **Fully styleable** — Bokeh-like flat props: `background`, `title`, `legend`, and per-axis line/tick/label/grid color, font & label rotation.
+- 🌈 **Readable colour** — every value-mapped layer (heatmap, hexbin, contour, choropleth, `colorBy` scatter/quiver) draws a **colorbar** automatically; 12 colormaps + 4 categorical palettes, and you can register your own.
+- 🖱️ **Interactive legend** — click an entry to hide/show a series (axes re-fit); keyboard-accessible, with `onVisibilityChange`.
 - ♿ **Accessible** — plots expose `role="img"` with an auto-summarized `aria-label` (override via `ariaLabel` / `setAriaLabel()` / `describe()`).
 - 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers, plus framework-free **Web Components** (`@photonviz/wc`).
 - 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.- 🌊 **Streaming-ready** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
 - 🖼️ **Many charts, one context** — a single shared WebGL2 context backs every chart, so a page can hold dozens without exhausting the browser's context limit.
+
+## Python · Jupyter, JupyterLab & Colab
+
+```bash
+pip install photonviz
+```
+
+```python
+import numpy as np, photonviz as pv
+
+x = np.linspace(0, 40, 200_000)
+pv.line(x, np.sin(x), name="signal", plot={"theme": "dark", "legend": True})
+
+# A PyTorch / Keras / scikit-learn / ONNX model, straight from the object:
+pv.model_graph_3d(model, example_input=torch.randn(1, 3, 224, 224), labels="full")
+```
+
+NumPy arrays and torch tensors cross to the browser as **binary buffers**, so a
+million points stay interactive inside a notebook cell. See
+[`python/`](./python) and the runnable [example notebooks](./examples/notebooks).
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/coredumpdev/photon/master/assets/jupyter-hero.png" alt="photonviz rendering a 200,000-point line chart in JupyterLab" width="100%" />
+</p>
 
 ## Gallery
 
@@ -201,8 +229,12 @@ export default class Chart extends Component {
 | Annotations | `plot.addAnnotation({ type: "span" \| "band" \| "box" \| "label" \| "line" \| "ray" \| "fib", …, label? })` | Canvas2D overlay; drawing-tool shapes are editable |
 | Spectrogram | `plot.addHeatmapSpectrogram(signal, { fftSize, hop, sampleRate })` | STFT → heatmap |
 | Diagrams | `plot.addTreemap` · `addFunnel` · `addSunburst` · `addGauge` · `addSankey` · `addChord` · `addParallelCoordinates` | Hierarchy / flow / composition; pure `*Layout` fns exported too |
+| Model architecture | `addModelGraph(plot, { graph })` · `addModelGraph3D(plot3d, { graph })` | Layers of a PyTorch / Keras / sklearn / ONNX model as a DAG or as tensor-shaped 3D blocks |
 
-Colormaps: `viridis`, `plasma`, `coolwarm`, `grayscale`.
+Colormaps — sequential `viridis` `plasma` `inferno` `magma` `cividis` `turbo` `grayscale`,
+diverging `coolwarm` `RdBu` `BrBG` `spectral`, cyclic `twilight`. Categorical palettes:
+`tableau10` (default), `okabe-ito` (colour-blind safe), `set2`, `bright`. Both accept
+inline colours or a custom name via `registerColormap` / `registerPalette`.
 
 ### Finance
 

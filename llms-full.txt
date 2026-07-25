@@ -1,4 +1,6 @@
 # Photon — full reference for LLMs
+#
+# Human-facing documentation (guides, live demos, API reference): https://coredumpdev.github.io/photon/docs/
 
 GPU-accelerated (WebGL2) charting for the web. 40+ chart types across 2D, 3D,
 polar, finance, diagrams, and ML. Zero runtime dependencies, TypeScript-first.
@@ -57,6 +59,10 @@ plot.render();
 - `axes`: `{ x?: AxisConfig, y?: AxisConfig }` — titles, tick format, grid.
 - `title`: string or `{ text, ... }`.
 - `legend`: `true` or a `LegendOptions` object — shows **named** series only.
+  Entries are clickable by default (`legend: { interactive: false }` to opt out);
+  hiding a series re-fits the auto axes. API: `plot.toggleLayer(layer)`,
+  `setLayerVisible`, `isLayerVisible`, `onVisibilityChange`.
+- `colorbar`: `true` (default) / `false` / `ColorbarOptions` — see Colorbar.
 - `interactive`: wheel-zoom + drag (default true). `mode`: `"pan"` (default) or box-zoom.
 - `hover`: crosshair + tooltip (default true). `pick`: `"x" | "y" | "xy"` (use `"xy"` for scatter/maps).
 - `showToolbar`: home + pan/box/X/Y-zoom buttons (default true).
@@ -96,10 +102,31 @@ Set per axis via `scales: { x: { type, domain?, factors?, times? } }`:
   `"ordinal-time"` (finance session axis: plots at integer indices, collapses market
   gaps, ticks snap to calendar dates — pass `times: number[]`).
 
-## Colormaps
+## Colormaps + palettes
 
-`colormap` option accepts: `"viridis" | "plasma" | "coolwarm" | "grayscale"`.
-`colormap(name)` → `(t)=>[r,g,b]`; `colormapLUT(name)` → Float32Array.
+Continuous (`colormap` option) — sequential: `viridis`, `plasma`, `inferno`,
+`magma`, `cividis`, `turbo`, `grayscale`; diverging: `coolwarm`, `RdBu`, `BrBG`,
+`spectral`; cyclic: `twilight`. `COLORMAP_KIND[name]` tells you which family.
+- `colormap(spec)` → `(t)=>[r,g,b]`; `colormapLUT(spec)` → Float32Array (256×3).
+- `spec` is a name **or** inline anchor colours: `colormap(["#000", "#0af"])`.
+- `registerColormap("brand", stops)` makes `"brand"` usable anywhere a name is.
+- `reverseColormap(spec)`, `discreteColormap(spec, steps)`, `colormapFromStops(stops)`.
+- `symmetricDomain(values, center?)` → a domain centred for a diverging map.
+
+Categorical (series/class colours) — `tableau10` (default), `okabe-ito`
+(colour-vision-deficiency safe), `set2`, `bright`.
+- `palette(spec)` → colours; `paletteColor(i, spec)` cycles by index.
+- `spec` is a name or the colours themselves; `registerPalette("brand", colors)`.
+- Builders take it too: `addTreemap(p, { colors: "okabe-ito" })`,
+  `addEmbedding(p, { palette: ["#f00", "#0f0"] })`.
+
+## Colorbar
+
+Any layer that maps values to colours reports `colorInfo()`, and the plot draws a
+bar per scale in the right margin — **on by default**. Turn it off or restyle it
+with `colorbar: false` / `colorbar: { position, label, width, ticks, format }`.
+Layers that report one: heatmap, hexbin, contour, choropleth patches, and
+`colorBy` scatter/quiver (plus the 3D surface/bar/quiver/volume).
 
 ## 3D — Plot3D
 
@@ -109,9 +136,13 @@ const p3 = new Plot3D(el, { axisLabels: { x, y, z }, autoRotate?, lightControls?
 p3.addSurface({ values, cols, rows, extentX, extentZ, colormap?, wireframe? });
 ```
 Layers: `addSurface`, `addPointCloud({ x, y, z, colorBy? })`, `addLine3D`, `addBar3D`,
-`addQuiver3D`, `addContour3D`, `addIsosurface({ values, dims, isoLevel })`,
+`addBoxes3D({ boxes: [{ x, y, z, w, h, d, color?, label? }] })` (independently sized
+lit cuboids), `addQuiver3D`, `addContour3D`, `addIsosurface({ values, dims, isoLevel })`,
 `addVolume({ values, dims, colormap?, density? })` (GPU raymarch). Orbit: drag;
 zoom: wheel. `marchingCubes(values, dims, isoLevel)` is exported (pure).
+Camera/framing options: `aspectMode: "cube" | "data"` ("data" keeps true
+proportions — use it for long scenes), `projection: "perspective" |
+"orthographic"`, `showAxes: false` (hide box + ticks, for diagrams).
 
 ## Polar — PolarPlot
 
@@ -125,10 +156,13 @@ pp.addLine({ theta, r, closed? }); pp.addScatter({ theta, r });
 
 Indicators (pure array→array): `sma, ema, wma, rollingStd, bollinger, rsi, macd,
 vwap, atr, trueRange, stochastic, keltner, obv, ichimoku, adx, superTrend,
-fibRetracements, firstFinite`.
-Transforms: `heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth`.
+fibRetracements, firstFinite, cci, mfi, williamsR, aroon, donchian, parabolicSar,
+pivotPoints`.
+Transforms: `heikinAshi, renko, lineBreak, pointAndFigure, volumeProfile, depth`,
+`resampleOhlc(time, ohlc, bucketMs, volume?)` (roll bars up to a coarser timeframe),
+`drawdown(equity)` → `{ values, peak, maxDrawdown, troughIndex, peakIndex }`.
 Builders (compose layers on a Plot): `addHeikinAshi(plot, opts)`, `addRenko`,
-`addVolumeProfile`, `addBollinger`, `addDepth`. Use an `ordinal-time` x scale for
+`addVolumeProfile`, `addBollinger`, `addDepth`, `addDrawdown(plot, { equity })`. Use an `ordinal-time` x scale for
 gap-free session charts.
 
 ## Diagrams (composed builders)
@@ -151,6 +185,58 @@ Builders (compose layers on a Plot):
 - `addAttentionMap(plot, { weights, colormap? })`
 - `addTrainingCurves(plot, { series, smoothing?, best? })` — EMA smoothing + best epoch
 - `addRidgeline(plot, { groups, overlap? })` — distributions over time
+- `addPredVsActual(plot, { yTrue, yPred })` — with the y=x reference and R²
+- `addResiduals(plot, { yTrue, yPred, against?: "predicted"|"index" })`
+- `addLiftCurve(plot, { scores, labels, mode?: "gain"|"lift" })`
+- `addLearningCurve(plot, { sizes, train, validation, trainStd?, validationStd? })`
+
+More pure metrics: `mse`, `rmse`, `mae`, `r2`, `logLoss`, `brierScore`,
+`classificationReport(yTrue, yPred, classes?)` (per-class precision/recall/f1 +
+macro/weighted), `liftCurve`, `rocCurveOvR(scores, labels, classes)` (one-vs-rest
+with macro/micro AUC).
+
+## Model architecture graphs
+
+A `ModelGraph` is `{ name?, nodes: [{ id, name?, type, shape?, params?, flops?,
+group? }], edges: [{ from, to }] }` — `shape` is the output tensor with the batch
+dim dropped. Build one with an adapter (all pure):
+- `sequentialModel(layers, name?)` — ordered list, edges added automatically
+- `modelGraphFromTorchFx(nodes, opts?)` — `torch.fx` trace (keeps skip connections)
+- `modelGraphFromKeras(config, { shapes?, params? })` — `json.loads(model.to_json())`,
+  Sequential and functional (Keras 2 + Keras 3 `inbound_nodes`)
+- `modelGraphFromSklearn(step)` — Pipeline / ColumnTransformer / FeatureUnion tree
+  (`mode: "sequential" | "parallel"`); `mlpModel(layerSizes)` for an MLPClassifier
+- `modelGraphFromOnnx(graph, { shapes?, paramCounts? })` — `MessageToDict(model.graph)`
+
+Render it either way, from the same graph:
+- `addModelGraph(plot, { graph, direction?: "vertical" | "horizontal", sizeBy?:
+  "params" | "flops", labels?, colors?, theme? })` — layered DAG of rounded boxes
+  with orthogonal connectors; skip edges route around the trunk. Returns
+  `{ layout, nodes, edges, nodeAt(x, y), destroy() }`. Blanks the axes and adds
+  its own hover tooltip; pair with `new Plot(el, { hover: false })`.
+- `addModelGraph3D(plot3d, { graph, sizeScale?, rankSpacing?, branchSpacing? })` —
+  one cuboid per layer, the visible face from the last two shape dims and the
+  thickness from the rest, so a CNN's feature maps shrink as depth grows. Pair
+  with `new Plot3D(el, { aspectMode: "data", showAxes: false, projection: "orthographic" })`.
+
+Pure helpers: `modelLayout(graph, opts)` → `{ nodes, edges, extent, ranks }`,
+`modelBoxDims(nodes, opts)`, `layerCategory(type)`, `LAYER_COLORS`,
+`formatCount`, `formatShape`.
+
+## Signal + statistics
+
+Signal (pure): `windowFunction(name, n)` (`hann`/`hamming`/`blackman`/`bartlett`/
+`rectangular`), `welch(signal, { segment?, overlap?, window?, sampleRate? })` →
+`{ frequencies, power }`, `savitzkyGolay(values, window?, order?)` (peak-preserving
+smoothing), `crossCorrelate(a, b, maxLag?, normalize?)` → `{ lags, values }`.
+
+Fits + summaries (pure): `linearRegression(x, y)` → `{ slope, intercept, r2, stderr, predict }`,
+`linearTrend(x, y, { points?, band? })`, `loess(x, y, { bandwidth?, points? })`,
+`ecdf(values)`, `zscore(values)`, `correlation(a, b)`, `corrMatrix(columns)`.
+
+Builders: `addRegression(plot, { x, y, method?: "ols"|"loess", band? })`,
+`addEcdf(plot, { values })`, `addCorrMatrix(plot, { columns, names? })` (diverging,
+locked to ±1), `addPsd(plot, { signal, sampleRate?, window? })`.
 
 ## Data + stats
 

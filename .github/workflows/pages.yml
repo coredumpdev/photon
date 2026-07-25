@@ -1,7 +1,7 @@
 name: Pages
 
-# Deploy the live demo (vanilla gallery + playground) and the LLM docs to
-# GitHub Pages at https://coredumpdev.github.io/photon/ .
+# Deploy the live demo (vanilla gallery + playground), the documentation site
+# (/docs/) and the LLM docs to GitHub Pages at https://coredumpdev.github.io/photon/ .
 # One-time setup: repo Settings → Pages → Source: "GitHub Actions".
 
 on:
@@ -38,6 +38,13 @@ jobs:
           cp -r examples/vanilla/dist/. site/
           cp -r examples/playground/dist/. site/playground/
           cp llms.txt llms-full.txt AGENTS.md site/
+
+      - name: Build docs (TypeDoc reference + VitePress site)
+        run: |
+          npx typedoc
+          npx vitepress build docs
+          mkdir -p site/docs
+          cp -r docs/.vitepress/dist/. site/docs/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

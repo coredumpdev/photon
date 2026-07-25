@@ -1,7 +1,8 @@
 # Photon
 
 > GPU-accelerated (WebGL2) charting for the web: 40+ chart types across 2D, 3D,
-> polar, finance, diagrams, and ML — zero runtime dependencies, TypeScript-first.
+> polar, finance, diagrams, ML, and model-architecture graphs (PyTorch / Keras /
+> scikit-learn / ONNX) — zero runtime dependencies, TypeScript-first.
 > One shared WebGL2 context lets a single page hold dozens of live charts at 60fps.
 
 Photon is a pnpm-workspace monorepo published under the `@photonviz/*` scope.
@@ -19,9 +20,18 @@ Key idioms an agent should know:
 ## Docs
 
 - [Full reference for LLMs](https://coredumpdev.github.io/photon/llms-full.txt): the complete, single-file API + recipes — fetch this to write correct Photon code.
+- [Documentation site](https://coredumpdev.github.io/photon/docs/): guides, the chart catalog with live demos, and the TypeDoc API reference.
 - [Repository README](https://github.com/coredumpdev/photon#readme): overview, feature tour, quick starts.
 - [Core README (`@photonviz/core`)](https://github.com/coredumpdev/photon/blob/master/packages/core/README.md): the engine + full chart catalog.
 - [AGENTS.md](https://github.com/coredumpdev/photon/blob/master/AGENTS.md): repo conventions for agents contributing to Photon itself.
+
+## Python
+
+- [`photonviz` on PyPI](https://pypi.org/project/photonviz/) — `pip install photonviz`. An anywidget
+  bridge for Jupyter Notebook, JupyterLab, VS Code and Google Colab. Arrays travel as binary
+  buffers; `pv.model_graph(model)` accepts PyTorch / Keras / scikit-learn / ONNX objects directly.
+- [Python README](https://github.com/coredumpdev/photon/blob/master/python/README.md)
+- [Example notebooks](https://github.com/coredumpdev/photon/tree/master/examples/notebooks)
 
 ## Framework wrappers
 
