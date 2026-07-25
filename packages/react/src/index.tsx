@@ -22,6 +22,8 @@ import {
   addBollinger,
   addDepth,
   addHeikinAshi,
+  addModelGraph,
+  addModelGraph3D,
   addRenko,
   addVolumeProfile,
   type AreaOptions,
@@ -42,6 +44,12 @@ import {
   type Annotation as AnnotationSpec,
   type Bar3DLayer,
   type Bar3DOptions,
+  type Boxes3DLayer,
+  type Boxes3DOptions,
+  type ModelGraph3DHandle,
+  type ModelGraph3DOptions,
+  type ModelGraphHandle,
+  type ModelGraphOptions,
   type Contour3DLayer,
   type Contour3DOptions,
   type GraphInput,
@@ -123,12 +131,12 @@ export function Plot({ options, className, style, children }: PlotProps) {
 
 export type LineProps = LineOptions;
 
-export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate, renderType }: LineProps) {
+export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, dash, decimate, renderType }: LineProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<LineLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addLine({ x, y, color, width, name, yAxis, step, join, miterLimit, decimate, renderType });
+    const l = plot.addLine({ x, y, color, width, name, yAxis, step, join, miterLimit, dash, decimate, renderType });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
@@ -136,7 +144,7 @@ export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, 
     };
     // Structural props → recreate the layer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, width, name, yAxis, step, join, miterLimit, decimate, renderType]);
+  }, [plot, color, width, name, yAxis, step, join, miterLimit, dash, decimate, renderType]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y);
@@ -149,19 +157,19 @@ export function Line({ x, y, color, width, name, yAxis, step, join, miterLimit, 
 
 export type ScatterProps = ScatterOptions;
 
-export function Scatter({ x, y, color, size, marker, name, yAxis, colorBy, renderType }: ScatterProps) {
+export function Scatter({ x, y, color, size, sizes, colors, marker, name, yAxis, colorBy, renderType }: ScatterProps) {
   const plot = useContext(PlotContext);
   const layer = useRef<ScatterLayer | null>(null);
   useEffect(() => {
     if (!plot) return;
-    const l = plot.addScatter({ x, y, color, size, marker, name, yAxis, colorBy, renderType });
+    const l = plot.addScatter({ x, y, color, size, sizes, colors, marker, name, yAxis, colorBy, renderType });
     layer.current = l;
     return () => {
       plot.removeLayer(l);
       layer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot, color, size, marker, name, yAxis, colorBy, renderType]);
+  }, [plot, color, size, sizes, colors, marker, name, yAxis, colorBy, renderType]);
   useEffect(() => {
     if (layer.current && plot) {
       layer.current.setData(x, y);
@@ -701,6 +709,28 @@ export function Depth(props: DepthProps) {
   return null;
 }
 
+export type ModelGraphProps = ModelGraphOptions;
+
+/** A model architecture as a flat layered DAG (PyTorch / ONNX / Keras / sklearn). Static. */
+export function ModelGraph(props: ModelGraphProps) {
+  const plot = useContext(PlotContext);
+  const handle = useRef<ModelGraphHandle | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const h = addModelGraph(plot, props);
+    handle.current = h;
+    plot.render();
+    return () => {
+      h.destroy();
+      plot.removeLayer(h.nodes);
+      plot.removeLayer(h.edges);
+      handle.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.graph, props.direction, props.sizeBy, props.labels, props.colors, props.theme]);
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Polar plot
 //
@@ -978,6 +1008,46 @@ export function Volume(props: VolumeProps) {
   return null;
 }
 
+export type Boxes3DProps = Boxes3DOptions;
+
+/** Independently sized lit cuboids (voxels, bounding boxes, layer blocks). */
+export function Boxes3D(props: Boxes3DProps) {
+  const plot = useContext(Plot3DContext);
+  const layer = useRef<Boxes3DLayer | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const l = plot.addBoxes3D(props);
+    layer.current = l;
+    return () => {
+      plot.removeLayer(l);
+      layer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.boxes, props.color, props.opacity, props.name]);
+  return null;
+}
+
+export type ModelGraph3DProps = ModelGraph3DOptions;
+
+/** A model architecture as cuboids sized from each layer's output tensor shape. */
+export function ModelGraph3D(props: ModelGraph3DProps) {
+  const plot = useContext(Plot3DContext);
+  const handle = useRef<ModelGraph3DHandle | null>(null);
+  useEffect(() => {
+    if (!plot) return;
+    const h = addModelGraph3D(plot, props);
+    handle.current = h;
+    return () => {
+      h.destroy();
+      plot.removeLayer(h.boxes);
+      for (const c of h.connectors) plot.removeLayer(c);
+      handle.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.graph, props.sizeScale, props.rankSpacing, props.branchSpacing, props.colors, props.opacity]);
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Finance math re-exports
 //
@@ -1032,4 +1102,17 @@ export {
   addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
+} from "@photonviz/core";
+
+// Model architecture graphs: framework adapters + the pure layout, so React
+// users can build a ModelGraph from a PyTorch / ONNX / Keras / sklearn export.
+export {
+  sequentialModel, mlpModel, modelLayout, modelBoxDims, layerCategory,
+  formatCount, formatShape, LAYER_COLORS,
+  modelGraphFromTorchFx, modelGraphFromOnnx, modelGraphFromKeras, modelGraphFromSklearn,
+} from "@photonviz/core";
+export type {
+  ModelGraph as ModelGraphSpec, ModelNode, ModelEdge, ModelNodeBox, ModelEdgePath,
+  ModelLayoutOptions, ModelLayoutResult, LayerCategory, ModelBlock,
+  TorchFxNode, OnnxGraph, OnnxNode, KerasModelConfig, KerasLayerConfig, SklearnStep,
 } from "@photonviz/core";

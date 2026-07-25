@@ -19,6 +19,12 @@ import {
   addVolumeProfile,
   addBollinger,
   addDepth,
+  addModelGraph,
+  addModelGraph3D,
+  type Boxes3DOptions,
+  type ModelGraph3DOptions,
+  type ModelGraphHandle,
+  type ModelGraphOptions,
   type HexbinOptions,
   type Annotation as AnnotationSpec,
   type Bar3DOptions,
@@ -131,12 +137,13 @@ export const Line = defineComponent({
     x: arr(), y: arr(),
     color: opt<LineOptions["color"]>(), width: opt<number>(), name: opt<string>(),
     yAxis: opt<string>(), step: opt<LineOptions["step"]>(), join: opt<LineOptions["join"]>(),
-    miterLimit: opt<number>(), decimate: opt<boolean>(), renderType: opt<RenderType>(),
+    miterLimit: opt<number>(),
+    dash: opt<number[]>(), decimate: opt<boolean>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addLine({ x: props.x, y: props.y, color: props.color, width: props.width, name: props.name, yAxis: props.yAxis, step: props.step, join: props.join, miterLimit: props.miterLimit, decimate: props.decimate, renderType: props.renderType }),
-      () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.miterLimit, props.decimate],
+      (p) => p.addLine({ x: props.x, y: props.y, color: props.color, width: props.width, name: props.name, yAxis: props.yAxis, step: props.step, join: props.join, miterLimit: props.miterLimit, dash: props.dash, decimate: props.decimate, renderType: props.renderType }),
+      () => [props.color, props.width, props.name, props.yAxis, props.step, props.join, props.miterLimit, props.dash, props.decimate],
       () => [props.x, props.y],
       (l) => l.setData(props.x, props.y),
     );
@@ -149,12 +156,13 @@ export const Scatter = defineComponent({
   props: {
     x: arr(), y: arr(),
     color: opt<ScatterOptions["color"]>(), size: opt<number>(), marker: opt<ScatterOptions["marker"]>(),
+    sizes: opt<ScatterOptions["sizes"]>(), colors: opt<ScatterOptions["colors"]>(),
     name: opt<string>(), yAxis: opt<string>(), colorBy: opt<ScatterOptions["colorBy"]>(), renderType: opt<RenderType>(),
   },
   setup(props) {
     useLayer(
-      (p) => p.addScatter({ x: props.x, y: props.y, color: props.color, size: props.size, marker: props.marker, name: props.name, yAxis: props.yAxis, colorBy: props.colorBy, renderType: props.renderType }),
-      () => [props.color, props.size, props.marker, props.name, props.yAxis, props.colorBy],
+      (p) => p.addScatter({ x: props.x, y: props.y, color: props.color, size: props.size, sizes: props.sizes, colors: props.colors, marker: props.marker, name: props.name, yAxis: props.yAxis, colorBy: props.colorBy, renderType: props.renderType }),
+      () => [props.color, props.size, props.sizes, props.colors, props.marker, props.name, props.yAxis, props.colorBy],
       () => [props.x, props.y],
       (l) => l.setData(props.x, props.y),
     );
@@ -688,6 +696,49 @@ export const Depth = defineComponent({
   },
 });
 
+/** A model architecture as a flat layered DAG (PyTorch / ONNX / Keras / sklearn). */
+export const ModelGraph = defineComponent({
+  name: "PhotonModelGraph",
+  props: {
+    graph: { type: Object as unknown as PropType<ModelGraphOptions["graph"]>, required: true as const },
+    direction: opt<ModelGraphOptions["direction"]>(),
+    sizeBy: opt<ModelGraphOptions["sizeBy"]>(),
+    labels: opt<ModelGraphOptions["labels"]>(),
+    colors: opt<ModelGraphOptions["colors"]>(),
+    theme: opt<ModelGraphOptions["theme"]>(),
+    nodeWidth: opt<number>(), nodeHeight: opt<number>(),
+    rankGap: opt<number>(), nodeGap: opt<number>(),
+    cornerRadius: opt<number>(), edgeWidth: opt<number>(), edgeColor: opt<string>(),
+    arrowSize: opt<number>(), opacity: opt<number>(),
+    tooltip: opt<boolean>(), hideAxes: opt<boolean>(), name: opt<string>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<ModelGraph> must be used inside <Plot>");
+    let handle: ModelGraphHandle | null = null;
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      handle = addModelGraph(p, { ...props });
+      markRaw(handle.nodes);
+      markRaw(handle.edges);
+      p.render();
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (handle) {
+        handle.destroy();
+        if (p) {
+          p.removeLayer(handle.nodes);
+          p.removeLayer(handle.edges);
+        }
+      }
+      handle = null;
+    });
+    return () => null;
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Finance pure math — re-exported straight from core.
 // ---------------------------------------------------------------------------
@@ -706,6 +757,19 @@ export {
   addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
+} from "@photonviz/core";
+
+// Model architecture graphs: the framework adapters + the pure layout, so a
+// ModelGraph can be built from a PyTorch / ONNX / Keras / scikit-learn export.
+export {
+  sequentialModel, mlpModel, modelLayout, modelBoxDims, layerCategory,
+  formatCount, formatShape, LAYER_COLORS,
+  modelGraphFromTorchFx, modelGraphFromOnnx, modelGraphFromKeras, modelGraphFromSklearn,
+} from "@photonviz/core";
+export type {
+  ModelGraph as ModelGraphSpec, ModelNode, ModelEdge, ModelNodeBox, ModelEdgePath,
+  ModelLayoutOptions, ModelLayoutResult, LayerCategory, ModelBlock,
+  TorchFxNode, OnnxGraph, OnnxNode, KerasModelConfig, KerasLayerConfig, SklearnStep,
 } from "@photonviz/core";
 
 // ---------------------------------------------------------------------------
@@ -956,6 +1020,39 @@ export const Volume = defineComponent({
   },
   setup(props) {
     usePlot3DLayer((p) => p.addVolume({ values: props.values, dims: props.dims, extent: props.extent, colormap: props.colormap, domain: props.domain, density: props.density, name: props.name, renderType: props.renderType }));
+    return () => null;
+  },
+});
+
+/** Independently sized lit cuboids (voxels, bounding boxes, layer blocks). */
+export const Boxes3D = defineComponent({
+  name: "PhotonBoxes3D",
+  props: {
+    boxes: { type: Array as unknown as PropType<Boxes3DOptions["boxes"]>, required: true },
+    color: opt<Boxes3DOptions["color"]>(),
+    opacity: opt<number>(),
+    name: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => p.addBoxes3D({ boxes: props.boxes, color: props.color, opacity: props.opacity, name: props.name, renderType: props.renderType }));
+    return () => null;
+  },
+});
+
+/** A model architecture as cuboids sized from each layer's output tensor shape. */
+export const ModelGraph3D = defineComponent({
+  name: "PhotonModelGraph3D",
+  props: {
+    graph: { type: Object as unknown as PropType<ModelGraph3DOptions["graph"]>, required: true as const },
+    colors: opt<ModelGraph3DOptions["colors"]>(),
+    sizeScale: opt<ModelGraph3DOptions["sizeScale"]>(),
+    maxThickness: opt<number>(), maxFace: opt<number>(), minSize: opt<number>(),
+    rankSpacing: opt<number>(), branchSpacing: opt<number>(),
+    connectors: opt<boolean>(), connectorColor: opt<string>(),
+    opacity: opt<number>(), name: opt<string>(),
+  },
+  setup(props) {
+    usePlot3DLayer((p) => addModelGraph3D(p, { ...props }).boxes);
     return () => null;
   },
 });

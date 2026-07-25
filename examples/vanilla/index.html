@@ -34,6 +34,9 @@
       .panel h2 { margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #e2e8f0; border-bottom: 1px solid #1e293b; }
       .panel h2 span { color: #64748b; font-weight: 400; }
       .chart { height: 260px; }
+      /* Architecture diagrams want the full row; the 3D one also wants depth. */
+      .panel.wide { grid-column: 1 / -1; }
+      .panel.tall .chart { height: 400px; }
       /* Per-chart fullscreen button (top-right, shown on hover). */
       .fs-btn { position: absolute; top: 6px; right: 6px; z-index: 7; width: 24px; height: 24px; padding: 0;
         cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;

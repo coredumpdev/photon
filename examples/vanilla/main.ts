@@ -6,6 +6,8 @@ import {
   addTrainingCurves, addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addRidgeline, pca,
+  addModelGraph, addModelGraph3D, modelGraphFromTorchFx, modelGraphFromSklearn, sequentialModel,
+  paletteColor,
 } from "@photonviz/core";
 
 // ============================================================================
@@ -22,9 +24,9 @@ const gridMl = document.getElementById("grid-ml")!;
 const fpsBadges: HTMLElement[] = [];
 
 /** Build a panel (title bar + chart div) inside `grid`. `showFps` adds an FPS badge. */
-function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false): HTMLElement {
+function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false, cls = ""): HTMLElement {
   const el = document.createElement("div");
-  el.className = "panel";
+  el.className = cls ? `panel ${cls}` : "panel";
   const h = document.createElement("h2");
   h.textContent = title;
   if (subtitle) { const s = document.createElement("span"); s.textContent = ` — ${subtitle}`; h.appendChild(s); }
@@ -180,6 +182,31 @@ const CHARTS: Builder[] = [
         sc.setData(x, y); p.render();
       });
     }
+  },
+
+  // --- Bubble chart + dashed reference lines -------------------------------
+  // Per-point `sizes` and `colors` turn a scatter into a bubble chart; `dash`
+  // marks the reference lines as guides rather than data.
+  (grid, dyn) => {
+    const p = new Plot(panel(grid, "Bubble", "per-point size + color · dashed guides", dyn), {
+      theme: "dark", legend: true, pick: "xy",
+    });
+    const M = 90;
+    const x = new Float64Array(M), y = new Float64Array(M);
+    const sizes = new Float64Array(M);
+    const colors: string[] = [];
+    for (let i = 0; i < M; i++) {
+      x[i] = gaussian(0, 1.1);
+      y[i] = x[i]! * 0.55 + gaussian(0, 0.7);
+      sizes[i] = 5 + Math.abs(gaussian(0, 1)) * 16;
+      colors.push(paletteColor(i % 6, "okabe-ito"));
+    }
+    p.addScatter({ x, y, sizes, colors, name: "samples" });
+    // Trend + one-sigma band, drawn as guides.
+    const gx = new Float64Array([-4, 4]);
+    p.addLine({ x: gx, y: new Float64Array([-4 * 0.55, 4 * 0.55]), color: "#f472b6", width: 2, dash: [8, 5], name: "trend" });
+    p.addLine({ x: gx, y: new Float64Array([0, 0]), color: "#64748b", width: 1.5, dash: [2, 4] });
+    p.setView({ x: [-4, 4], y: [-3.5, 3.5] });
   },
 
   // --- Scatter markers (6 glyph shapes) ------------------------------------
@@ -1553,6 +1580,104 @@ function buildML(grid: HTMLElement): void {
     const p = new Plot(panel(grid, "Ridgeline", "weights over epochs"), base);
     addRidgeline(p, { groups, overlap: 1.6, range: [-1.5, 2.5] });
     p.render();
+  }
+
+  // 13 — Model architecture, 2D: a traced PyTorch residual block.
+  // Exactly the shape `torch.fx.symbolic_trace(...)` + ShapeProp dumps; the skip
+  // edge spans five ranks, so it routes around the trunk instead of through it.
+  {
+    const graph = modelGraphFromTorchFx([
+      { name: "x", op: "placeholder", shape: [64, 56, 56] },
+      { name: "conv1", op: "call_module", target: "conv1", moduleType: "Conv2d", args: ["x"], shape: [64, 56, 56], params: 36864 },
+      { name: "bn1", op: "call_module", target: "bn1", moduleType: "BatchNorm2d", args: ["conv1"], shape: [64, 56, 56], params: 128 },
+      { name: "relu1", op: "call_module", target: "relu", moduleType: "ReLU", args: ["bn1"], shape: [64, 56, 56] },
+      { name: "conv2", op: "call_module", target: "conv2", moduleType: "Conv2d", args: ["relu1"], shape: [64, 56, 56], params: 36864 },
+      { name: "bn2", op: "call_module", target: "bn2", moduleType: "BatchNorm2d", args: ["conv2"], shape: [64, 56, 56], params: 128 },
+      { name: "add", op: "call_function", target: "<built-in function add>", args: ["bn2", "x"], shape: [64, 56, 56] },
+      { name: "out", op: "call_module", target: "relu", moduleType: "ReLU", args: ["add"], shape: [64, 56, 56] },
+    ], { name: "BasicBlock" });
+    const p = new Plot(panel(grid, "Model graph · 2D", "torch.fx residual block · hover a layer", false, "wide"), {
+      ...base, hover: false, background: "#0b1220",
+    });
+    addModelGraph(p, {
+      graph,
+      direction: "horizontal",
+      nodeWidth: 3, nodeHeight: 1.5, rankGap: 0.8,
+      sizeBy: "params",
+      cornerRadius: 0.1,
+      labelFont: "600 11px system-ui, sans-serif",
+      subLabelFont: "9px system-ui, sans-serif",
+    });
+    p.render();
+  }
+
+  // 14 — Model architecture, 2D: a scikit-learn Pipeline. The ColumnTransformer's
+  // branches fan out from the trunk and fan back into the next step.
+  {
+    const graph = modelGraphFromSklearn({
+      name: "clf",
+      type: "Pipeline",
+      steps: [
+        {
+          name: "prep",
+          type: "ColumnTransformer",
+          mode: "parallel",
+          steps: [
+            { name: "num", type: "Pipeline", steps: [
+              { name: "impute", type: "SimpleImputer", columns: ["age", "fare"] },
+              { name: "scale", type: "StandardScaler" },
+            ] },
+            { name: "cat", type: "Pipeline", steps: [
+              { name: "impute", type: "SimpleImputer", columns: ["class", "port"] },
+              { name: "encode", type: "OneHotEncoder" },
+            ] },
+          ],
+        },
+        { name: "select", type: "SelectKBest" },
+        { name: "model", type: "GradientBoostingClassifier", params: 12800 },
+      ],
+    });
+    const p = new Plot(panel(grid, "Model graph · sklearn", "Pipeline + ColumnTransformer"), {
+      ...base, hover: false, background: "#0b1220",
+    });
+    addModelGraph(p, {
+      graph,
+      nodeWidth: 3.4, nodeHeight: 1.05, rankGap: 0.55, nodeGap: 0.5,
+      labelFont: "600 11px system-ui, sans-serif",
+      subLabelFont: "9px system-ui, sans-serif",
+    });
+    p.render();
+  }
+
+  // 15 — Model architecture, 3D: each layer is a cuboid sized from its output
+  // tensor — the visible face is H×W, the thickness is the channel count.
+  {
+    const cnn = sequentialModel([
+      { name: "input", type: "Input", shape: [3, 224, 224] },
+      { name: "conv1", type: "Conv2d", shape: [64, 112, 112], params: 1792 },
+      { name: "pool1", type: "MaxPool2d", shape: [64, 56, 56] },
+      { name: "conv2", type: "Conv2d", shape: [128, 56, 56], params: 73856 },
+      { name: "pool2", type: "MaxPool2d", shape: [128, 28, 28] },
+      { name: "conv3", type: "Conv2d", shape: [256, 28, 28], params: 295168 },
+      { name: "pool3", type: "MaxPool2d", shape: [256, 14, 14] },
+      { name: "conv4", type: "Conv2d", shape: [512, 14, 14], params: 1180160 },
+      { name: "gap", type: "AdaptiveAvgPool2d", shape: [512, 1, 1] },
+      { name: "flatten", type: "Flatten", shape: [512] },
+      { name: "fc", type: "Linear", shape: [1000], params: 513000 },
+      { name: "softmax", type: "Softmax", shape: [1000] },
+    ], "TinyVGG");
+    const p3 = new Plot3D(panel(grid, "Model graph · 3D", "tensor-shaped blocks · drag to orbit", false, "wide tall"), {
+      background: [0.04, 0.06, 0.13, 1],
+      // A long chain needs proportional scaling and a parallel camera; a diagram has no axes.
+      aspectMode: "data",
+      projection: "orthographic",
+      showAxes: false,
+      gridPlanes: false,
+      azimuth: 0.42, elevation: 0.3, distance: 0.85,
+      title: "TinyVGG — feature maps shrink, channel depth grows",
+      downloadButton: false,
+    });
+    addModelGraph3D(p3, { graph: cnn, rankSpacing: 0.4, maxFace: 2.4, maxThickness: 1.1, labels: "full" });
   }
 }
 

@@ -16,6 +16,11 @@ import {
   addVolumeProfile,
   addBollinger,
   addDepth,
+  addModelGraph,
+  addModelGraph3D,
+  type Boxes3DOptions,
+  type ModelGraph3DOptions,
+  type ModelGraphOptions,
   type HeikinAshiOptions,
   type RenkoOptions,
   type VolumeProfileOptions,
@@ -202,6 +207,7 @@ export function Line(props: LineProps): JSX.Element {
         step: props.step,
         join: props.join,
         miterLimit: props.miterLimit,
+        dash: props.dash,
         decimate: props.decimate,
         renderType: props.renderType,
       }),
@@ -225,6 +231,8 @@ export function Scatter(props: ScatterProps): JSX.Element {
         y: props.y,
         color: props.color,
         size: props.size,
+        sizes: props.sizes,
+        colors: props.colors,
         marker: props.marker,
         name: props.name,
         yAxis: props.yAxis,
@@ -685,6 +693,30 @@ export function Depth(props: DepthProps): JSX.Element {
   return null;
 }
 
+export type ModelGraphProps = ModelGraphOptions;
+
+/** A model architecture as a flat layered DAG (PyTorch / ONNX / Keras / sklearn). Static. */
+export function ModelGraph(props: ModelGraphProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.graph, props.direction, props.sizeBy, props.labels, props.colors, props.theme],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const handle = addModelGraph(p, props);
+        p.render();
+        onCleanup(() => {
+          handle.destroy();
+          p.removeLayer(handle.nodes);
+          p.removeLayer(handle.edges);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Polar plot
 //
@@ -978,6 +1010,48 @@ export function Volume(props: VolumeProps): JSX.Element {
   return null;
 }
 
+export type Boxes3DProps = Boxes3DOptions;
+
+/** Independently sized lit cuboids (voxels, bounding boxes, layer blocks). */
+export function Boxes3D(props: Boxes3DProps): JSX.Element {
+  const plot = usePlot3D();
+  createEffect(
+    on(
+      () => [plot(), props.boxes, props.color, props.opacity, props.name],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const l = p.addBoxes3D(props);
+        onCleanup(() => p.removeLayer(l));
+      },
+    ),
+  );
+  return null;
+}
+
+export type ModelGraph3DProps = ModelGraph3DOptions;
+
+/** A model architecture as cuboids sized from each layer's output tensor shape. */
+export function ModelGraph3D(props: ModelGraph3DProps): JSX.Element {
+  const plot = usePlot3D();
+  createEffect(
+    on(
+      () => [plot(), props.graph, props.sizeScale, props.rankSpacing, props.branchSpacing, props.colors, props.opacity],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const h = addModelGraph3D(p, props);
+        onCleanup(() => {
+          h.destroy();
+          p.removeLayer(h.boxes);
+          for (const c of h.connectors) p.removeLayer(c);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Finance — pure math re-exports
 //
@@ -1027,4 +1101,17 @@ export {
   addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
+} from "@photonviz/core";
+
+// Model architecture graphs: the framework adapters + the pure layout, so a
+// ModelGraph can be built from a PyTorch / ONNX / Keras / scikit-learn export.
+export {
+  sequentialModel, mlpModel, modelLayout, modelBoxDims, layerCategory,
+  formatCount, formatShape, LAYER_COLORS,
+  modelGraphFromTorchFx, modelGraphFromOnnx, modelGraphFromKeras, modelGraphFromSklearn,
+} from "@photonviz/core";
+export type {
+  ModelGraph as ModelGraphSpec, ModelNode, ModelEdge, ModelNodeBox, ModelEdgePath,
+  ModelLayoutOptions, ModelLayoutResult, LayerCategory, ModelBlock,
+  TorchFxNode, OnnxGraph, OnnxNode, KerasModelConfig, KerasLayerConfig, SklearnStep,
 } from "@photonviz/core";

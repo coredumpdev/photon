@@ -17,6 +17,9 @@
       .panel h2 { margin: 0; padding: 9px 13px; font-size: 13px; font-weight: 600; color: #e2e8f0; border-bottom: 1px solid #1e293b; }
       .panel h2 span { color: #64748b; font-weight: 400; margin-left: 6px; }
       .chart { height: 280px; }
+      /* Architecture diagrams need the full row; the 3D one also needs depth. */
+      .panel.wide { grid-column: 1 / -1; }
+      .panel.tall .chart { height: 420px; }
     </style>
   </head>
   <body>
@@ -26,6 +29,9 @@
         Every panel is a composed builder — <code>addConfusionMatrix</code>, <code>addRocCurve</code>,
         <code>addEmbedding</code>, <code>addShapBeeswarm</code>, <code>addTrainingCurves</code>… — over the
         same WebGL2 engine, all sharing one GL context. Synthetic, in-browser data; zero runtime deps.
+        The last three panels render <b>model architectures</b> with <code>addModelGraph</code> /
+        <code>addModelGraph3D</code>, from a PyTorch <code>torch.fx</code> trace, a scikit-learn
+        <code>Pipeline</code>, and a CNN whose blocks are sized by their output tensor shape.
       </p>
     </header>
     <div class="grid" id="grid"></div>

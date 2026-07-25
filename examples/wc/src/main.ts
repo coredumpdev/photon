@@ -2,6 +2,7 @@
 import {
   PhotonPlotElement, PhotonPlot3DElement, PhotonPolarElement,
   addConfusionMatrix, addRocCurve, addEmbedding, addTrainingCurves, addShapBeeswarm, addAttentionMap, pca,
+  modelGraphFromTorchFx, sequentialModel,
 } from "@photonviz/wc";
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -172,4 +173,55 @@ for (let i = 0; i < NB; i++) {
   el.options = { theme: "dark", showToolbar: false };
   addAttentionMap(el.plot!, { weights: w, colormap: "viridis" });
   el.plot!.render();
+}
+
+// --- Model architecture ------------------------------------------------------
+// Both go through the declarative series/layer specs: `modelGraph` on
+// <photon-plot> and `modelGraph3d` on <photon-plot3d>.
+
+/** A traced PyTorch residual block — the shape `torch.fx` + ShapeProp dumps. */
+const residualBlock = modelGraphFromTorchFx([
+  { name: "x", op: "placeholder", shape: [64, 56, 56] },
+  { name: "conv1", op: "call_module", target: "conv1", moduleType: "Conv2d", args: ["x"], shape: [64, 56, 56], params: 36864 },
+  { name: "bn1", op: "call_module", target: "bn1", moduleType: "BatchNorm2d", args: ["conv1"], shape: [64, 56, 56], params: 128 },
+  { name: "relu", op: "call_module", target: "relu", moduleType: "ReLU", args: ["bn1"], shape: [64, 56, 56] },
+  { name: "conv2", op: "call_module", target: "conv2", moduleType: "Conv2d", args: ["relu"], shape: [64, 56, 56], params: 36864 },
+  // The residual add reaches back to the block input — a skip across four ranks.
+  { name: "add", op: "call_function", target: "<built-in function add>", args: ["conv2", "x"], shape: [64, 56, 56] },
+], { name: "BasicBlock" });
+
+{
+  const el = byId<PhotonPlotElement>("model2d");
+  el.options = { theme: "dark", showToolbar: false, hover: false };
+  el.series = [{
+    type: "modelGraph",
+    graph: residualBlock,
+    direction: "horizontal",
+    nodeWidth: 3, nodeHeight: 1.4, rankGap: 0.8,
+    labelFont: "600 11px system-ui, sans-serif",
+    subLabelFont: "9px system-ui, sans-serif",
+  }];
+}
+
+{
+  const cnn = sequentialModel([
+    { name: "input", type: "Input", shape: [3, 128, 128] },
+    { name: "conv1", type: "Conv2d", shape: [32, 64, 64], params: 896 },
+    { name: "conv2", type: "Conv2d", shape: [64, 32, 32], params: 18496 },
+    { name: "conv3", type: "Conv2d", shape: [128, 16, 16], params: 73856 },
+    { name: "gap", type: "AdaptiveAvgPool2d", shape: [128, 1, 1] },
+    { name: "fc", type: "Linear", shape: [10], params: 1290 },
+  ], "TinyCNN");
+  const el = byId<PhotonPlot3DElement>("model3d");
+  el.options = {
+    background: [0.04, 0.06, 0.13, 1],
+    // Proportional scaling + a parallel camera keep a long chain undistorted.
+    aspectMode: "data",
+    projection: "orthographic",
+    showAxes: false,
+    gridPlanes: false,
+    azimuth: 0.45, elevation: 0.3, distance: 0.9,
+    downloadButton: false,
+  };
+  el.layers = [{ type: "modelGraph3d", graph: cnn, rankSpacing: 0.5, maxFace: 2.2, maxThickness: 1, labels: "full" }];
 }

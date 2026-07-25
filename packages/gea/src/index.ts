@@ -49,3 +49,16 @@ export {
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
 } from "@photonviz/core"
+
+// Model architecture graphs: the framework adapters + the pure layout, so a
+// ModelGraph can be built from a PyTorch / ONNX / Keras / scikit-learn export.
+export {
+  sequentialModel, mlpModel, modelLayout, modelBoxDims, layerCategory,
+  formatCount, formatShape, LAYER_COLORS,
+  modelGraphFromTorchFx, modelGraphFromOnnx, modelGraphFromKeras, modelGraphFromSklearn,
+} from "@photonviz/core"
+export type {
+  ModelGraph as ModelGraphSpec, ModelNode, ModelEdge, ModelNodeBox, ModelEdgePath,
+  ModelLayoutOptions, ModelLayoutResult, LayerCategory, ModelBlock,
+  TorchFxNode, OnnxGraph, OnnxNode, KerasModelConfig, KerasLayerConfig, SklearnStep,
+} from "@photonviz/core"

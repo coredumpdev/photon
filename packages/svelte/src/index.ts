@@ -43,9 +43,14 @@ import {
   addHeikinAshi,
   addRenko,
   addVolumeProfile,
+  addModelGraph,
+  addModelGraph3D,
   type HeikinAshiOptions,
   type RenkoOptions,
   type VolumeProfileOptions,
+  type Boxes3DOptions,
+  type ModelGraph3DOptions,
+  type ModelGraphOptions,
 } from "@photonviz/core";
 
 export type SeriesSpec =
@@ -68,7 +73,8 @@ export type SeriesSpec =
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
-  | ({ type: "graph" } & GraphInput);
+  | ({ type: "graph" } & GraphInput)
+  | ({ type: "modelGraph" } & ModelGraphOptions);
 
 export interface YAxisSpec extends YAxisOptions {
   id: string;
@@ -103,6 +109,8 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
     case "graph": return p.addGraph(s);
+    // The builder also adds a connector layer + labels; the box layer is the handle.
+    case "modelGraph": return addModelGraph(p, s).nodes;
   }
 }
 
@@ -128,6 +136,7 @@ function updateSeries(layer: Layer, s: SeriesSpec): void {
     case "patches": break; // static
     case "image": break; // static
     case "graph": break; // static
+    case "modelGraph": break; // static
   }
 }
 
@@ -228,7 +237,9 @@ export type LayerSpec3D =
   | ({ type: "quiver3d" } & Quiver3DOptions)
   | ({ type: "contour3d" } & Contour3DOptions)
   | ({ type: "isosurface" } & IsosurfaceOptions)
-  | ({ type: "volume" } & VolumeOptions);
+  | ({ type: "volume" } & VolumeOptions)
+  | ({ type: "boxes3d" } & Boxes3DOptions)
+  | ({ type: "modelGraph3d" } & ModelGraph3DOptions);
 
 export interface Plot3DConfig {
   options?: Plot3DOptions;
@@ -245,6 +256,8 @@ function addLayer3D(p: CorePlot3D, s: LayerSpec3D) {
     case "contour3d": return p.addContour3D(s);
     case "isosurface": return p.addIsosurface(s);
     case "volume": return p.addVolume(s);
+    case "boxes3d": return p.addBoxes3D(s);
+    case "modelGraph3d": return addModelGraph3D(p, s).boxes;
   }
 }
 
@@ -314,4 +327,17 @@ export {
   addConfusionMatrix, addRocCurve, addPrCurve, addCalibration,
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addTrainingCurves, addRidgeline,
+} from "@photonviz/core";
+
+// Model architecture graphs: the framework adapters + the pure layout, so a
+// ModelGraph can be built from a PyTorch / ONNX / Keras / scikit-learn export.
+export {
+  sequentialModel, mlpModel, modelLayout, modelBoxDims, layerCategory,
+  formatCount, formatShape, LAYER_COLORS,
+  modelGraphFromTorchFx, modelGraphFromOnnx, modelGraphFromKeras, modelGraphFromSklearn,
+} from "@photonviz/core";
+export type {
+  ModelGraph as ModelGraphSpec, ModelNode, ModelEdge, ModelNodeBox, ModelEdgePath,
+  ModelLayoutOptions, ModelLayoutResult, LayerCategory, ModelBlock,
+  TorchFxNode, OnnxGraph, OnnxNode, KerasModelConfig, KerasLayerConfig, SklearnStep,
 } from "@photonviz/core";

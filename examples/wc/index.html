@@ -46,6 +46,16 @@
       <div class="card"><h3>Training curves</h3><photon-plot id="train" theme="dark" height="240px"></photon-plot></div>
       <div class="card"><h3>SHAP beeswarm</h3><photon-plot id="shap" theme="dark" height="240px"></photon-plot></div>
       <div class="card"><h3>Attention map</h3><photon-plot id="attn" theme="dark" height="240px"></photon-plot></div>
+
+      <div class="section">Model architecture</div>
+      <div class="card" style="grid-column: 1 / -1">
+        <h3>Model graph · 2D</h3>
+        <photon-plot id="model2d" theme="dark" height="260px"></photon-plot>
+      </div>
+      <div class="card" style="grid-column: 1 / -1">
+        <h3>Model graph · 3D</h3>
+        <photon-plot3d id="model3d" height="360px"></photon-plot3d>
+      </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

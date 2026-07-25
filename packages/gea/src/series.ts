@@ -4,6 +4,7 @@ import type {
   Bar3DOptions,
   BarLayer,
   BarOptions,
+  Boxes3DOptions,
   BoxOptions,
   CandlestickOptions,
   Contour3DOptions,
@@ -19,6 +20,8 @@ import type {
   Line3DOptions,
   LineLayer,
   LineOptions,
+  ModelGraph3DOptions,
+  ModelGraphOptions,
   OhlcOptions,
   PatchesOptions,
   PieOptions,
@@ -40,7 +43,7 @@ import type {
   VolumeProfileOptions,
   YAxisOptions,
 } from "@photonviz/core";
-import { addHeikinAshi, addRenko, addVolumeProfile } from "@photonviz/core";
+import { addHeikinAshi, addModelGraph, addModelGraph3D, addRenko, addVolumeProfile } from "@photonviz/core";
 
 /** Base container sizing, applied imperatively (gea's `style` attr wants an object). */
 export function applyContainerStyle(el: HTMLElement, style?: string): void {
@@ -71,7 +74,8 @@ export type SeriesSpec =
   | ({ type: "pie" } & PieOptions)
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
-  | ({ type: "graph" } & GraphInput);
+  | ({ type: "graph" } & GraphInput)
+  | ({ type: "modelGraph" } & ModelGraphOptions);
 
 export interface YAxisSpec extends YAxisOptions {
   id: string;
@@ -99,6 +103,8 @@ export function addSeries(p: CorePlot, s: SeriesSpec): Layer {
     case "patches": return p.addPatches(s);
     case "image": return p.addImage(s);
     case "graph": return p.addGraph(s);
+    // The builder also adds a connector layer + labels; the box layer is the handle.
+    case "modelGraph": return addModelGraph(p, s).nodes;
   }
 }
 
@@ -136,7 +142,9 @@ export type LayerSpec3D =
   | ({ type: "quiver3d" } & Quiver3DOptions)
   | ({ type: "contour3d" } & Contour3DOptions)
   | ({ type: "isosurface" } & IsosurfaceOptions)
-  | ({ type: "volume" } & VolumeOptions);
+  | ({ type: "volume" } & VolumeOptions)
+  | ({ type: "boxes3d" } & Boxes3DOptions)
+  | ({ type: "modelGraph3d" } & ModelGraph3DOptions);
 
 export function addLayer3D(p: CorePlot3D, s: LayerSpec3D): void {
   switch (s.type) {
@@ -148,5 +156,7 @@ export function addLayer3D(p: CorePlot3D, s: LayerSpec3D): void {
     case "contour3d": p.addContour3D(s); break;
     case "isosurface": p.addIsosurface(s); break;
     case "volume": p.addVolume(s); break;
+    case "boxes3d": p.addBoxes3D(s); break;
+    case "modelGraph3d": addModelGraph3D(p, s); break;
   }
 }

@@ -27,6 +27,8 @@ import {
   Isosurface,
   Line,
   Line3D,
+  ModelGraph,
+  ModelGraph3D,
   Ohlc,
   Patches,
   Pie,
@@ -59,8 +61,10 @@ import {
   addTrainingCurves,
   firstFinite,
   macd,
+  modelGraphFromTorchFx,
   pca,
   rsi,
+  sequentialModel,
   usePlot,
   usePlot3D,
   usePolarPlot,
@@ -3186,7 +3190,76 @@ function MLTab() {
         subtitle="weights over epochs"
         setup={(p) => addRidgeline(p, { groups: d.ridge, overlap: 1.6, range: [-1.5, 2.5] })}
       />
+
+      <ModelGraphPanel />
+      <ModelGraph3DPanel />
     </div>
+  );
+}
+
+// ============================================================================
+// Model architecture — the declarative bindings: <ModelGraph> on a Plot and
+// <ModelGraph3D> on a Plot3D, both fed the same kind of exported graph.
+// ============================================================================
+
+/** A traced PyTorch residual block — the shape `torch.fx` + ShapeProp dumps. */
+const RESIDUAL_BLOCK = modelGraphFromTorchFx([
+  { name: "x", op: "placeholder", shape: [64, 56, 56] },
+  { name: "conv1", op: "call_module", target: "conv1", moduleType: "Conv2d", args: ["x"], shape: [64, 56, 56], params: 36864 },
+  { name: "bn1", op: "call_module", target: "bn1", moduleType: "BatchNorm2d", args: ["conv1"], shape: [64, 56, 56], params: 128 },
+  { name: "relu", op: "call_module", target: "relu", moduleType: "ReLU", args: ["bn1"], shape: [64, 56, 56] },
+  { name: "conv2", op: "call_module", target: "conv2", moduleType: "Conv2d", args: ["relu"], shape: [64, 56, 56], params: 36864 },
+  // The residual add reaches back to the block input — a skip across four ranks.
+  { name: "add", op: "call_function", target: "<built-in function add>", args: ["conv2", "x"], shape: [64, 56, 56] },
+], { name: "BasicBlock" });
+
+/** A small CNN whose feature maps shrink while the channel depth grows. */
+const TINY_CNN = sequentialModel([
+  { name: "input", type: "Input", shape: [3, 128, 128] },
+  { name: "conv1", type: "Conv2d", shape: [32, 64, 64], params: 896 },
+  { name: "conv2", type: "Conv2d", shape: [64, 32, 32], params: 18496 },
+  { name: "conv3", type: "Conv2d", shape: [128, 16, 16], params: 73856 },
+  { name: "gap", type: "AdaptiveAvgPool2d", shape: [128, 1, 1] },
+  { name: "fc", type: "Linear", shape: [10], params: 1290 },
+], "TinyCNN");
+
+function ModelGraphPanel() {
+  return (
+    <PanelShell title="Model graph · 2D" subtitle="torch.fx residual block">
+      <Plot options={{ theme: "dark", showToolbar: false, hover: false, background: "#0b1220" }}>
+        <ModelGraph
+          graph={RESIDUAL_BLOCK}
+          nodeWidth={3.4}
+          nodeHeight={1}
+          rankGap={0.5}
+          labelFont="600 11px system-ui, sans-serif"
+          subLabelFont="9px system-ui, sans-serif"
+        />
+      </Plot>
+    </PanelShell>
+  );
+}
+
+function ModelGraph3DPanel() {
+  return (
+    <PanelShell title="Model graph · 3D" subtitle="tensor-shaped blocks · drag to orbit">
+      <Plot3D
+        options={{
+          background: [0.04, 0.06, 0.13, 1],
+          // Proportional scaling + a parallel camera keep a long chain undistorted.
+          aspectMode: "data",
+          projection: "orthographic",
+          showAxes: false,
+          gridPlanes: false,
+          azimuth: 0.5,
+          elevation: 0.32,
+          distance: 1.8,
+          downloadButton: false,
+        }}
+      >
+        <ModelGraph3D graph={TINY_CNN} rankSpacing={0.5} maxFace={2} maxThickness={1} labels="name" />
+      </Plot3D>
+    </PanelShell>
   );
 }
 
