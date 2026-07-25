@@ -1,0 +1,123 @@
+"""
+photonviz — GPU-accelerated (WebGL2) charts for Jupyter, JupyterLab and Colab.
+
+A thin Python bridge over `@photonviz/core <https://github.com/coredumpdev/photon>`_.
+NumPy arrays and torch tensors cross to the browser as binary buffers, so a
+million points still render at 60fps inside a notebook cell.
+
+    import numpy as np, photonviz as pv
+
+    x = np.linspace(0, 10, 100_000)
+    pv.line(x, np.sin(x), name="sin", plot={"theme": "dark", "legend": True})
+
+Charts chain, and the last expression in a cell renders itself::
+
+    pv.Plot(theme="dark", title="Two series").line(x, y1, name="a").line(x, y2, name="b")
+
+Model architectures come straight from the framework object::
+
+    pv.model_graph(torch_model, example_input=torch.randn(1, 3, 224, 224))
+    pv.model_graph_3d(keras_model)
+
+In Google Colab, enable the widget manager once per session::
+
+    from google.colab import output; output.enable_custom_widget_manager()
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from ._widget import ChartWidget
+from .charts import Plot, Plot3D, Polar, _shortcut
+from .models import from_keras, from_layers, from_onnx, from_sklearn, from_torch, to_source
+
+__version__ = "0.5.0"
+
+# -- One-liners: pv.line(x, y) == pv.Plot().line(x, y) ------------------------
+line = _shortcut(Plot, "line")
+scatter = _shortcut(Plot, "scatter")
+bar = _shortcut(Plot, "bar")
+area = _shortcut(Plot, "area")
+step = _shortcut(Plot, "step")
+histogram = _shortcut(Plot, "histogram")
+box = _shortcut(Plot, "box")
+heatmap = _shortcut(Plot, "heatmap")
+contour = _shortcut(Plot, "contour")
+hexbin = _shortcut(Plot, "hexbin")
+errorbar = _shortcut(Plot, "errorbar")
+stem = _shortcut(Plot, "stem")
+quiver = _shortcut(Plot, "quiver")
+pie = _shortcut(Plot, "pie")
+
+candlestick = _shortcut(Plot, "candlestick")
+ohlc = _shortcut(Plot, "ohlc")
+heikin_ashi = _shortcut(Plot, "heikin_ashi")
+bollinger = _shortcut(Plot, "bollinger")
+volume_profile = _shortcut(Plot, "volume_profile")
+drawdown = _shortcut(Plot, "drawdown")
+
+regression = _shortcut(Plot, "regression")
+ecdf = _shortcut(Plot, "ecdf")
+corr_matrix = _shortcut(Plot, "corr_matrix")
+psd = _shortcut(Plot, "psd")
+
+confusion_matrix = _shortcut(Plot, "confusion_matrix")
+roc_curve = _shortcut(Plot, "roc_curve")
+pr_curve = _shortcut(Plot, "pr_curve")
+calibration = _shortcut(Plot, "calibration")
+embedding = _shortcut(Plot, "embedding")
+feature_importance = _shortcut(Plot, "feature_importance")
+training_curves = _shortcut(Plot, "training_curves")
+model_graph = _shortcut(Plot, "model_graph")
+
+surface = _shortcut(Plot3D, "surface")
+scatter3d = _shortcut(Plot3D, "scatter3d")
+line3d = _shortcut(Plot3D, "line3d")
+bar3d = _shortcut(Plot3D, "bar3d")
+isosurface = _shortcut(Plot3D, "isosurface")
+volume = _shortcut(Plot3D, "volume")
+model_graph_3d = _shortcut(Plot3D, "model_graph")
+
+polar_line = _shortcut(Polar, "line")
+polar_scatter = _shortcut(Polar, "scatter")
+
+
+def show(chart: Any) -> Any:
+    """Explicitly display a chart (notebooks render the last expression anyway)."""
+    from IPython.display import display  # noqa: PLC0415 - optional at import time
+
+    display(chart)
+    return chart
+
+
+__all__ = [
+    "Plot",
+    "Plot3D",
+    "Polar",
+    "ChartWidget",
+    "show",
+    "__version__",
+    # model export
+    "model_graph",
+    "model_graph_3d",
+    "to_source",
+    "from_torch",
+    "from_keras",
+    "from_sklearn",
+    "from_onnx",
+    "from_layers",
+    # 2D one-liners
+    "line", "scatter", "bar", "area", "step", "histogram", "box", "heatmap",
+    "contour", "hexbin", "errorbar", "stem", "quiver", "pie",
+    # finance
+    "candlestick", "ohlc", "heikin_ashi", "bollinger", "volume_profile", "drawdown",
+    # statistics
+    "regression", "ecdf", "corr_matrix", "psd",
+    # machine learning
+    "confusion_matrix", "roc_curve", "pr_curve", "calibration", "embedding",
+    "feature_importance", "training_curves",
+    # 3D + polar
+    "surface", "scatter3d", "line3d", "bar3d", "isosurface", "volume",
+    "polar_line", "polar_scatter",
+]
