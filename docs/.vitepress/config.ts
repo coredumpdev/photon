@@ -76,8 +76,14 @@ export default defineConfig({
           { text: "Diagrams", link: "/charts/diagrams" },
         ],
       },
-      { text: "Python", items: [{ text: "Jupyter, Lab & Colab", link: "/python/" }]},
-      { text: "Reference", items: [{ text: "API", link: "/api/" }] },
+      {
+        text: "Python",
+        items: [
+          { text: "Jupyter, Lab & Colab", link: "/python/" },
+          { text: "Python API", link: "/python/api" },
+        ],
+      },
+      { text: "Reference", items: [{ text: "TypeScript API", link: "/api/" }] },
     ],
 
     socialLinks: [{ icon: "github", link: "https://github.com/coredumpdev/photon" }],

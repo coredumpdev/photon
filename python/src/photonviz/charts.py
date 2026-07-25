@@ -55,6 +55,7 @@ class Plot(ChartWidget):
     # -- basic marks ----------------------------------------------------------
 
     def line(self, x: Any, y: Any, **opts: Any) -> "Plot":
+        """A line (or step, with `step="before"|"after"|"center"`)."""
         return self.add("line", x=x, y=y, **opts)
 
     def scatter(self, x: Any, y: Any, **opts: Any) -> "Plot":
@@ -62,15 +63,19 @@ class Plot(ChartWidget):
         return self.add("scatter", x=x, y=y, **opts)
 
     def bar(self, x: Any, y: Any, **opts: Any) -> "Plot":
+        """Vertical bars; `orientation="h"` lays them horizontally."""
         return self.add("bar", x=x, y=y, **opts)
 
     def area(self, x: Any, y: Any, **opts: Any) -> "Plot":
+        """A filled area; pass `base=` to stack."""
         return self.add("area", x=x, y=y, **opts)
 
     def step(self, x: Any, y: Any, where: str = "after", **opts: Any) -> "Plot":
+        """A step line — shorthand for `line(..., step=where)`."""
         return self.add("line", x=x, y=y, step=where, **opts)
 
     def histogram(self, values: Any, **opts: Any) -> "Plot":
+        """Bin raw values and draw them as bars."""
         return self.add("histogram", values=values, **opts)
 
     def box(self, groups: Sequence[Dict[str, Any]], **opts: Any) -> "Plot":
@@ -78,44 +83,57 @@ class Plot(ChartWidget):
         return self.add("box", groups=list(groups), **opts)
 
     def heatmap(self, values: Any, cols: int, rows: int, extent: Dict[str, Any], **opts: Any) -> "Plot":
+        """A scalar field as an image; row-major, row 0 at the bottom."""
         return self.add("heatmap", values=values, cols=cols, rows=rows, extent=extent, **opts)
 
     def contour(self, values: Any, cols: int, rows: int, extent: Dict[str, Any], **opts: Any) -> "Plot":
+        """Iso-lines of a scalar field (marching squares)."""
         return self.add("contour", values=values, cols=cols, rows=rows, extent=extent, **opts)
 
     def hexbin(self, x: Any, y: Any, **opts: Any) -> "Plot":
+        """Density of a large point cloud, binned into hexagons."""
         return self.add("hexbin", x=x, y=y, **opts)
 
     def errorbar(self, x: Any, y: Any, **opts: Any) -> "Plot":
+        """Points with error whiskers; `band=True` shades the range instead."""
         return self.add("errorbar", x=x, y=y, **opts)
 
     def stem(self, x: Any, y: Any, **opts: Any) -> "Plot":
+        """Stems from a baseline with a marker at each tip."""
         return self.add("stem", x=x, y=y, **opts)
 
     def quiver(self, x: Any, y: Any, u: Any, v: Any, **opts: Any) -> "Plot":
+        """A vector field of arrows."""
         return self.add("quiver", x=x, y=y, u=u, v=v, **opts)
 
     def pie(self, values: Any, **opts: Any) -> "Plot":
+        """Pie or donut (`innerRadius=`); set `equalAspect` on the plot."""
         return self.add("pie", values=values, **opts)
 
     def image(self, source: str, extent: Dict[str, Any], **opts: Any) -> "Plot":
+        """A bitmap placed in data space."""
         return self.add("image", source=source, extent=extent, **opts)
 
     # -- finance --------------------------------------------------------------
 
     def candlestick(self, x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any) -> "Plot":
+        """OHLC candles."""
         return self.add("candlestick", x=x, open=open, high=high, low=low, close=close, **opts)
 
     def ohlc(self, x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any) -> "Plot":
+        """OHLC bars (open/close ticks on a high-low line)."""
         return self.add("ohlc", x=x, open=open, high=high, low=low, close=close, **opts)
 
     def heikin_ashi(self, x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any) -> "Plot":
+        """Heikin-Ashi candles — a smoothed OHLC that filters noise."""
         return self.add("heikinAshi", x=x, open=open, high=high, low=low, close=close, **opts)
 
     def bollinger(self, x: Any, close: Any, **opts: Any) -> "Plot":
+        """Bollinger bands around a moving average."""
         return self.add("bollinger", x=x, close=close, **opts)
 
     def volume_profile(self, price: Any, volume: Any, **opts: Any) -> "Plot":
+        """Traded volume by price level, with the point of control marked."""
         return self.add("volumeProfile", price=price, volume=volume, **opts)
 
     def drawdown(self, equity: Any, **opts: Any) -> "Plot":
@@ -129,6 +147,7 @@ class Plot(ChartWidget):
         return self.add("regression", x=x, y=y, **opts)
 
     def ecdf(self, values: Any, **opts: Any) -> "Plot":
+        """The empirical CDF as a step line — no binning choice to defend."""
         return self.add("ecdf", values=values, **opts)
 
     def corr_matrix(self, columns: Sequence[Any], **opts: Any) -> "Plot":
@@ -142,15 +161,19 @@ class Plot(ChartWidget):
     # -- machine learning -----------------------------------------------------
 
     def confusion_matrix(self, y_true: Any, y_pred: Any, **opts: Any) -> "Plot":
+        """Confusion matrix with per-cell counts and a colorbar."""
         return self.add("confusionMatrix", yTrue=y_true, yPred=y_pred, **opts)
 
     def roc_curve(self, scores: Any, labels: Any, **opts: Any) -> "Plot":
+        """ROC curve with the chance diagonal; AUC lands in the legend."""
         return self.add("rocCurve", scores=scores, labels=labels, **opts)
 
     def pr_curve(self, scores: Any, labels: Any, **opts: Any) -> "Plot":
+        """Precision-recall curve with the no-skill baseline; AP in the legend."""
         return self.add("prCurve", scores=scores, labels=labels, **opts)
 
     def calibration(self, scores: Any, labels: Any, **opts: Any) -> "Plot":
+        """Reliability diagram plus the expected calibration error."""
         return self.add("calibration", scores=scores, labels=labels, **opts)
 
     def embedding(self, x: Any, y: Any, **opts: Any) -> "Plot":
@@ -158,9 +181,11 @@ class Plot(ChartWidget):
         return self.add("embedding", x=x, y=y, **opts)
 
     def feature_importance(self, names: Sequence[str], values: Any, **opts: Any) -> "Plot":
+        """Sorted horizontal importance bars."""
         return self.add("featureImportance", names=list(names), values=values, **opts)
 
     def training_curves(self, series: Sequence[Dict[str, Any]], **opts: Any) -> "Plot":
+        """Loss/metric curves with EMA smoothing and a best-epoch marker."""
         return self.add("trainingCurves", series=list(series), **opts)
 
     def model_graph(self, model: Any, **opts: Any) -> "Plot":
@@ -192,27 +217,35 @@ class Plot3D(ChartWidget):
         return self._sync()
 
     def surface(self, values: Any, cols: int, rows: int, **opts: Any) -> "Plot3D":
+        """A lit height field."""
         return self.add("surface", values=values, cols=cols, rows=rows, **opts)
 
     def scatter3d(self, x: Any, y: Any, z: Any, **opts: Any) -> "Plot3D":
+        """A 3D point cloud."""
         return self.add("pointcloud", x=x, y=y, z=z, **opts)
 
     def line3d(self, x: Any, y: Any, z: Any, **opts: Any) -> "Plot3D":
+        """A 3D polyline / path."""
         return self.add("line3d", x=x, y=y, z=z, **opts)
 
     def bar3d(self, x: Any, z: Any, y: Any, **opts: Any) -> "Plot3D":
+        """3D bars on an x/z grid."""
         return self.add("bar3d", x=x, z=z, y=y, **opts)
 
     def boxes3d(self, boxes: Sequence[Dict[str, Any]], **opts: Any) -> "Plot3D":
+        """Independently sized lit cuboids."""
         return self.add("boxes3d", boxes=list(boxes), **opts)
 
     def quiver3d(self, x: Any, y: Any, z: Any, u: Any, v: Any, w: Any, **opts: Any) -> "Plot3D":
+        """A 3D vector field."""
         return self.add("quiver3d", x=x, y=y, z=z, u=u, v=v, w=w, **opts)
 
     def isosurface(self, values: Any, dims: Sequence[int], iso_level: float, **opts: Any) -> "Plot3D":
+        """A marching-cubes isosurface of a scalar volume."""
         return self.add("isosurface", values=values, dims=list(dims), isoLevel=iso_level, **opts)
 
     def volume(self, values: Any, dims: Sequence[int], **opts: Any) -> "Plot3D":
+        """Direct volume rendering (GPU raymarch)."""
         return self.add("volume", values=values, dims=list(dims), **opts)
 
     def model_graph(self, model: Any, **opts: Any) -> "Plot3D":
@@ -229,10 +262,12 @@ class Polar(ChartWidget):
         super().__init__("polar", options, height)
 
     def line(self, theta: Any, r: Any, **opts: Any) -> "Polar":
+        """A polar line; `closed=True` joins the ends."""
         self._series.append(series_dict("line", {"theta": theta, "r": r, **opts}))
         return self._sync()
 
     def scatter(self, theta: Any, r: Any, **opts: Any) -> "Polar":
+        """Polar points."""
         self._series.append(series_dict("scatter", {"theta": theta, "r": r, **opts}))
         return self._sync()
 
@@ -266,4 +301,7 @@ def _shortcut(cls: type, method: str):
         f"Shorthand for ``{cls.__name__}().{method}(...)``. Pass ``plot={{...}}`` "
         "to configure the plot itself (theme, title, legend, scales…)."
     )
+    # Remember what this wraps so the docs generator can show the real signature
+    # instead of the (*args, **kwargs) this closure would otherwise report.
+    call._photon_target = (cls, method)  # type: ignore[attr-defined]
     return call

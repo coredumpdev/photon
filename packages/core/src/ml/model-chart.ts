@@ -10,6 +10,7 @@
  * Both consume the same {@link ModelGraph} and the same {@link modelLayout}, so a
  * PyTorch / ONNX export renders identically in either dimension.
  */
+import { parseColor, toColorCss } from "../gl/context.js";
 import type { PatchesLayer } from "../layers/patches.js";
 import type { Patch } from "../layers/patches.js";
 import type { Plot } from "../plot.js";
@@ -28,6 +29,7 @@ import {
   type ModelLayoutOptions,
   type ModelLayoutResult,
   type ModelNode,
+  tensorMetrics,
   type ModelNodeBox,
 } from "./model.js";
 
@@ -36,6 +38,12 @@ import {
 /** Category → color, with the caller's overrides merged over the defaults. */
 function colorTable(overrides?: Partial<Record<LayerCategory, string>>): Record<LayerCategory, string> {
   return overrides ? { ...LAYER_COLORS, ...overrides } : LAYER_COLORS;
+}
+
+/** Multiply a CSS colour toward black — used to give a card stack depth. */
+function shade(css: string, factor: number): string {
+  const [r, g, b, a] = parseColor(css);
+  return toColorCss([r * factor, g * factor, b * factor, a]);
 }
 
 /** One-line summary of a layer: `"conv1 · Conv2d · 64×112×112 · 9.4K params"`. */
@@ -63,6 +71,22 @@ export interface ModelGraphOptions extends ModelLayoutOptions {
   arrowSize?: number;
   /** Box fill opacity, 0..1. Default 0.9. */
   opacity?: number;
+  /**
+   * Draw each box as a stack of offset cards instead of one rectangle, so a
+   * `[3, 224, 224]` layer reads as three feature maps rather than one block.
+   *
+   * `"channels"` uses the layer's own channel count, a number uses that many for
+   * every layer, `"none"` (default) keeps one box. The front card stays where
+   * the box was, and keeps the labels, so nothing shifts or becomes unreadable.
+   */
+  slices?: "none" | "channels" | number;
+  /** Cap on cards per layer. Default 12. */
+  maxSlices?: number;
+  /**
+   * How far the stack fans out, as a fraction of the box size. The spread is
+   * fixed regardless of the card count. Default 0.3.
+   */
+  sliceSpread?: number;
   /** What to write inside each box. Default `"full"`. */
   labels?: "none" | "name" | "full";
   labelColor?: string;
@@ -202,10 +226,27 @@ export function addModelGraph(plot: Plot, opts: ModelGraphOptions): ModelGraphHa
   }
   const edges = plot.addPatches({ patches: edgePatches, color: edgeColor });
 
-  const nodePatches: Patch[] = layout.nodes.map((b) => ({
-    ...roundedRect(b.x, b.y, b.w, b.h, cornerRadius),
-    color: colors[b.category],
-  }));
+  // Cards are emitted back-to-front and darkened with depth, so the stack reads
+  // as one object rather than a smear of identical rectangles.
+  const sliceMode = opts.slices ?? "none";
+  const maxSlices = opts.maxSlices ?? 12;
+  const spread = opts.sliceSpread ?? 0.3;
+  const nodePatches: Patch[] = layout.nodes.flatMap((b) => {
+    const color = colors[b.category];
+    const n = sliceCount(b.node, sliceMode, maxSlices);
+    if (n <= 1) return [{ ...roundedRect(b.x, b.y, b.w, b.h, cornerRadius), color }];
+    const dx = (b.w * spread) / (n - 1);
+    const dy = (b.h * spread) / (n - 1);
+    const out: Patch[] = [];
+    for (let i = n - 1; i >= 0; i--) {
+      out.push({
+        ...roundedRect(b.x + dx * i, b.y + dy * i, b.w, b.h, cornerRadius),
+        // The front card keeps the true colour; each one behind steps darker.
+        color: i === 0 ? color : shade(color, 1 - (0.45 * i) / (n - 1)),
+      });
+    }
+    return out;
+  });
   const nodes = plot.addPatches({
     patches: nodePatches,
     opacity: opts.opacity ?? 0.9,
@@ -343,6 +384,23 @@ export interface ModelGraph3DOptions extends ModelLayoutOptions, ModelBoxSizing 
   rankSpacing?: number;
   /** Lateral offset between branches that share a rank. Default 3. */
   branchSpacing?: number;
+  /**
+   * Draw each block as a stack of slices along the flow axis instead of one
+   * solid cuboid — the classic feature-map look, where `[3, 224, 224]` reads as
+   * three separate planes rather than a single slab.
+   *
+   * `"channels"` uses the layer's own channel count, a number uses that many for
+   * every layer, `"none"` (default) keeps one block. The stack occupies exactly
+   * the same space either way, so the layout does not shift.
+   */
+  slices?: "none" | "channels" | number;
+  /**
+   * Cap on slices per layer, so a 512-channel block does not become a solid
+   * smear. Default 12. Set it higher when the model is small.
+   */
+  maxSlices?: number;
+  /** Fraction of each slice's cell left empty as the gap, 0..1. Default 0.35. */
+  sliceGap?: number;
   /** Draw connectors between blocks. Default true. */
   connectors?: boolean;
   connectorColor?: string;
@@ -359,6 +417,48 @@ export interface ModelGraph3DOptions extends ModelLayoutOptions, ModelBoxSizing 
   subLabelColor?: string;
   subLabelFont?: string;
   name?: string;
+}
+
+/**
+ * How many slices a block is drawn with: its channel count, a fixed number, or
+ * one — always at least 1 and never more than `maxSlices`.
+ */
+function sliceCount(
+  node: ModelNode,
+  mode: NonNullable<ModelGraph3DOptions["slices"]>,
+  maxSlices: number,
+): number {
+  if (mode === "none") return 1;
+  const wanted = mode === "channels" ? tensorMetrics(node.shape)[0] : mode;
+  return Math.max(1, Math.min(Math.floor(maxSlices), Math.floor(wanted) || 1));
+}
+
+/**
+ * Cut a block into `n` slabs along x, filling the same extent it occupied whole.
+ * Each cell is `w/n` wide and the slab takes `1 - gap` of it, so the stack reads
+ * as separate planes without growing the model.
+ */
+function sliceBoxes(block: ModelBlock, n: number, gap: number, color: string, label: string): Box3D[] {
+  if (n <= 1) {
+    return [{ x: block.x, y: block.y, z: block.z, w: block.w, h: block.h, d: block.d, color, label }];
+  }
+  const cell = block.w / n;
+  const thickness = Math.max(cell * (1 - gap), cell * 0.05);
+  const start = block.x - block.w / 2 + cell / 2;
+  const out: Box3D[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      x: start + i * cell,
+      y: block.y,
+      z: block.z,
+      w: thickness,
+      h: block.h,
+      d: block.d,
+      color,
+      label,
+    });
+  }
+  return out;
 }
 
 /** Where one layer's cuboid ended up, in world space. */
@@ -380,7 +480,10 @@ export interface ModelGraph3DHandle {
   boxes: Boxes3DLayer;
   /** One polyline per drawn connector (empty when `connectors: false`). */
   connectors: Line3DLayer[];
+  /** One entry per layer, whatever the slice count. */
   blocks: ModelBlock[];
+  /** Slices drawn for each block, parallel to {@link blocks}. */
+  slices: number[];
   /** Remove the labels this builder pinned (the layers are yours to remove). */
   destroy(): void;
 }
@@ -434,17 +537,15 @@ export function addModelGraph3D(plot: Plot3D, opts: ModelGraph3DOptions): ModelG
     };
   });
 
+  const sliceMode = opts.slices ?? "none";
+  const maxSlices = opts.maxSlices ?? 12;
+  const sliceGap = Math.min(0.9, Math.max(0, opts.sliceGap ?? 0.35));
+  const slices = blocks.map((b) => sliceCount(b.node, sliceMode, maxSlices));
+
   const boxes = plot.addBoxes3D({
-    boxes: blocks.map((b): Box3D => ({
-      x: b.x,
-      y: b.y,
-      z: b.z,
-      w: b.w,
-      h: b.h,
-      d: b.d,
-      color: colors[b.category],
-      label: describeNode(b.node),
-    })),
+    boxes: blocks.flatMap((b, i) =>
+      sliceBoxes(b, slices[i]!, sliceGap, colors[b.category], describeNode(b.node)),
+    ),
     opacity: opts.opacity ?? 1,
     ...(opts.name ? { name: opts.name } : {}),
   });
@@ -505,6 +606,7 @@ export function addModelGraph3D(plot: Plot3D, opts: ModelGraph3DOptions): ModelG
     boxes,
     connectors,
     blocks,
+    slices,
     destroy(): void {
       for (const d of disposers) d();
       disposers.length = 0;

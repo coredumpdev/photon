@@ -219,9 +219,16 @@ Render it either way, from the same graph:
   thickness from the rest, so a CNN's feature maps shrink as depth grows. Pair
   with `new Plot3D(el, { aspectMode: "data", showAxes: false, projection: "orthographic" })`.
 
+Slices — draw a layer as its channels instead of one shape, in either dimension:
+`slices: "none" | "channels" | number` (default "none"), `maxSlices` (cap per
+layer, default 12), `sliceSpread` (2D card fan-out, default 0.3), `sliceGap` (3D
+gap per slice cell, default 0.35). Neither view shifts: in 2D the front card
+stays where the box was and keeps the labels, in 3D the stack fills exactly the
+space the solid cuboid occupied.
+
 Pure helpers: `modelLayout(graph, opts)` → `{ nodes, edges, extent, ranks }`,
 `modelBoxDims(nodes, opts)`, `layerCategory(type)`, `LAYER_COLORS`,
-`formatCount`, `formatShape`.
+`formatCount`, `formatShape`, `tensorMetrics(shape)` -> [channels, height, width].
 
 ## Signal + statistics
 

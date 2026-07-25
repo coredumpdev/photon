@@ -299,3 +299,52 @@ const residualBlock = modelGraphFromTorchFx([
   });
   addModelGraph3D(p, { graph: cnn, rankSpacing: 0.4, maxFace: 2.4, maxThickness: 1.1, labels: "full" });
 }
+
+// 16 ── Model architecture · sliced (2D + 3D) ────────────────────────────────
+// `slices` draws a layer as its channels instead of one shape: [3,224,224] reads
+// as three feature maps. Neither view shifts — in 2D the front card stays put and
+// keeps the labels, in 3D the stack fills the space the solid cuboid occupied.
+const slicedCnn = sequentialModel([
+  { name: "input", type: "Input", shape: [3, 224, 224] },
+  { name: "conv1", type: "Conv2d", shape: [8, 112, 112], params: 1792 },
+  { name: "pool1", type: "MaxPool2d", shape: [8, 56, 56] },
+  { name: "conv2", type: "Conv2d", shape: [16, 56, 56], params: 73856 },
+  { name: "gap", type: "AdaptiveAvgPool2d", shape: [16, 1, 1] },
+  { name: "fc", type: "Linear", shape: [10], params: 2570 },
+], "SlicedCNN");
+
+{
+  const p = new Plot(panel("Model graph · 2D sliced", 'slices: "channels" · card stacks', "wide"), {
+    ...base, hover: false, background: "#0b1220",
+  });
+  addModelGraph(p, {
+    graph: slicedCnn,
+    direction: "horizontal",
+    slices: "channels",
+    maxSlices: 10,
+    nodeWidth: 2.8, nodeHeight: 1.3, rankGap: 1.1,
+    labelFont: "600 11px system-ui, sans-serif",
+    subLabelFont: "9px system-ui, sans-serif",
+  });
+}
+
+{
+  const p = new Plot3D(panel("Model graph · 3D sliced", 'slices: "channels" · feature planes', "wide tall"), {
+    background: [0.04, 0.06, 0.13, 1],
+    aspectMode: "data",
+    projection: "orthographic",
+    showAxes: false,
+    gridPlanes: false,
+    azimuth: 0.5, elevation: 0.28, distance: 1.95,
+    title: "Each block drawn as its channels",
+    downloadButton: false,
+  });
+  addModelGraph3D(p, {
+    graph: slicedCnn,
+    slices: "channels",
+    maxSlices: 16,
+    rankSpacing: 0.85,
+    maxFace: 2.3,
+    labels: "full",
+  });
+}

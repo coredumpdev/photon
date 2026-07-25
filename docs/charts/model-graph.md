@@ -33,6 +33,34 @@ Those three options matter: the default cube fit would stretch a long chain unti
 the blocks lose their proportions, perspective would magnify the near end, and a
 diagram has no axes to label.
 
+## Slices
+
+By default a layer is one shape. `slices` draws it as its channels instead —
+`[3, 224, 224]` as three feature maps rather than one block. It works the same
+way in both dimensions, and neither changes the layout: in 2D the front card
+stays where the box was (so the labels stay put), and in 3D the stack fills
+exactly the space the solid cuboid occupied.
+
+<Demo src="model-graph-sliced" :height="300" />
+
+```ts
+addModelGraph(plot,   { graph, slices: "channels", maxSlices: 10 });
+addModelGraph3D(plot, { graph, slices: "channels", maxSlices: 16 });
+addModelGraph(plot,   { graph, slices: 4 });   // four for every layer
+```
+
+<Demo src="model-graph-3d-sliced" :height="420" />
+
+| Option | Meaning |
+| --- | --- |
+| `slices` | `"none"` (default) · `"channels"` · a fixed number |
+| `maxSlices` | cap per layer, so a 512-channel block stays readable. Default 12 |
+| `sliceSpread` (2D) | how far the card stack fans out, as a fraction of the box. Default 0.3 |
+| `sliceGap` (3D) | fraction of each slice cell left empty. Default 0.35 |
+
+`tensorMetrics(shape)` is exported if you want the `[channels, height, width]`
+split that both the sizing and the slice count are derived from.
+
 ## The graph
 
 ```ts

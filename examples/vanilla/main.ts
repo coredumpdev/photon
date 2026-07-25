@@ -1679,6 +1679,48 @@ function buildML(grid: HTMLElement): void {
     });
     addModelGraph3D(p3, { graph: cnn, rankSpacing: 0.4, maxFace: 2.4, maxThickness: 1.1, labels: "full" });
   }
+
+  // 16 — Sliced: `slices` draws a layer as its channels rather than one shape,
+  // so [3,224,224] reads as three feature maps. The layout does not shift — in 2D
+  // the front card keeps the labels, in 3D the stack fills the same space.
+  const sliced = sequentialModel([
+    { name: "input", type: "Input", shape: [3, 224, 224] },
+    { name: "conv1", type: "Conv2d", shape: [8, 112, 112], params: 1792 },
+    { name: "pool1", type: "MaxPool2d", shape: [8, 56, 56] },
+    { name: "conv2", type: "Conv2d", shape: [16, 56, 56], params: 73856 },
+    { name: "gap", type: "AdaptiveAvgPool2d", shape: [16, 1, 1] },
+    { name: "fc", type: "Linear", shape: [10], params: 2570 },
+  ], "SlicedCNN");
+
+  {
+    const p = new Plot(panel(grid, "Model graph · 2D sliced", "slices: channels · card stacks", false, "wide"), {
+      ...base, hover: false, background: "#0b1220",
+    });
+    addModelGraph(p, {
+      graph: sliced,
+      direction: "horizontal",
+      slices: "channels",
+      maxSlices: 10,
+      nodeWidth: 2.8, nodeHeight: 1.3, rankGap: 1.1,
+      labelFont: "600 11px system-ui, sans-serif",
+      subLabelFont: "9px system-ui, sans-serif",
+    });
+    p.render();
+  }
+
+  {
+    const p3 = new Plot3D(panel(grid, "Model graph · 3D sliced", "slices: channels · feature planes", false, "wide tall"), {
+      background: [0.04, 0.06, 0.13, 1],
+      aspectMode: "data",
+      projection: "orthographic",
+      showAxes: false,
+      gridPlanes: false,
+      azimuth: 0.5, elevation: 0.28, distance: 1.95,
+      title: "Each block drawn as its channels",
+      downloadButton: false,
+    });
+    addModelGraph3D(p3, { graph: sliced, slices: "channels", maxSlices: 16, rankSpacing: 0.85, maxFace: 2.3, labels: "full" });
+  }
 }
 
 const built = { static: false, dynamic: false, finance: false, ml: false };

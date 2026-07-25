@@ -828,12 +828,12 @@ export interface ModelBoxSizing {
 export type BoxDims = [number, number, number];
 
 /**
- * Split a tensor shape into the three quantities a cuboid shows: the last two
- * dims become the visible face (height × depth) and everything before them is
- * folded into the thickness — so `[64,112,112]` is a thin 112×112 slab 64 deep,
- * and `[512]` is a tall thin bar.
+ * Split a tensor shape into the three quantities a cuboid shows —
+ * `[channels, height, width]`. The last two dims become the visible face and
+ * everything before them folds into the thickness, so `[64,112,112]` is a thin
+ * 112×112 slab 64 deep, and `[512]` is a tall thin bar.
  */
-function shapeMetrics(shape?: number[]): [number, number, number] {
+export function tensorMetrics(shape?: number[]): [number, number, number] {
   if (!shape || shape.length === 0) return [1, 1, 1];
   if (shape.length === 1) return [1, Math.max(1, shape[0]!), 1];
   const h = Math.max(1, shape[shape.length - 2]!);
@@ -863,7 +863,7 @@ export function modelBoxDims(nodes: ModelNode[], opts: ModelBoxSizing = {}): Box
   // like [512] gets a minimal channel thickness instead of the maximum one.
   const baseline = f(1);
   const raw = nodes.map(
-    (node) => shapeMetrics(node.shape).map((v) => Math.max(0, f(v) - baseline)) as [number, number, number],
+    (node) => tensorMetrics(node.shape).map((v) => Math.max(0, f(v) - baseline)) as [number, number, number],
   );
   let maxC = 0;
   let maxH = 0;

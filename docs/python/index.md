@@ -87,6 +87,11 @@ Runnable, in the repo under [`examples/notebooks/`](https://github.com/coredumpd
 - **`gallery.ipynb`** — distributions, fields, custom colours, finance, signal
   processing, ML metrics, model architecture and 3D.
 
+## API reference
+
+Every class, method and shortcut: **[Python API](/python/api)** — generated from
+the package itself, so the signatures are always the real ones.
+
 ## How it works
 
 `photonviz` is an [anywidget](https://anywidget.dev), which is why one object

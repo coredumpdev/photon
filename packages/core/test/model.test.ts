@@ -11,6 +11,7 @@ import {
   modelGraphFromTorchFx,
   modelLayout,
   sequentialModel,
+  tensorMetrics,
   type ModelGraph,
 } from "../src/ml/model.js";
 
@@ -320,5 +321,17 @@ describe("modelBoxDims", () => {
       expect(d[1]).toBeCloseTo(2, 10);
       expect(d[2]).toBeCloseTo(2, 10);
     }
+  });
+});
+
+describe("tensorMetrics", () => {
+  it("folds leading dims into channels and keeps the last two as the face", () => {
+    expect(tensorMetrics([64, 112, 112])).toEqual([64, 112, 112]);
+    expect(tensorMetrics([512])).toEqual([1, 512, 1]);
+    expect(tensorMetrics([8, 4])).toEqual([1, 8, 4]);
+    // A 3-D conv volume folds C×D together — it is all "depth" to the diagram.
+    expect(tensorMetrics([16, 8, 32, 32])).toEqual([128, 32, 32]);
+    expect(tensorMetrics()).toEqual([1, 1, 1]);
+    expect(tensorMetrics([])).toEqual([1, 1, 1]);
   });
 });
