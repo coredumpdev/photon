@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColorInfo, type ColormapSpec } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
@@ -15,7 +15,9 @@ export interface ContourOptions {
   levels?: number[] | number;
   /** Single line color; if omitted, levels are colored by a colormap. */
   color?: string | Color;
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
+  /** Series name — used as the colorbar caption. */
+  name?: string;
   /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
   renderType?: RenderType;
   yAxis?: string;
@@ -67,6 +69,9 @@ export class ContourLayer implements Layer {
   // Styling captured at construction, reused by setData.
   private levelsOpt: number[] | number | undefined;
   private cmap: ReturnType<typeof colormap>;
+  private cmapName: ColormapSpec;
+  private cInfo: ColorInfo | null = null;
+  private label?: string;
   private fixedColor: Color | null;
   private usage: number;
 
@@ -83,7 +88,9 @@ export class ContourLayer implements Layer {
     this.xRef = x0; this.yRef = y0;
 
     this.levelsOpt = opts.levels;
-    this.cmap = colormap(opts.colormap ?? "viridis");
+    this.cmapName = opts.colormap ?? "viridis";
+    this.label = opts.name;
+    this.cmap = colormap(this.cmapName);
     this.fixedColor = opts.color != null
       ? (Array.isArray(opts.color) ? (opts.color as Color) : parseColor(opts.color as string))
       : null;
@@ -124,6 +131,9 @@ export class ContourLayer implements Layer {
 
     const data: number[] = [];
     const lspan = vmax - vmin || 1;
+    this.cInfo = this.fixedColor
+      ? null
+      : { colormap: this.cmapName, domain: [vmin, vmax], ...(this.label ? { label: this.label } : {}) };
     for (let li = 0; li < levels.length; li++) {
       const L = levels[li]!;
       const col: Color = fixed ?? [...cmap((L - vmin) / lspan), 1] as Color;
@@ -162,6 +172,10 @@ export class ContourLayer implements Layer {
     const data = this.build(values, cols, rows);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
+  }
+
+  colorInfo(): ColorInfo | null {
+    return this.cInfo;
   }
 
   bounds() {

@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import type { Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
@@ -10,7 +10,7 @@ export interface VolumeOptions {
   dims: [number, number, number];
   /** World extent of the volume. Defaults to unit indices. */
   extent?: { x: Range; y: Range; z: Range };
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Value range mapped to the colormap + opacity. Defaults to the data min/max. */
   domain?: Range;
   /** Overall opacity multiplier. Default 1. */
@@ -102,7 +102,7 @@ export class VolumeLayer implements Layer3D {
   private b3: Bounds3;
   private ext: { x: Range; y: Range; z: Range };
   private density: number;
-  private cmapName: ColormapName;
+  private cmapName: ColormapSpec;
   private vDomain: Range = [0, 1];
   private dims: [number, number, number];
   private domainOpt?: Range;

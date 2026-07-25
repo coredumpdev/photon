@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import type { Color, Range, RenderType } from "../types.js";
@@ -17,7 +17,7 @@ export interface Contour3DOptions {
   levels?: number[] | number;
   /** Single line color; if omitted, levels are colored by a colormap. */
   color?: string | Color;
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   name?: string;
   /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
   renderType?: RenderType;
@@ -68,7 +68,7 @@ export class Contour3DLayer implements Layer3D {
   private vertCount!: number;
   private b3!: Bounds3;
   private cInfo: ColorInfo | null = null;
-  private cmapName: ColormapName;
+  private cmapName: ColormapSpec;
   private fixed: Color | null;
   private levelsOpt?: number[] | number;
   private cols!: number;

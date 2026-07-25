@@ -222,3 +222,106 @@ export function depth(
   for (let i = 0; i < a.length; i++) { cum += a[i]![1]; askPrice[i] = a[i]![0]; askCum[i] = cum; }
   return { bidPrice, bidCum, askPrice, askCum };
 }
+
+/** One resampled bar, with the timestamp of the bucket it covers. */
+export interface ResampledOhlc extends OhlcArrays {
+  /** Bucket start time (epoch ms). */
+  time: Float64Array;
+  /** Summed volume per bucket, when volume was supplied. */
+  volume?: Float64Array;
+}
+
+/**
+ * Roll bars up to a coarser timeframe — 1m candles into 1h, daily into weekly.
+ * Buckets are aligned to multiples of `bucketMs` from the epoch, so the same
+ * input always produces the same boundaries. Empty buckets are skipped rather
+ * than filled, which is what a market calendar wants.
+ */
+export function resampleOhlc(
+  time: ArrayLike<number>,
+  ohlc: Ohlc,
+  bucketMs: number,
+  volume?: ArrayLike<number>,
+): ResampledOhlc {
+  const n = Math.min(time.length, ohlc.open.length, ohlc.high.length, ohlc.low.length, ohlc.close.length);
+  const ts: number[] = [];
+  const o: number[] = [];
+  const h: number[] = [];
+  const l: number[] = [];
+  const c: number[] = [];
+  const v: number[] = [];
+  if (bucketMs <= 0 || n === 0) {
+    const empty = new Float64Array(0);
+    return { time: empty, open: empty, high: empty, low: empty, close: empty, ...(volume ? { volume: empty } : {}) };
+  }
+  let bucket = NaN;
+  for (let i = 0; i < n; i++) {
+    const b = Math.floor(time[i]! / bucketMs) * bucketMs;
+    if (b !== bucket) {
+      bucket = b;
+      ts.push(b);
+      o.push(ohlc.open[i]!);
+      h.push(ohlc.high[i]!);
+      l.push(ohlc.low[i]!);
+      c.push(ohlc.close[i]!);
+      v.push(volume ? volume[i]! : 0);
+      continue;
+    }
+    const k = ts.length - 1;
+    if (ohlc.high[i]! > h[k]!) h[k] = ohlc.high[i]!;
+    if (ohlc.low[i]! < l[k]!) l[k] = ohlc.low[i]!;
+    c[k] = ohlc.close[i]!;
+    if (volume) v[k]! += volume[i]!;
+  }
+  return {
+    time: Float64Array.from(ts),
+    open: Float64Array.from(o),
+    high: Float64Array.from(h),
+    low: Float64Array.from(l),
+    close: Float64Array.from(c),
+    ...(volume ? { volume: Float64Array.from(v) } : {}),
+  };
+}
+
+/** An equity curve's underwater profile and its worst stretch. */
+export interface Drawdown {
+  /** Fractional drawdown from the running peak at each point (≤ 0). */
+  values: Float64Array;
+  /** Running peak equity. */
+  peak: Float64Array;
+  /** The deepest drawdown (a negative fraction, e.g. −0.32 for −32%). */
+  maxDrawdown: number;
+  /** Index where the max drawdown bottomed, or −1. */
+  troughIndex: number;
+  /** Index of the peak that drawdown fell from, or −1. */
+  peakIndex: number;
+}
+
+/**
+ * The underwater curve of an equity series: how far below its running high-water
+ * mark the strategy sat at each point. Plot `values` as a filled area under zero
+ * — the standard companion to an equity curve.
+ */
+export function drawdown(equity: ArrayLike<number>): Drawdown {
+  const n = equity.length;
+  const values = new Float64Array(n);
+  const peak = new Float64Array(n);
+  let high = -Infinity;
+  let highIdx = -1;
+  let maxDrawdown = 0;
+  let troughIndex = -1;
+  let peakIndex = -1;
+  for (let i = 0; i < n; i++) {
+    const e = equity[i]!;
+    if (e > high) { high = e; highIdx = i; }
+    peak[i] = high;
+    const dd = high === 0 ? 0 : e / high - 1;
+    values[i] = dd;
+    if (dd < maxDrawdown) {
+      maxDrawdown = dd;
+      troughIndex = i;
+      peakIndex = highIdx;
+    }
+  }
+  return { values, peak, maxDrawdown, troughIndex, peakIndex };
+}

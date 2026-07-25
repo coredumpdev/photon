@@ -1,4 +1,4 @@
-import { colormapLUT, type ColormapName } from "../color/colormap.js";
+import { colormapLUT, type ColorInfo, type ColormapSpec } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
@@ -24,6 +24,16 @@ export interface ScatterOptions {
   color?: string | Color;
   /** Marker diameter in CSS pixels. */
   size?: number;
+  /**
+   * Per-point diameter in CSS pixels — a bubble chart. Overrides {@link size}
+   * wherever it is `> 0`; entries of `0` fall back to the uniform size.
+   */
+  sizes?: ArrayLike<number>;
+  /**
+   * Explicit per-point colors. Overrides {@link color}; ignored when
+   * {@link colorBy} is set (that drives the same per-point buffer).
+   */
+  colors?: ReadonlyArray<string | Color>;
   /** Marker glyph. Default `"circle"`. */
   marker?: MarkerShape;
   name?: string;
@@ -37,7 +47,7 @@ export interface ScatterOptions {
   /** Color each point by a value through a colormap. */
   colorBy?: {
     values: ArrayLike<number>;
-    colormap?: ColormapName;
+    colormap?: ColormapSpec;
     /** Value range mapped to [0,1]. Defaults to the data min/max. */
     domain?: Range;
   };
@@ -50,14 +60,17 @@ precision highp float;
 layout(location = 0) in vec2 aCorner;  // unit quad [-1,1]^2
 layout(location = 1) in vec2 aPos;     // point (offset data space)
 layout(location = 2) in vec4 aColor;   // per-point color (used if uUseVertexColor>0.5)
+layout(location = 3) in float aSize;   // per-point diameter in CSS px (0 => uniform uSize)
 uniform vec2 uResolution;
 uniform float uSize;                   // radius in device px
+uniform float uDpr;
 ${TRANSFORM_GLSL}
 out vec2 vLocal;
 out vec4 vColor;
 void main() {
   vec2 center = (dataToClip(aPos) * 0.5 + 0.5) * uResolution;
-  vec2 pos = center + aCorner * uSize;
+  float radius = aSize > 0.0 ? aSize * 0.5 * uDpr : uSize;
+  vec2 pos = center + aCorner * radius;
   vLocal = aCorner;
   vColor = aColor;
   gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
@@ -140,10 +153,13 @@ export class ScatterLayer implements Layer {
   private uniforms: Record<string, WebGLUniformLocation | null>;
   private count: number;
   private size: number;
+  /** Largest marker diameter in play, for the hover hit gate. */
+  private maxSize: number;
   private marker: number;
   private usage: number;
   private color: Color;
   private useVertexColor: boolean;
+  private cInfo: ColorInfo | null = null;
   private labels?: ArrayLike<string>;
   private xRef = 0;
   private yRef = 0;
@@ -157,6 +173,7 @@ export class ScatterLayer implements Layer {
     this.gl = gl;
     this.program = getProgram(gl);
     this.size = opts.size ?? 5;
+    this.maxSize = this.size;
     this.marker = MARKERS[opts.marker ?? "circle"];
     const colorInput = opts.color ?? "#3b82f6";
     this.color = Array.isArray(colorInput) ? (colorInput as Color) : parseColor(colorInput as string);
@@ -188,8 +205,31 @@ export class ScatterLayer implements Layer {
     this.xBounds = [minX, maxX];
     this.yBounds = [minY, maxY];
 
+    // Per-point sizes (optional; 0 means "use the uniform size").
+    const sizes = new Float32Array(n);
+    if (opts.sizes) {
+      let max = this.size;
+      for (let i = 0; i < n; i++) {
+        const s = opts.sizes[i] ?? 0;
+        sizes[i] = s > 0 ? s : 0;
+        if (s > max) max = s;
+      }
+      this.maxSize = max;
+    }
+
     // Per-point colors (optional).
     const colors = new Float32Array(n * 4);
+    if (opts.colors && !opts.colorBy) {
+      this.useVertexColor = true;
+      for (let i = 0; i < n; i++) {
+        const c = opts.colors[i];
+        const rgba = c == null
+          ? this.color
+          : Array.isArray(c) ? (c as Color) : parseColor(c as string);
+        colors[i * 4] = rgba[0]; colors[i * 4 + 1] = rgba[1];
+        colors[i * 4 + 2] = rgba[2]; colors[i * 4 + 3] = rgba[3];
+      }
+    }
     if (opts.colorBy) {
       const vals = opts.colorBy.values;
       const lut = colormapLUT(opts.colorBy.colormap ?? "viridis");
@@ -203,6 +243,11 @@ export class ScatterLayer implements Layer {
         }
       }
       const span = hi - lo || 1;
+      this.cInfo = {
+        colormap: opts.colorBy.colormap ?? "viridis",
+        domain: [lo, hi],
+        ...(opts.name ? { label: opts.name } : {}),
+      };
       for (let i = 0; i < n; i++) {
         let t = (vals[i]! - lo) / span;
         t = t <= 0 ? 0 : t >= 1 ? 1 : t;
@@ -235,12 +280,23 @@ export class ScatterLayer implements Layer {
     gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(2, 1);
 
+    const sizeBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, sizes, this.usage);
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(3, 1);
+
     gl.bindVertexArray(null);
-    this.buffers = [cornerBuf, posBuf, colorBuf];
+    this.buffers = [cornerBuf, posBuf, colorBuf, sizeBuf];
 
     this.uniforms = uniformLocations(gl, this.program, [
-      ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uSize", "uUseVertexColor", "uMarker",
+      ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uSize", "uDpr", "uUseVertexColor", "uMarker",
     ]);
+  }
+
+  colorInfo(): ColorInfo | null {
+    return this.cInfo;
   }
 
   bounds() {
@@ -256,7 +312,7 @@ export class ScatterLayer implements Layer {
   ): Picked | null {
     // Only a hit when the cursor is within the marker (+ a couple px of slack),
     // so a far-away point never highlights.
-    const gatePx = this.size / 2 + 4;
+    const gatePx = this.maxSize / 2 + 4;
     return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project, gatePx);
   }
 
@@ -285,8 +341,12 @@ export class ScatterLayer implements Layer {
     }
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
     this.useVertexColor = false;
+    this.cInfo = null;
+    this.maxSize = this.size;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers[1]!);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, pos, this.usage);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers[3]!);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(n), this.usage);
   }
 
   draw(state: DrawState): void {
@@ -297,6 +357,7 @@ export class ScatterLayer implements Layer {
     gl.uniform4f(this.uniforms.uColor!, this.color[0], this.color[1], this.color[2], this.color[3]);
     gl.uniform2f(this.uniforms.uResolution!, state.pixelWidth, state.pixelHeight);
     gl.uniform1f(this.uniforms.uSize!, (this.size / 2) * state.dpr);
+    gl.uniform1f(this.uniforms.uDpr!, state.dpr);
     gl.uniform1f(this.uniforms.uUseVertexColor!, this.useVertexColor ? 1 : 0);
     gl.uniform1i(this.uniforms.uMarker!, this.marker);
     gl.bindVertexArray(this.vao);

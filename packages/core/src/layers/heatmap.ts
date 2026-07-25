@@ -1,4 +1,4 @@
-import { colormapLUT, type ColormapName } from "../color/colormap.js";
+import { colormapLUT, type ColorInfo, type ColormapSpec } from "../color/colormap.js";
 import { createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Range, RenderType } from "../types.js";
@@ -11,9 +11,11 @@ export interface HeatmapOptions {
   rows: number;
   /** Data-space extent the grid spans. */
   extent: { x: Range; y: Range };
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Value range mapped to the colormap. Defaults to the data min/max. */
   domain?: Range;
+  /** Series name — used as the colorbar caption. */
+  name?: string;
   /** Bilinear filtering (default true) vs. hard cells. */
   smooth?: boolean;
   /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
@@ -68,6 +70,9 @@ export class HeatmapLayer implements Layer {
   private fixedDomain: Range | undefined;
   private cols: number;
   private rows: number;
+  private cmapName: ColormapSpec;
+  private cInfo: ColorInfo | null = null;
+  private label?: string;
 
   constructor(gl: WebGL2RenderingContext, opts: HeatmapOptions) {
     this.id = `heatmap-${counter++}`;
@@ -80,7 +85,9 @@ export class HeatmapLayer implements Layer {
     this.xRef = x0;
     this.yRef = y0;
 
-    this.lut = colormapLUT(opts.colormap ?? "viridis");
+    this.cmapName = opts.colormap ?? "viridis";
+    this.label = opts.name;
+    this.lut = colormapLUT(this.cmapName);
     this.fixedDomain = opts.domain;
     this.cols = opts.cols;
     this.rows = opts.rows;
@@ -135,6 +142,7 @@ export class HeatmapLayer implements Layer {
       }
     }
     const span = hi - lo || 1;
+    this.cInfo = { colormap: this.cmapName, domain: [lo, hi], ...(this.label ? { label: this.label } : {}) };
     const pixels = new Uint8Array(cols * rows * 4);
     // Direct LUT indexing — no per-cell closure call or tuple allocation.
     for (let i = 0; i < cols * rows; i++) {
@@ -157,6 +165,10 @@ export class HeatmapLayer implements Layer {
     this.cols = cols;
     this.rows = rows;
     this.uploadValues(values, cols, rows);
+  }
+
+  colorInfo(): ColorInfo | null {
+    return this.cInfo;
   }
 
   bounds() {

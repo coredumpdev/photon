@@ -5,14 +5,13 @@
  * arc. Import from `@photonviz/core`. Use `equalAspect: true` so it stays circular.
  */
 import { type Patch, type PatchesLayer } from "../layers/patches.js";
+import { DEFAULT_PALETTE, palette as resolvePalette, type PaletteSpec } from "../color/palettes.js";
 import type { Plot } from "../plot.js";
 import type { RenderType } from "../types.js";
 
 /** tab10-ish default palette, cycled by group index. */
-export const CHORD_PALETTE: readonly string[] = [
-  "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
-  "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
-];
+/** Group colours when none are supplied. Aliases the shared {@link DEFAULT_PALETTE} (Tableau 10). */
+export const CHORD_PALETTE: readonly string[] = DEFAULT_PALETTE;
 
 /** A laid-out group arc as a closed ring of `x`/`y` (thin annular sector). */
 export interface ChordGroupArc {
@@ -176,7 +175,7 @@ export interface ChordOptions {
   /** Outer radius. Default 1. */
   radius?: number;
   /** Palette cycled by group index. Defaults to {@link CHORD_PALETTE}. */
-  colors?: string[];
+  colors?: PaletteSpec;
   /** Ribbon fill opacity, 0..1. Default 0.65. */
   opacity?: number;
   name?: string;
@@ -190,7 +189,7 @@ export interface ChordOptions {
  */
 export function addChord(plot: Plot, opts: ChordOptions): PatchesLayer {
   const radius = opts.radius ?? 1;
-  const palette = opts.colors && opts.colors.length ? opts.colors : CHORD_PALETTE;
+  const palette = resolvePalette(opts.colors ?? CHORD_PALETTE);
   const opacity = opts.opacity ?? 0.65;
   const { groupArcs, ribbons } = chordLayout(opts.matrix, { radius });
 

@@ -4,6 +4,7 @@
  * label annotation per cell. Import from `@photonviz/core`.
  */
 import { type Patch, type PatchesLayer } from "../layers/patches.js";
+import { DEFAULT_PALETTE, palette as resolvePalette, type PaletteSpec } from "../color/palettes.js";
 import type { Plot } from "../plot.js";
 import type { RenderType } from "../types.js";
 
@@ -35,10 +36,8 @@ export interface TreemapExtent {
 const DEFAULT_EXTENT: TreemapExtent = { x: [0, 1], y: [0, 1] };
 
 /** tab10-ish default palette, cycled by index for items without a color. */
-export const TREEMAP_PALETTE: readonly string[] = [
-  "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
-  "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
-];
+/** Cell colours when an item has no explicit `color`. Aliases the shared {@link DEFAULT_PALETTE} (Tableau 10). */
+export const TREEMAP_PALETTE: readonly string[] = DEFAULT_PALETTE;
 
 /** Worst aspect ratio of a row of areas laid across a strip of thickness `w`. */
 function worst(row: number[], w: number, sum: number): number {
@@ -141,7 +140,7 @@ export interface TreemapOptions {
   items: TreemapItem[];
   extent?: TreemapExtent;
   /** Palette cycled by index for items lacking a `color`. Defaults to {@link TREEMAP_PALETTE}. */
-  colors?: string[];
+  colors?: PaletteSpec;
   opacity?: number;
   name?: string;
   renderType?: RenderType;
@@ -158,7 +157,7 @@ const LABEL_MIN_FRAC = 0.04;
  */
 export function addTreemap(plot: Plot, opts: TreemapOptions): PatchesLayer {
   const extent = opts.extent ?? DEFAULT_EXTENT;
-  const palette = opts.colors && opts.colors.length ? opts.colors : TREEMAP_PALETTE;
+  const palette = resolvePalette(opts.colors ?? TREEMAP_PALETTE);
   const cells = treemapLayout(opts.items, extent);
 
   const patches: Patch[] = cells.map((c, i) => ({

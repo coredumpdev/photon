@@ -5,11 +5,12 @@ import { begin3D, getSharedGL, sizeShared } from "../gl/shared.js";
 import { canvasToBlob, copyCanvasToClipboard, downloadCanvas, type ExportOptions } from "../render/export.js";
 import type { Range } from "../types.js";
 import { Bar3DLayer, type Bar3DOptions } from "./bar3d.js";
+import { Boxes3DLayer, type Boxes3DOptions } from "./boxes3d.js";
 import { Contour3DLayer, type Contour3DOptions } from "./contour3d.js";
 import { IsosurfaceLayer, type IsosurfaceOptions } from "./isosurface.js";
 import type { Bounds3, Layer3D } from "./layer3d.js";
 import { Line3DLayer, type Line3DOptions } from "./line3d.js";
-import { lookAt, multiply, perspective, scaleTranslate, transformPoint, type Mat4 } from "./mat4.js";
+import { lookAt, multiply, orthographic, perspective, scaleTranslate, transformPoint, type Mat4 } from "./mat4.js";
 import { PointCloudLayer, type PointCloudOptions } from "./pointcloud.js";
 import { Quiver3DLayer, type Quiver3DOptions } from "./quiver3d.js";
 import { SurfaceLayer, type SurfaceOptions } from "./surface.js";
@@ -38,6 +39,23 @@ export interface Plot3DOptions {
   downloadButton?: boolean;
   /** Draw grid lines on the back walls of the cube. Default true. */
   gridPlanes?: boolean;
+  /**
+   * How data extents map into the view cube. `"cube"` (default) stretches each
+   * axis independently to fill it — best for surfaces, where relative shape
+   * matters more than units. `"data"` uses one shared scale so proportions are
+   * preserved: a long, thin scene stays long and thin.
+   */
+  aspectMode?: "cube" | "data";
+  /** Draw the bounding box, tick marks and axis labels. Default true. */
+  showAxes?: boolean;
+  /**
+   * Camera projection. `"perspective"` (default) is the natural choice for
+   * surfaces and point clouds; `"orthographic"` removes the perspective divide,
+   * so a long scene keeps a constant scale end-to-end — the right pick for
+   * diagrams. `distance` then sets the visible half-height instead of the eye
+   * distance. Volume raymarching assumes perspective and ignores this.
+   */
+  projection?: "perspective" | "orthographic";
   /** Auto-orbit the camera: `true` for a default speed, or radians/frame. Default off. */
   autoRotate?: boolean | number;
 }
@@ -60,6 +78,24 @@ const BOX_EDGES = new Float32Array([
 ]);
 
 interface Label { p: [number, number, number]; text: string; title?: boolean }
+
+/** A text label pinned to a point in *data* space, re-projected every frame. */
+export interface Label3D {
+  x: number;
+  y: number;
+  z: number;
+  text: string;
+  color?: string;
+  /** CSS `font` shorthand. Default `"11px system-ui, sans-serif"`. */
+  font?: string;
+  /** Screen-space nudge in CSS px, applied after projection. */
+  dx?: number;
+  dy?: number;
+  /** Horizontal alignment about the projected point. Default `"center"`. */
+  align?: CanvasTextAlign;
+  /** Vertical alignment about the projected point. Default `"middle"`. */
+  baseline?: CanvasTextBaseline;
+}
 
 /** A 3D scatter/surface plot with an orbit camera, axis ticks, and lighting. */
 export class Plot3D {
@@ -89,9 +125,14 @@ export class Plot3D {
   private tickBuf: WebGLBuffer;
   private tickCount = 0;
   private labels: Label[] = [];
+  /** User labels anchored in data space (see {@link addLabel3D}). */
+  private dataLabels: Label3D[] = [];
   /** Tick positions in cube space [-1,1], per axis, for the grid planes. */
   private tickCube: { x: number[]; y: number[]; z: number[] } = { x: [], y: [], z: [] };
   private gridPlanes: boolean;
+  private aspectMode: "cube" | "data";
+  private showAxes: boolean;
+  private projection: "perspective" | "orthographic";
   private gridVao: WebGLVertexArrayObject | null = null;
   private gridBuf: WebGLBuffer | null = null;
   /** Normalize params (world→cube: `cube = s*world + t`), for the volume camera. */
@@ -147,6 +188,9 @@ export class Plot3D {
     this.colorbarOpt = options.colorbar ?? true;
     this.hoverEnabled = options.hover !== false;
     this.gridPlanes = options.gridPlanes !== false;
+    this.aspectMode = options.aspectMode ?? "cube";
+    this.showAxes = options.showAxes !== false;
+    this.projection = options.projection ?? "perspective";
 
     // Legend + colorbar DOM overlays.
     this.legendDiv = document.createElement("div");
@@ -279,6 +323,16 @@ export class Plot3D {
     return l;
   }
 
+  /** Independently sized lit cuboids (voxels, bounding boxes, model layer blocks). */
+  addBoxes3D(opts: Boxes3DOptions): Boxes3DLayer {
+    const l = new Boxes3DLayer(this.gl, opts);
+    l.setLight(this.lightDir(), this.ambient);
+    this.layers.push(l);
+    this.recompute();
+    this.requestRender();
+    return l;
+  }
+
   /** A 3D vector field (arrows), optionally colored by magnitude. */
   addQuiver3D(opts: Quiver3DOptions): Quiver3DLayer {
     const l = new Quiver3DLayer(this.gl, opts);
@@ -314,6 +368,30 @@ export class Plot3D {
     this.recompute();
     this.requestRender();
     return l;
+  }
+
+  /**
+   * Pin a text label to a point in data space. It is re-projected every frame,
+   * so it tracks the point as the camera orbits. Returns a disposer that removes
+   * just this label.
+   */
+  addLabel3D(label: Label3D): () => void {
+    this.dataLabels.push(label);
+    this.requestRender();
+    return () => {
+      const i = this.dataLabels.indexOf(label);
+      if (i >= 0) {
+        this.dataLabels.splice(i, 1);
+        this.requestRender();
+      }
+    };
+  }
+
+  /** Remove every data-space label. */
+  clearLabels3D(): void {
+    if (this.dataLabels.length === 0) return;
+    this.dataLabels = [];
+    this.requestRender();
   }
 
   /** Update the light direction (azimuth/elevation, radians) and ambient (0..1). */
@@ -499,7 +577,13 @@ export class Plot3D {
     }
     if (!b) return;
     this.dataBounds = b;
+    // "cube": stretch each axis to fill [-1,1]. "data": one shared scale, so the
+    // longest axis fills the cube and the others keep their true proportion.
+    const shared = this.aspectMode === "data"
+      ? 2 / (Math.max(b.x[1] - b.x[0], b.y[1] - b.y[0], b.z[1] - b.z[0]) || 1)
+      : 0;
     const axis = (r: Range): [number, number] => {
+      if (shared) return [shared, (-shared * (r[0] + r[1])) / 2];
       const span = r[1] - r[0];
       return span === 0 ? [1, -r[0]] : [2 / span, -(r[1] + r[0]) / span];
     };
@@ -565,12 +649,19 @@ export class Plot3D {
 
   private viewProj(): { vp: Mat4; mvp: Mat4; eye: [number, number, number] } {
     const aspect = this.canvas.width / Math.max(1, this.canvas.height);
-    const proj = perspective((50 * Math.PI) / 180, aspect, 0.01, 100);
+    // Orthographic reads `distance` as the visible half-height; the near/far
+    // span is wide enough that the orbiting eye never clips the scene.
+    const proj = this.projection === "orthographic"
+      ? orthographic(this.distance / 2, aspect, -100, 100)
+      : perspective((50 * Math.PI) / 180, aspect, 0.01, 100);
     const el = Math.max(-1.5, Math.min(1.5, this.elevation));
+    // Under orthographic projection the eye distance no longer sets the scale
+    // (`distance` does), so park it well outside the normalized scene.
+    const radius = this.projection === "orthographic" ? 8 : this.distance;
     const eye: [number, number, number] = [
-      this.distance * Math.cos(el) * Math.sin(this.azimuth),
-      this.distance * Math.sin(el),
-      this.distance * Math.cos(el) * Math.cos(this.azimuth),
+      radius * Math.cos(el) * Math.sin(this.azimuth),
+      radius * Math.sin(el),
+      radius * Math.cos(el) * Math.cos(this.azimuth),
     ];
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const vp = multiply(proj, view);
@@ -621,15 +712,17 @@ export class Plot3D {
     // Back-wall grid planes (behind the data).
     if (this.gridPlanes) this.drawGridPlanes(vp, eye);
     gl.uniformMatrix4fv(this.lineUniforms.uVP!, false, vp);
-    // Bounding box.
-    gl.uniform4f(this.lineUniforms.uColor!, 0.6, 0.65, 0.75, 0.4);
-    gl.bindVertexArray(this.boxVao);
-    gl.drawArrays(gl.LINES, 0, BOX_EDGES.length / 3);
-    // Axis tick marks.
-    if (this.tickCount > 0) {
-      gl.uniform4f(this.lineUniforms.uColor!, 0.75, 0.8, 0.9, 0.8);
-      gl.bindVertexArray(this.tickVao);
-      gl.drawArrays(gl.LINES, 0, this.tickCount);
+    if (this.showAxes) {
+      // Bounding box.
+      gl.uniform4f(this.lineUniforms.uColor!, 0.6, 0.65, 0.75, 0.4);
+      gl.bindVertexArray(this.boxVao);
+      gl.drawArrays(gl.LINES, 0, BOX_EDGES.length / 3);
+      // Axis tick marks.
+      if (this.tickCount > 0) {
+        gl.uniform4f(this.lineUniforms.uColor!, 0.75, 0.8, 0.9, 0.8);
+        gl.bindVertexArray(this.tickVao);
+        gl.drawArrays(gl.LINES, 0, this.tickCount);
+      }
     }
     gl.bindVertexArray(null);
 
@@ -645,6 +738,7 @@ export class Plot3D {
     this.displayCtx.clearRect(0, 0, w, h);
     this.displayCtx.drawImage(this.sharedCanvas, 0, 0);
     this.drawLabels(vp, w, h);
+    this.drawDataLabels(mvp, w, h);
 
     if (this.title) {
       const ctx = this.displayCtx;
@@ -738,8 +832,39 @@ export class Plot3D {
     div.style.display = "block";
   }
 
+  /**
+   * Draw the user's data-space labels. Coordinates come out of the projection in
+   * device px; we scale the context by dpr instead so the caller's `font` string
+   * means CSS px, and outline each label so it stays readable over any fill.
+   */
+  private drawDataLabels(mvp: Mat4, w: number, h: number): void {
+    if (this.dataLabels.length === 0) return;
+    const ctx = this.displayCtx;
+    const dpr = this.dpr;
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.lineJoin = "round";
+    for (const l of this.dataLabels) {
+      const c = transformPoint(mvp, l.x, l.y, l.z);
+      if (c[3] <= 0) continue;
+      const sx = ((c[0] / c[3]) * 0.5 + 0.5) * w;
+      const sy = (1 - ((c[1] / c[3]) * 0.5 + 0.5)) * h;
+      ctx.font = l.font ?? "11px system-ui, -apple-system, sans-serif";
+      ctx.textAlign = l.align ?? "center";
+      ctx.textBaseline = l.baseline ?? "middle";
+      const x = sx / dpr + (l.dx ?? 0);
+      const y = sy / dpr + (l.dy ?? 0);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(2,6,23,0.75)";
+      ctx.strokeText(l.text, x, y);
+      ctx.fillStyle = l.color ?? "#e2e8f0";
+      ctx.fillText(l.text, x, y);
+    }
+    ctx.restore();
+  }
+
   private drawLabels(vp: Mat4, w: number, h: number): void {
-    if (this.labels.length === 0) return;
+    if (!this.showAxes || this.labels.length === 0) return;
     const ctx = this.displayCtx;
     ctx.save();
     ctx.textAlign = "center";

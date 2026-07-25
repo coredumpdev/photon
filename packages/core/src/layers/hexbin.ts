@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColorInfo, type ColormapSpec } from "../color/colormap.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Range, RenderType } from "../types.js";
@@ -9,9 +9,11 @@ export interface HexbinOptions {
   y: ArrayLike<number>;
   /** Hex radius in data units. Defaults to ~1/30 of the x-extent. */
   radius?: number;
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Count range mapped to the colormap. Defaults to [1, maxCount]. */
   domain?: Range;
+  /** Series name — used as the colorbar caption. */
+  name?: string;
   /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
   renderType?: RenderType;
   yAxis?: string;
@@ -76,6 +78,9 @@ export class HexbinLayer implements Layer {
   private cmap: ReturnType<typeof colormap>;
   private explicitRadius: number | undefined;
   private domain: Range | undefined;
+  private cmapName: ColormapSpec;
+  private cInfo: ColorInfo | null = null;
+  private label?: string;
   private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: HexbinOptions) {
@@ -85,7 +90,9 @@ export class HexbinLayer implements Layer {
     this.usage = bufferUsage(gl, opts.renderType);
     this.yAxis = opts.yAxis ?? "y";
 
-    this.cmap = colormap(opts.colormap ?? "viridis");
+    this.cmapName = opts.colormap ?? "viridis";
+    this.label = opts.name;
+    this.cmap = colormap(this.cmapName);
     this.explicitRadius = opts.radius;
     this.domain = opts.domain;
 
@@ -158,6 +165,7 @@ export class HexbinLayer implements Layer {
     const lo = this.domain?.[0] ?? 1;
     const hi = this.domain?.[1] ?? maxCount;
     const span = hi - lo || 1;
+    this.cInfo = { colormap: this.cmapName, domain: [lo, hi], ...(this.label ? { label: this.label } : {}) };
     let k = 0;
     for (const cell of cells.values()) {
       centers[k * 2] = cell.cx - this.xRef;
@@ -177,6 +185,10 @@ export class HexbinLayer implements Layer {
     gl.bufferData(gl.ARRAY_BUFFER, centers, this.usage);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
     gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
+  }
+
+  colorInfo(): ColorInfo | null {
+    return this.cInfo;
   }
 
   bounds() {

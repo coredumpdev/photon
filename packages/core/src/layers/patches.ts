@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColorInfo, type ColormapSpec } from "../color/colormap.js";
 import { earcut } from "../geo/earcut.js";
 import { parseColor } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
@@ -51,7 +51,7 @@ export interface PatchesOptions {
   /** Default fill for patches without their own `color`/`value`. */
   color?: string | Color;
   /** Color patches by `value` through this colormap (choropleth). */
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Value range mapped to [0,1] for the colormap. Defaults to the data min/max. */
   domain?: Range;
   /** Fill opacity, 0..1. Default 1. */
@@ -89,6 +89,8 @@ export class PatchesLayer implements Layer {
   private opacity: number;
   private cmap: ReturnType<typeof colormap> | null;
   private domainOpt: Range | undefined;
+  private cmapName: ColormapSpec | undefined;
+  private cInfo: ColorInfo | null = null;
   private usage: number;
 
   constructor(gl: WebGL2RenderingContext, opts: PatchesOptions) {
@@ -101,6 +103,7 @@ export class PatchesLayer implements Layer {
     this.defRgba = Array.isArray(defColor) ? (defColor as Color) : parseColor(defColor as string);
     this.colorCss = typeof defColor === "string" ? defColor : "#3b82f6";
     this.opacity = opts.opacity ?? 1;
+    this.cmapName = opts.colormap;
     this.cmap = opts.colormap ? colormap(opts.colormap) : null;
     this.domainOpt = opts.domain;
     this.usage = bufferUsage(gl, opts.renderType);
@@ -142,6 +145,9 @@ export class PatchesLayer implements Layer {
       }
     }
     const span = hi - lo || 1;
+    this.cInfo = cmap && this.cmapName && lo <= hi
+      ? { colormap: this.cmapName, domain: [lo, hi], ...(this.name !== this.id ? { label: this.name } : {}) }
+      : null;
 
     // First vertex of the first non-empty patch anchors the float32 reference.
     this.xRef = 0;
@@ -209,6 +215,10 @@ export class PatchesLayer implements Layer {
     gl.bufferData(gl.ARRAY_BUFFER, positions, this.usage);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[1]!);
     gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
+  }
+
+  colorInfo(): ColorInfo | null {
+    return this.cInfo;
   }
 
   bounds() {

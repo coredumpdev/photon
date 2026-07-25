@@ -38,6 +38,12 @@ export interface LineOptions {
    */
   miterLimit?: number;
   /**
+   * Dash pattern in CSS pixels, alternating on/off lengths (Canvas
+   * `setLineDash` semantics) — e.g. `[6, 4]`. Up to 8 entries. Dashing turns
+   * decimation off, since a dashed line is a low-point-count annotation.
+   */
+  dash?: number[];
+  /**
    * Min/max decimate very large series to ~2 points per pixel column when
    * zoomed out (preserves peaks). Requires monotonic x; auto-detected. Default true.
    */
@@ -53,6 +59,7 @@ precision highp float;
 layout(location = 0) in vec2 aCorner;  // (along 0..1, side -1..1)
 layout(location = 1) in vec2 aP0;
 layout(location = 2) in vec2 aP1;
+layout(location = 3) in float aDist;   // cumulative data-space length at P0
 uniform vec2 uResolution;
 uniform float uWidth;
 uniform float uRound;
@@ -60,6 +67,7 @@ ${TRANSFORM_GLSL}
 out vec2 vPix;
 out vec2 vS0;
 out vec2 vS1;
+out float vDash0;
 void main() {
   vec2 s0 = (dataToClip(aP0) * 0.5 + 0.5) * uResolution;
   vec2 s1 = (dataToClip(aP1) * 0.5 + 0.5) * uResolution;
@@ -72,6 +80,10 @@ void main() {
   vec2 endpoint = mix(s0, s1, aCorner.x);
   vec2 outward = (aCorner.x < 0.5 ? -dir : dir) * ext;
   vec2 pos = endpoint + outward + nrm * (aCorner.y * hw);
+  // Convert the CPU-side data-space arc length into screen px using this
+  // segment own scale, so the pattern stays continuous across vertices.
+  float dataLen = length(aP1 - aP0);
+  vDash0 = dataLen > 1e-12 ? aDist * (len / dataLen) : 0.0;
   vPix = pos; vS0 = s0; vS1 = s1;
   gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
 }`;
@@ -81,9 +93,13 @@ precision highp float;
 in vec2 vPix;
 in vec2 vS0;
 in vec2 vS1;
+in float vDash0;
 uniform vec4 uColor;
 uniform float uWidth;
 uniform float uRound;
+uniform float uDash[8];
+uniform int uDashCount;
+uniform float uDashPeriod;
 out vec4 outColor;
 void main() {
   vec2 pa = vPix - vS0;
@@ -96,6 +112,17 @@ void main() {
   } else {
     if (t < 0.0 || t > 1.0) discard;             // butt caps
     d = length(pa - ba * t);
+  }
+  if (uDashCount > 0) {
+    float phase = mod(vDash0 + clamp(t, 0.0, 1.0) * length(ba), uDashPeriod);
+    float acc = 0.0;
+    bool on = true;
+    for (int i = 0; i < 8; i++) {
+      if (i >= uDashCount) break;
+      acc += uDash[i];
+      if (phase < acc) { on = (i - (i / 2) * 2) == 0; break; }
+    }
+    if (!on) discard;
   }
   float hw = uWidth * 0.5;
   float alpha = 1.0 - smoothstep(hw - 1.0, hw + 1.0, d);
@@ -255,6 +282,10 @@ export class LineLayer implements Layer {
   private joinStyle: LineJoin;
   private miterLimit: number;
   private decimateOn: boolean;
+  /** Dash pattern in CSS px (empty = solid) and its period. */
+  private dash: number[];
+  private dashPeriod: number;
+  private distBuf: WebGLBuffer;
   private monotonic: boolean;
   private gpuDec: GpuDecimator | null = null;
   private step?: "before" | "after" | "center";
@@ -277,7 +308,11 @@ export class LineLayer implements Layer {
     this.joinStyle = opts.join ?? "round";
     this.round = this.joinStyle === "round";
     this.miterLimit = opts.miterLimit ?? 4;
-    this.decimateOn = opts.decimate !== false;
+    this.dash = (opts.dash ?? []).filter((v) => v > 0).slice(0, 8);
+    this.dashPeriod = this.dash.reduce((a, b) => a + b, 0);
+    // A dashed line is an annotation, not a million-point series: decimating it
+    // would resample the vertices the dash phase is measured from.
+    this.decimateOn = opts.decimate !== false && this.dash.length === 0;
     this.step = opts.step;
     const colorInput = opts.color ?? "#3b82f6";
     this.color = Array.isArray(colorInput) ? (colorInput as Color) : parseColor(colorInput as string);
@@ -307,8 +342,16 @@ export class LineLayer implements Layer {
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
     this.count = n; this.monotonic = mono;
 
+    // Cumulative data-space arc length at each point; the vertex shader scales it
+    // into screen px per segment. Only needed when dashing.
+    const dists = new Float32Array(this.dash.length ? n : 0);
+    for (let i = 1; i < dists.length; i++) {
+      dists[i] = dists[i - 1]! + Math.hypot(data[i * 2]! - data[(i - 1) * 2]!, data[i * 2 + 1]! - data[(i - 1) * 2 + 1]!);
+    }
+
     this.cornerBuf = gl.createBuffer()!;
     this.posBuf = gl.createBuffer()!;
+    this.distBuf = gl.createBuffer()!;
     this.decBuf = gl.createBuffer()!;
     this.fullVao = gl.createVertexArray()!;
     this.decVao = gl.createVertexArray()!;
@@ -319,6 +362,8 @@ export class LineLayer implements Layer {
     gl.bufferData(gl.ARRAY_BUFFER, CORNERS, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
     gl.bufferData(gl.ARRAY_BUFFER, data, this.usage);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.distBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, dists, this.usage);
 
     this.configureVao(this.fullVao, this.posBuf);
     this.configureVao(this.decVao, this.decBuf);
@@ -327,6 +372,7 @@ export class LineLayer implements Layer {
 
     this.uniforms = uniformLocations(gl, this.program, [
       ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uWidth", "uRound",
+      "uDash[0]", "uDashCount", "uDashPeriod",
     ]);
     this.joinUniforms = uniformLocations(gl, this.joinProgram, [
       ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uWidth", "uMiter", "uMiterLimit",
@@ -364,6 +410,12 @@ export class LineLayer implements Layer {
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 8, 8);
     gl.vertexAttribDivisor(2, 1);
+    if (this.dash.length) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.distBuf);
+      gl.enableVertexAttribArray(3);
+      gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 4, 0);
+      gl.vertexAttribDivisor(3, 1);
+    }
     gl.bindVertexArray(null);
   }
 
@@ -415,7 +467,14 @@ export class LineLayer implements Layer {
       if (vy < minY) minY = vy; if (vy > maxY) maxY = vy;
     }
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
-    this.count = n; this.monotonic = mono; this.decKey = "";
+    this.count = n; this.monotonic = mono;
+
+    // Cumulative data-space arc length at each point; the vertex shader scales it
+    // into screen px per segment. Only needed when dashing.
+    const dists = new Float32Array(this.dash.length ? n : 0);
+    for (let i = 1; i < dists.length; i++) {
+      dists[i] = dists[i - 1]! + Math.hypot(data[i * 2]! - data[(i - 1) * 2]!, data[i * 2 + 1]! - data[(i - 1) * 2 + 1]!);
+    } this.decKey = "";
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.posBuf);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
     this.syncGpu(data, n);
@@ -482,6 +541,13 @@ export class LineLayer implements Layer {
     gl.uniform1f(this.uniforms.uWidth!, this.width * state.dpr);
     // round joins use the SDF cap extension; miter/bevel/butt draw plain rectangles.
     gl.uniform1f(this.uniforms.uRound!, this.round ? 1 : 0);
+    gl.uniform1i(this.uniforms.uDashCount!, this.dash.length);
+    if (this.dash.length) {
+      const scaled = new Float32Array(8);
+      for (let i = 0; i < this.dash.length; i++) scaled[i] = this.dash[i]! * state.dpr;
+      gl.uniform1fv(this.uniforms["uDash[0]"]!, scaled);
+      gl.uniform1f(this.uniforms.uDashPeriod!, this.dashPeriod * state.dpr);
+    }
     gl.bindVertexArray(vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, segments);
     gl.bindVertexArray(null);
@@ -510,6 +576,7 @@ export class LineLayer implements Layer {
     gl.deleteVertexArray(this.joinDecVao);
     gl.deleteBuffer(this.cornerBuf);
     gl.deleteBuffer(this.posBuf);
+    gl.deleteBuffer(this.distBuf);
     gl.deleteBuffer(this.decBuf);
   }
 }

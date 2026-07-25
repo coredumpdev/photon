@@ -5,7 +5,8 @@ import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
 
 /** A per-point error, given as one value for all points or an array. */
-type ErrInput = ArrayLike<number> | number;
+/** A per-point error array, or one value applied to every point. */
+export type ErrInput = ArrayLike<number> | number;
 
 export interface ErrorBarOptions {
   x: ArrayLike<number>;

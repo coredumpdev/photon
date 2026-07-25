@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import type { Color, Range, RenderType } from "../types.js";
@@ -18,7 +18,7 @@ export interface Quiver3DOptions {
   scale?: number;
   color?: string | Color;
   /** Color arrows by magnitude via a colormap. */
-  colorBy?: { colormap?: ColormapName; domain?: Range };
+  colorBy?: { colormap?: ColormapSpec; domain?: Range };
   /** Arrowhead length as a fraction of the arrow. Default 0.28. */
   headSize?: number;
   name?: string;

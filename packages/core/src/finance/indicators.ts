@@ -369,3 +369,175 @@ export function fibRetracements(high: number, low: number, ratios = [0, 0.236, 0
 }
 
 export { toF64 as toFloat64 };
+
+/**
+ * Commodity Channel Index: how far the typical price sits from its own moving
+ * average, scaled by mean deviation. ±100 is the conventional band.
+ */
+export function cci(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>, period = 20,
+): Float64Array {
+  const n = Math.min(high.length, low.length, close.length);
+  const out = new Float64Array(n).fill(NaN);
+  if (period <= 0 || n < period) return out;
+  const tp = new Float64Array(n);
+  for (let i = 0; i < n; i++) tp[i] = (high[i]! + low[i]! + close[i]!) / 3;
+  const avg = sma(tp, period);
+  for (let i = period - 1; i < n; i++) {
+    let dev = 0;
+    for (let k = i - period + 1; k <= i; k++) dev += Math.abs(tp[k]! - avg[i]!);
+    dev /= period;
+    out[i] = dev === 0 ? 0 : (tp[i]! - avg[i]!) / (0.015 * dev);
+  }
+  return out;
+}
+
+/**
+ * Money Flow Index — RSI weighted by volume, so a move on thin volume counts
+ * for less. 0..100, with 20/80 the usual oversold/overbought lines.
+ */
+export function mfi(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>,
+  volume: ArrayLike<number>, period = 14,
+): Float64Array {
+  const n = Math.min(high.length, low.length, close.length, volume.length);
+  const out = new Float64Array(n).fill(NaN);
+  if (period <= 0 || n <= period) return out;
+  const tp = new Float64Array(n);
+  for (let i = 0; i < n; i++) tp[i] = (high[i]! + low[i]! + close[i]!) / 3;
+  for (let i = period; i < n; i++) {
+    let pos = 0;
+    let neg = 0;
+    for (let k = i - period + 1; k <= i; k++) {
+      const flow = tp[k]! * volume[k]!;
+      if (tp[k]! > tp[k - 1]!) pos += flow;
+      else if (tp[k]! < tp[k - 1]!) neg += flow;
+    }
+    out[i] = neg === 0 ? 100 : 100 - 100 / (1 + pos / neg);
+  }
+  return out;
+}
+
+/** Williams %R: where the close sits in the `period` high-low range, as −100..0. */
+export function williamsR(
+  high: ArrayLike<number>, low: ArrayLike<number>, close: ArrayLike<number>, period = 14,
+): Float64Array {
+  const n = Math.min(high.length, low.length, close.length);
+  const out = new Float64Array(n).fill(NaN);
+  if (period <= 0 || n < period) return out;
+  for (let i = period - 1; i < n; i++) {
+    let hh = -Infinity;
+    let ll = Infinity;
+    for (let k = i - period + 1; k <= i; k++) {
+      if (high[k]! > hh) hh = high[k]!;
+      if (low[k]! < ll) ll = low[k]!;
+    }
+    const span = hh - ll;
+    out[i] = span === 0 ? 0 : ((hh - close[i]!) / span) * -100;
+  }
+  return out;
+}
+
+/** Aroon: how recently the `period` high and low were set, plus their difference. */
+export interface Aroon { up: Float64Array; down: Float64Array; oscillator: Float64Array }
+
+/**
+ * Aroon Up/Down — 100 means the extreme was set this bar, 0 means `period` bars
+ * ago. The oscillator (up − down) reads as trend strength and direction.
+ */
+export function aroon(high: ArrayLike<number>, low: ArrayLike<number>, period = 25): Aroon {
+  const n = Math.min(high.length, low.length);
+  const up = new Float64Array(n).fill(NaN);
+  const down = new Float64Array(n).fill(NaN);
+  const oscillator = new Float64Array(n).fill(NaN);
+  if (period <= 0 || n <= period) return { up, down, oscillator };
+  for (let i = period; i < n; i++) {
+    let hi = -Infinity, lo = Infinity, hIdx = i, lIdx = i;
+    for (let k = i - period; k <= i; k++) {
+      if (high[k]! >= hi) { hi = high[k]!; hIdx = k; }
+      if (low[k]! <= lo) { lo = low[k]!; lIdx = k; }
+    }
+    up[i] = ((period - (i - hIdx)) / period) * 100;
+    down[i] = ((period - (i - lIdx)) / period) * 100;
+    oscillator[i] = up[i]! - down[i]!;
+  }
+  return { up, down, oscillator };
+}
+
+/** Donchian Channels: the rolling `period` high/low and their midline (turtle breakout bands). */
+export function donchian(high: ArrayLike<number>, low: ArrayLike<number>, period = 20): Channel {
+  const n = Math.min(high.length, low.length);
+  const upper = new Float64Array(n).fill(NaN);
+  const lower = new Float64Array(n).fill(NaN);
+  const middle = new Float64Array(n).fill(NaN);
+  if (period <= 0 || n < period) return { middle, upper, lower };
+  for (let i = period - 1; i < n; i++) {
+    let hh = -Infinity;
+    let ll = Infinity;
+    for (let k = i - period + 1; k <= i; k++) {
+      if (high[k]! > hh) hh = high[k]!;
+      if (low[k]! < ll) ll = low[k]!;
+    }
+    upper[i] = hh;
+    lower[i] = ll;
+    middle[i] = (hh + ll) / 2;
+  }
+  return { middle, upper, lower };
+}
+
+/**
+ * Parabolic SAR — the trailing stop-and-reverse dots. `step` is the
+ * acceleration increment and `max` its ceiling (Wilder's 0.02 / 0.2).
+ */
+export function parabolicSar(
+  high: ArrayLike<number>, low: ArrayLike<number>, step = 0.02, max = 0.2,
+): Float64Array {
+  const n = Math.min(high.length, low.length);
+  const out = new Float64Array(n).fill(NaN);
+  if (n < 2) return out;
+  let rising = high[1]! >= high[0]!;
+  let sar = rising ? low[0]! : high[0]!;
+  let extreme = rising ? high[1]! : low[1]!;
+  let accel = step;
+  out[1] = sar;
+  for (let i = 2; i < n; i++) {
+    sar += accel * (extreme - sar);
+    // The SAR may never enter the previous two bars' range.
+    if (rising) sar = Math.min(sar, low[i - 1]!, low[i - 2]!);
+    else sar = Math.max(sar, high[i - 1]!, high[i - 2]!);
+    if (rising ? low[i]! < sar : high[i]! > sar) {
+      // Reverse: the stop becomes the extreme and a fresh trend starts.
+      rising = !rising;
+      sar = extreme;
+      extreme = rising ? high[i]! : low[i]!;
+      accel = step;
+    } else if (rising ? high[i]! > extreme : low[i]! < extreme) {
+      extreme = rising ? high[i]! : low[i]!;
+      accel = Math.min(max, accel + step);
+    }
+    out[i] = sar;
+  }
+  return out;
+}
+
+/** Classic floor-trader pivot levels for the next session. */
+export interface PivotLevels {
+  pivot: number;
+  r1: number; r2: number; r3: number;
+  s1: number; s2: number; s3: number;
+}
+
+/** Pivot points from one session's high/low/close, for the session that follows. */
+export function pivotPoints(high: number, low: number, close: number): PivotLevels {
+  const pivot = (high + low + close) / 3;
+  const range = high - low;
+  return {
+    pivot,
+    r1: 2 * pivot - low,
+    s1: 2 * pivot - high,
+    r2: pivot + range,
+    s2: pivot - range,
+    r3: high + 2 * (pivot - low),
+    s3: low - 2 * (high - pivot),
+  };
+}

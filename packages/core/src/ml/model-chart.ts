@@ -1,0 +1,513 @@
+/**
+ * Model-architecture diagrams built on existing layers:
+ *
+ *  - {@link addModelGraph} — a flat Netron-style DAG on a 2D {@link Plot}
+ *    (rounded boxes + orthogonal connectors, colored by layer family).
+ *  - {@link addModelGraph3D} — the "CNN explainer" view on a {@link Plot3D}:
+ *    one cuboid per layer, sized from its output tensor shape, chained along the
+ *    flow axis.
+ *
+ * Both consume the same {@link ModelGraph} and the same {@link modelLayout}, so a
+ * PyTorch / ONNX export renders identically in either dimension.
+ */
+import type { PatchesLayer } from "../layers/patches.js";
+import type { Patch } from "../layers/patches.js";
+import type { Plot } from "../plot.js";
+import type { Boxes3DLayer, Box3D } from "../plot3d/boxes3d.js";
+import type { Line3DLayer } from "../plot3d/line3d.js";
+import type { Plot3D } from "../plot3d/plot3d.js";
+import {
+  formatCount,
+  formatShape,
+  LAYER_COLORS,
+  modelBoxDims,
+  modelLayout,
+  type LayerCategory,
+  type ModelBoxSizing,
+  type ModelGraph,
+  type ModelLayoutOptions,
+  type ModelLayoutResult,
+  type ModelNode,
+  type ModelNodeBox,
+} from "./model.js";
+
+// --- Shared helpers ----------------------------------------------------------
+
+/** Category → color, with the caller's overrides merged over the defaults. */
+function colorTable(overrides?: Partial<Record<LayerCategory, string>>): Record<LayerCategory, string> {
+  return overrides ? { ...LAYER_COLORS, ...overrides } : LAYER_COLORS;
+}
+
+/** One-line summary of a layer: `"conv1 · Conv2d · 64×112×112 · 9.4K params"`. */
+function describeNode(node: ModelNode): string {
+  const parts = [node.name && node.name !== node.type ? `${node.name} · ${node.type}` : node.type];
+  const shape = formatShape(node.shape);
+  if (shape) parts.push(shape);
+  if (node.params) parts.push(`${formatCount(node.params)} params`);
+  if (node.flops) parts.push(`${formatCount(node.flops)} FLOPs`);
+  return parts.join(" · ");
+}
+
+// --- 2D: flat architecture graph ---------------------------------------------
+
+export interface ModelGraphOptions extends ModelLayoutOptions {
+  graph: ModelGraph;
+  /** Per-category color overrides (merged over {@link LAYER_COLORS}). */
+  colors?: Partial<Record<LayerCategory, string>>;
+  /** Box corner radius in data units. Default 0.14. */
+  cornerRadius?: number;
+  /** Connector thickness in data units. Default 0.05. */
+  edgeWidth?: number;
+  edgeColor?: string;
+  /** Arrowhead length in data units; 0 hides them. Default 0.18. */
+  arrowSize?: number;
+  /** Box fill opacity, 0..1. Default 0.9. */
+  opacity?: number;
+  /** What to write inside each box. Default `"full"`. */
+  labels?: "none" | "name" | "full";
+  labelColor?: string;
+  labelFont?: string;
+  subLabelColor?: string;
+  subLabelFont?: string;
+  /** Attach a hover tooltip with the layer's shape + parameter count. Default true. */
+  tooltip?: boolean;
+  /** Palette for the tooltip chrome. Default `"dark"`. */
+  theme?: "light" | "dark";
+  /** Blank the axes — a diagram has no meaningful coordinates. Default true. */
+  hideAxes?: boolean;
+  /** Legend name for the box layer. Omitted by default (diagrams use their own key). */
+  name?: string;
+}
+
+export interface ModelGraphHandle {
+  /** The computed layout — box centers, sizes, ranks and routed edge paths. */
+  layout: ModelLayoutResult;
+  /** Layer holding the layer boxes. */
+  nodes: PatchesLayer;
+  /** Layer holding the connectors (drawn beneath the boxes). */
+  edges: PatchesLayer;
+  /** The box containing a data-space point, or null. */
+  nodeAt(x: number, y: number): ModelNodeBox | null;
+  /** Remove the labels and tooltip this builder added (layers are yours to remove). */
+  destroy(): void;
+}
+
+/** A rounded rectangle as a polygon ring, CCW, with `seg` segments per corner. */
+function roundedRect(cx: number, cy: number, w: number, h: number, r: number, seg = 3): Patch {
+  const hw = w / 2;
+  const hh = h / 2;
+  const rad = Math.max(0, Math.min(r, hw, hh));
+  if (rad === 0) {
+    return { x: [cx - hw, cx + hw, cx + hw, cx - hw], y: [cy - hh, cy - hh, cy + hh, cy + hh] };
+  }
+  const corners: Array<[number, number, number]> = [
+    [cx + hw - rad, cy + hh - rad, 0],
+    [cx - hw + rad, cy + hh - rad, Math.PI / 2],
+    [cx - hw + rad, cy - hh + rad, Math.PI],
+    [cx + hw - rad, cy - hh + rad, (3 * Math.PI) / 2],
+  ];
+  const x: number[] = [];
+  const y: number[] = [];
+  for (const [ccx, ccy, a0] of corners) {
+    for (let i = 0; i <= seg; i++) {
+      const a = a0 + (Math.PI / 2) * (i / seg);
+      x.push(ccx + rad * Math.cos(a));
+      y.push(ccy + rad * Math.sin(a));
+    }
+  }
+  return { x, y };
+}
+
+/**
+ * A polyline segment as a quad, extended by half its thickness at both ends so
+ * consecutive segments overlap into a filled corner (the paths are orthogonal,
+ * so a square joint is exact).
+ */
+function segmentQuad(
+  x0: number, y0: number, x1: number, y1: number, thickness: number,
+): { x: number[]; y: number[] } | null {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-12) return null;
+  const ux = dx / len;
+  const uy = dy / len;
+  const half = thickness / 2;
+  const ax = x0 - ux * half;
+  const ay = y0 - uy * half;
+  const bx = x1 + ux * half;
+  const by = y1 + uy * half;
+  const nx = -uy * half;
+  const ny = ux * half;
+  return {
+    x: [ax + nx, bx + nx, bx - nx, ax - nx],
+    y: [ay + ny, by + ny, by - ny, ay - ny],
+  };
+}
+
+/** An arrowhead triangle whose tip sits at the path's final point. */
+function arrowHead(
+  x0: number, y0: number, x1: number, y1: number, size: number,
+): { x: number[]; y: number[] } | null {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-12 || size <= 0) return null;
+  const ux = dx / len;
+  const uy = dy / len;
+  const bx = x1 - ux * size;
+  const by = y1 - uy * size;
+  const wx = -uy * size * 0.45;
+  const wy = ux * size * 0.45;
+  return { x: [x1, bx + wx, bx - wx], y: [y1, by + wy, by - wy] };
+}
+
+/**
+ * Draw a model architecture as a flat layered graph. Boxes are colored by layer
+ * family, residual/skip connections route around the trunk, and each box shows
+ * its type, name and output shape.
+ *
+ * Pair it with `new Plot(el, { equalAspect: true, hover: false })` — the diagram
+ * is a schematic, so a square aspect and no series tooltip read best.
+ */
+export function addModelGraph(plot: Plot, opts: ModelGraphOptions): ModelGraphHandle {
+  const layout = modelLayout(opts.graph, opts);
+  const colors = colorTable(opts.colors);
+  const cornerRadius = opts.cornerRadius ?? 0.14;
+  const edgeWidth = opts.edgeWidth ?? 0.05;
+  const arrowSize = opts.arrowSize ?? 0.18;
+  const dark = (opts.theme ?? "dark") === "dark";
+  const edgeColor = opts.edgeColor ?? (dark ? "#64748b" : "#94a3b8");
+  const labelMode = opts.labels ?? "full";
+  const labelColor = opts.labelColor ?? (dark ? "#f1f5f9" : "#0f172a");
+  const subLabelColor = opts.subLabelColor ?? (dark ? "#cbd5e1" : "#475569");
+  const labelFont = opts.labelFont ?? "600 12px system-ui, -apple-system, sans-serif";
+  const subLabelFont = opts.subLabelFont ?? "10px system-ui, -apple-system, sans-serif";
+
+  // Connectors first so the boxes paint over their endpoints.
+  const edgePatches: Patch[] = [];
+  for (const e of layout.edges) {
+    for (let i = 1; i < e.points.length; i++) {
+      const a = e.points[i - 1]!;
+      const b = e.points[i]!;
+      const quad = segmentQuad(a.x, a.y, b.x, b.y, edgeWidth);
+      if (quad) edgePatches.push({ ...quad, color: edgeColor });
+    }
+    const last = e.points[e.points.length - 1]!;
+    const prev = e.points[e.points.length - 2];
+    if (prev) {
+      const head = arrowHead(prev.x, prev.y, last.x, last.y, arrowSize);
+      if (head) edgePatches.push({ ...head, color: edgeColor });
+    }
+  }
+  const edges = plot.addPatches({ patches: edgePatches, color: edgeColor });
+
+  const nodePatches: Patch[] = layout.nodes.map((b) => ({
+    ...roundedRect(b.x, b.y, b.w, b.h, cornerRadius),
+    color: colors[b.category],
+  }));
+  const nodes = plot.addPatches({
+    patches: nodePatches,
+    opacity: opts.opacity ?? 0.9,
+    ...(opts.name ? { name: opts.name } : {}),
+  });
+
+  // Text is Canvas2D (crisp at any zoom), placed in data space so it pans along.
+  const disposers: Array<() => void> = [];
+  if (labelMode !== "none") {
+    for (const b of layout.nodes) {
+      const lines: Array<{ text: string; sub: boolean }> = [];
+      if (labelMode === "name") {
+        lines.push({ text: b.node.name ?? b.node.type, sub: false });
+      } else {
+        lines.push({ text: b.node.type, sub: false });
+        const name = b.node.name ?? b.node.id;
+        if (name && name !== b.node.type) lines.push({ text: name, sub: true });
+        const detail = [formatShape(b.node.shape), b.node.params ? `${formatCount(b.node.params)}p` : ""]
+          .filter(Boolean)
+          .join("  ");
+        if (detail) lines.push({ text: detail, sub: true });
+      }
+      // Cap the line spacing at the unscaled box height: a `sizeBy`-inflated box
+      // should keep its label block tight, not spread it across the whole face.
+      const step = Math.min(b.h, opts.nodeHeight ?? 0.9) * 0.27;
+      const top = ((lines.length - 1) / 2) * step;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+        disposers.push(
+          plot.addAnnotation({
+            type: "label",
+            x: b.x,
+            y: b.y + top - i * step,
+            text: line.text,
+            align: "center",
+            color: line.sub ? subLabelColor : labelColor,
+            font: line.sub ? subLabelFont : labelFont,
+          }),
+        );
+      }
+    }
+  }
+
+  if (opts.hideAxes !== false) {
+    plot.setAxis("x", { ticks: [], showAxisLine: false });
+    plot.setAxis("y", { ticks: [], showAxisLine: false });
+  }
+
+  const nodeAt = (x: number, y: number): ModelNodeBox | null => {
+    for (let i = layout.nodes.length - 1; i >= 0; i--) {
+      const b = layout.nodes[i]!;
+      if (Math.abs(x - b.x) <= b.w / 2 && Math.abs(y - b.y) <= b.h / 2) return b;
+    }
+    return null;
+  };
+
+  // Purpose-built hover tooltip: the series tooltip has nothing useful to say
+  // about a diagram, so we hit-test the boxes directly.
+  let teardownTooltip = (): void => {};
+  if (opts.tooltip !== false) {
+    const host = plot.element;
+    const tip = document.createElement("div");
+    Object.assign(tip.style, {
+      position: "absolute",
+      display: "none",
+      zIndex: "7",
+      pointerEvents: "none",
+      padding: "6px 8px",
+      borderRadius: "6px",
+      font: "12px system-ui, -apple-system, sans-serif",
+      lineHeight: "1.45",
+      whiteSpace: "nowrap",
+      background: dark ? "rgba(15,23,42,0.94)" : "rgba(255,255,255,0.97)",
+      color: dark ? "#e2e8f0" : "#1e293b",
+      border: `1px solid ${dark ? "rgba(148,163,184,0.3)" : "rgba(100,116,139,0.3)"}`,
+      boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+    } as CSSStyleDeclaration);
+    host.appendChild(tip);
+
+    const hide = (): void => { tip.style.display = "none"; };
+    const move = (ev: PointerEvent): void => {
+      const data = plot.dataAt(ev.clientX, ev.clientY);
+      const box = data && nodeAt(data.x, data.y);
+      if (!box) { hide(); return; }
+      tip.replaceChildren();
+      const title = document.createElement("div");
+      title.textContent = box.node.name ?? box.node.id;
+      title.style.fontWeight = "600";
+      tip.appendChild(title);
+      const detail = document.createElement("div");
+      detail.style.opacity = "0.75";
+      detail.textContent = describeNode(box.node);
+      tip.appendChild(detail);
+      tip.style.display = "block";
+      const rect = host.getBoundingClientRect();
+      const lx = ev.clientX - rect.left;
+      const ly = ev.clientY - rect.top;
+      let left = lx + 14;
+      if (left + tip.offsetWidth > host.clientWidth) left = lx - tip.offsetWidth - 14;
+      let top = ly + 14;
+      if (top + tip.offsetHeight > host.clientHeight) top = ly - tip.offsetHeight - 14;
+      tip.style.left = `${Math.max(0, left)}px`;
+      tip.style.top = `${Math.max(0, top)}px`;
+    };
+    host.addEventListener("pointermove", move);
+    host.addEventListener("pointerleave", hide);
+    teardownTooltip = () => {
+      host.removeEventListener("pointermove", move);
+      host.removeEventListener("pointerleave", hide);
+      tip.remove();
+    };
+  }
+
+  return {
+    layout,
+    nodes,
+    edges,
+    nodeAt,
+    destroy(): void {
+      for (const d of disposers) d();
+      disposers.length = 0;
+      teardownTooltip();
+      teardownTooltip = () => {};
+    },
+  };
+}
+
+// --- 3D: tensor-shaped layer blocks ------------------------------------------
+
+export interface ModelGraph3DOptions extends ModelLayoutOptions, ModelBoxSizing {
+  graph: ModelGraph;
+  /** Per-category color overrides (merged over {@link LAYER_COLORS}). */
+  colors?: Partial<Record<LayerCategory, string>>;
+  /** Clear space between consecutive layer blocks along the flow axis. Default 1.1. */
+  rankSpacing?: number;
+  /** Lateral offset between branches that share a rank. Default 3. */
+  branchSpacing?: number;
+  /** Draw connectors between blocks. Default true. */
+  connectors?: boolean;
+  connectorColor?: string;
+  /** Block opacity, 0..1. Default 1. */
+  opacity?: number;
+  /**
+   * Text pinned above each block: `"name"` (default) the layer name, `"type"`
+   * its class, `"full"` the name above and the output shape below, `"none"` to
+   * rely on the hover tooltip alone.
+   */
+  labels?: "none" | "name" | "type" | "full";
+  labelColor?: string;
+  labelFont?: string;
+  subLabelColor?: string;
+  subLabelFont?: string;
+  name?: string;
+}
+
+/** Where one layer's cuboid ended up, in world space. */
+export interface ModelBlock {
+  node: ModelNode;
+  category: LayerCategory;
+  /** Center. */
+  x: number;
+  y: number;
+  z: number;
+  /** Full size: `w` along the flow axis, `h` up, `d` lateral. */
+  w: number;
+  h: number;
+  d: number;
+  rank: number;
+}
+
+export interface ModelGraph3DHandle {
+  boxes: Boxes3DLayer;
+  /** One polyline per drawn connector (empty when `connectors: false`). */
+  connectors: Line3DLayer[];
+  blocks: ModelBlock[];
+  /** Remove the labels this builder pinned (the layers are yours to remove). */
+  destroy(): void;
+}
+
+/**
+ * Draw a model as a chain of cuboids sized from each layer's output tensor: the
+ * visible face is the last two dims (H×W) and the thickness is everything before
+ * them (channels) — so a CNN reads as feature maps shrinking while depth grows.
+ * Blocks flow along +x, branches spread along z, and hovering one shows its
+ * shape and parameter count.
+ *
+ * Build the plot with `new Plot3D(el, { aspectMode: "data", showAxes: false })`
+ * — the default cube fit would stretch a long chain until the blocks lose their
+ * proportions, and a diagram has no axes to label.
+ */
+export function addModelGraph3D(plot: Plot3D, opts: ModelGraph3DOptions): ModelGraph3DHandle {
+  const { graph } = opts;
+  const layout = modelLayout(graph, opts);
+  const dims = modelBoxDims(graph.nodes, opts);
+  const colors = colorTable(opts.colors);
+  const rankSpacing = opts.rankSpacing ?? 1.1;
+  const branchSpacing = opts.branchSpacing ?? 3;
+
+  // Thickest block per rank, so ranks step by their real extent (never overlap).
+  const rankThickness = new Array<number>(layout.ranks).fill(0);
+  const rankCount = new Array<number>(layout.ranks).fill(0);
+  for (let i = 0; i < layout.nodes.length; i++) {
+    const r = layout.nodes[i]!.rank;
+    const t = dims[i]![0];
+    if (t > rankThickness[r]!) rankThickness[r] = t;
+    rankCount[r]!++;
+  }
+  const rankX = new Array<number>(layout.ranks).fill(0);
+  for (let r = 1; r < layout.ranks; r++) {
+    rankX[r] = rankX[r - 1]! + rankThickness[r - 1]! / 2 + rankSpacing + rankThickness[r]! / 2;
+  }
+
+  const blocks: ModelBlock[] = layout.nodes.map((b, i) => {
+    const [w, h, d] = dims[i]!;
+    const siblings = rankCount[b.rank]!;
+    return {
+      node: b.node,
+      category: b.category,
+      x: rankX[b.rank]!,
+      y: 0,
+      z: (b.order - (siblings - 1) / 2) * branchSpacing,
+      w,
+      h,
+      d,
+      rank: b.rank,
+    };
+  });
+
+  const boxes = plot.addBoxes3D({
+    boxes: blocks.map((b): Box3D => ({
+      x: b.x,
+      y: b.y,
+      z: b.z,
+      w: b.w,
+      h: b.h,
+      d: b.d,
+      color: colors[b.category],
+      label: describeNode(b.node),
+    })),
+    opacity: opts.opacity ?? 1,
+    ...(opts.name ? { name: opts.name } : {}),
+  });
+
+  // Text pinned in data space, so it tracks the blocks as the camera orbits.
+  const labelMode = opts.labels ?? "name";
+  const disposers: Array<() => void> = [];
+  if (labelMode !== "none") {
+    const labelColor = opts.labelColor ?? "#e2e8f0";
+    const subLabelColor = opts.subLabelColor ?? "#94a3b8";
+    const labelFont = opts.labelFont ?? "600 11px system-ui, -apple-system, sans-serif";
+    const subLabelFont = opts.subLabelFont ?? "9px system-ui, -apple-system, sans-serif";
+    for (const b of blocks) {
+      const head = labelMode === "type" ? b.node.type : (b.node.name ?? b.node.id);
+      disposers.push(plot.addLabel3D({
+        x: b.x, y: b.y + b.h / 2, z: b.z,
+        text: head,
+        color: labelColor,
+        font: labelFont,
+        dy: -10,
+        baseline: "bottom",
+      }));
+      const shape = labelMode === "full" ? formatShape(b.node.shape) : "";
+      if (shape) {
+        disposers.push(plot.addLabel3D({
+          x: b.x, y: b.y - b.h / 2, z: b.z,
+          text: shape,
+          color: subLabelColor,
+          font: subLabelFont,
+          dy: 10,
+          baseline: "top",
+        }));
+      }
+    }
+  }
+
+  const connectors: Line3DLayer[] = [];
+  if (opts.connectors !== false) {
+    const byId = new Map<string, ModelBlock>();
+    for (const b of blocks) byId.set(b.node.id, b);
+    const color = opts.connectorColor ?? "#64748b";
+    for (const e of graph.edges) {
+      const a = byId.get(e.from);
+      const b = byId.get(e.to);
+      if (!a || !b) continue;
+      const x0 = a.x + a.w / 2;
+      const x1 = b.x - b.w / 2;
+      const mid = (x0 + x1) / 2;
+      const straight = Math.abs(a.z - b.z) < 1e-9;
+      const xs = straight ? [x0, x1] : [x0, mid, mid, x1];
+      const ys = straight ? [a.y, b.y] : [a.y, a.y, b.y, b.y];
+      const zs = straight ? [a.z, b.z] : [a.z, a.z, b.z, b.z];
+      connectors.push(plot.addLine3D({ x: xs, y: ys, z: zs, color }));
+    }
+  }
+
+  return {
+    boxes,
+    connectors,
+    blocks,
+    destroy(): void {
+      for (const d of disposers) d();
+      disposers.length = 0;
+    },
+  };
+}

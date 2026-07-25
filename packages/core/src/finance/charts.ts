@@ -10,7 +10,7 @@ import type { LineLayer } from "../layers/line.js";
 import type { Plot } from "../plot.js";
 import type { Color, RenderType } from "../types.js";
 import { bollinger, firstFinite } from "./indicators.js";
-import { depth, heikinAshi, renko, volumeProfile, type Brick } from "./transforms.js";
+import { depth, drawdown, heikinAshi, renko, volumeProfile, type Brick, type Drawdown } from "./transforms.js";
 
 /** Raw OHLC input shared by the candle-style helpers. */
 export interface OhlcInput {
@@ -168,3 +168,52 @@ export function addDepth(plot: Plot, opts: DepthOptions): DepthHandle {
 }
 
 export type { Candle };
+
+export interface DrawdownOptions {
+  /** Equity / NAV series. */
+  equity: ArrayLike<number>;
+  /** X positions (epoch ms or bar indices). Defaults to `0..n-1`. */
+  x?: ArrayLike<number>;
+  /** Plot as percentages rather than fractions. Default true. */
+  percent?: boolean;
+  color?: string;
+  /** Mark the deepest point with a labelled annotation. Default true. */
+  markMax?: boolean;
+  name?: string;
+  yAxis?: string;
+  renderType?: RenderType;
+}
+
+export interface DrawdownHandle {
+  area: AreaLayer;
+  /** The computed underwater curve and its worst stretch. */
+  stats: Drawdown;
+}
+
+/**
+ * The underwater curve: how far below its running high-water mark an equity
+ * series sat, as a filled area hanging from zero. The companion pane to an
+ * equity curve — the number that decides whether a strategy is survivable.
+ */
+export function addDrawdown(plot: Plot, opts: DrawdownOptions): DrawdownHandle {
+  const stats = drawdown(opts.equity);
+  const n = stats.values.length;
+  const scale = opts.percent === false ? 1 : 100;
+  const x = opts.x ?? Float64Array.from({ length: n }, (_, i) => i);
+  const y = Float64Array.from(stats.values, (v) => v * scale);
+  const color = opts.color ?? "#ef4444";
+  const area = plot.addArea({
+    x, y, base: 0,
+    color,
+    name: opts.name ?? `drawdown · max ${(stats.maxDrawdown * scale).toFixed(opts.percent === false ? 3 : 1)}${opts.percent === false ? "" : "%"}`,
+    yAxis: opts.yAxis,
+    renderType: opts.renderType,
+  });
+  if ((opts.markMax ?? true) && stats.troughIndex >= 0) {
+    const tx = x[stats.troughIndex]!;
+    plot.addAnnotation({
+      type: "span", dim: "x", value: tx, color, width: 1, dash: [4, 4], yAxis: opts.yAxis,
+    });
+  }
+  return { area, stats };
+}

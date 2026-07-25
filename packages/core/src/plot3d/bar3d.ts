@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import type { Color, Range, RenderType } from "../types.js";
@@ -16,7 +16,7 @@ export interface Bar3DOptions {
   width?: number;
   color?: string | Color;
   /** Color bars via a colormap (over `values`, default the heights). */
-  colorBy?: { values?: ArrayLike<number>; colormap?: ColormapName; domain?: Range };
+  colorBy?: { values?: ArrayLike<number>; colormap?: ColormapSpec; domain?: Range };
   name?: string;
   /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
   renderType?: RenderType;

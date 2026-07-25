@@ -41,6 +41,8 @@ import {
   type Theme,
 } from "./render/overlay.js";
 import { canvasToBlob, copyCanvasToClipboard, downloadCanvas, type ExportOptions } from "./render/export.js";
+import { renderColorbars, type ColorbarOptions } from "./render/colorbar.js";
+import type { ColorInfo } from "./color/colormap.js";
 import type { PickMode } from "./layers/pick.js";
 import { LinearScale, makeScale, type Scale, type ScaleType } from "./scales/scale.js";
 import { createToolbar } from "./ui/toolbar.js";
@@ -70,6 +72,11 @@ export interface LegendOptions {
   border?: string;
   textColor?: string;
   font?: string;
+  /**
+   * Click a legend entry to show/hide its series (axes re-fit to what is left).
+   * Entries are focusable and respond to Enter/Space. Default true.
+   */
+  interactive?: boolean;
 }
 
 export interface YAxisOptions extends AxisConfig {
@@ -179,6 +186,13 @@ export interface PlotOptions {
   title?: string | PlotTitleOptions;
   /** Show a legend of named series. `true` uses defaults; pass an object to place/style it. */
   legend?: boolean | LegendOptions;
+  /**
+   * Show a colorbar for every layer that maps values to colours (heatmap,
+   * hexbin, contour, choropleth patches, `colorBy` scatter/quiver). Enabled by
+   * default — a colour scale nobody can read is not a scale. Pass `false` to
+   * suppress it, or an object to place/style it.
+   */
+  colorbar?: boolean | ColorbarOptions;
   margin?: Partial<Layout["margin"]>;
   /** Enable wheel-zoom and drag interaction. Default true. */
   interactive?: boolean;
@@ -242,6 +256,8 @@ interface YAxisState {
 
 const DEFAULT_MARGIN = { top: 16, right: 16, bottom: 40, left: 56 };
 const Y_AXIS_GAP = 52;
+/** Right-margin space reserved for the colorbar (bar + tick labels). */
+const COLORBAR_GAP = 62;
 /** Extra top margin reserved for the plot title when one is set. */
 const TITLE_RESERVE = 28;
 
@@ -385,6 +401,11 @@ export class Plot {
   private title: PlotTitleOptions | null;
   private legend: LegendOptions | null;
   private legendDiv: HTMLDivElement;
+  private colorbar: ColorbarOptions | null;
+  private colorbarDiv: HTMLDivElement;
+  /** Ids of layers hidden via the legend / {@link setLayerVisible}. */
+  private hidden = new Set<string>();
+  private visibilityCbs: Array<(layer: Layer, visible: boolean) => void> = [];
 
   constructor(container: HTMLElement, options: PlotOptions = {}) {
     this.container = container;
@@ -441,6 +462,7 @@ export class Plot {
       typeof options.title === "string" ? { text: options.title } : (options.title ?? null);
     this.updateAria();
     this.legend = options.legend === true ? {} : (options.legend || null);
+    this.colorbar = options.colorbar === false ? null : (options.colorbar === true || options.colorbar == null ? {} : options.colorbar);
     this.mode = options.mode ?? "pan";
     this.hoverEnabled = options.hover !== false;
     this.pickMode = options.pick ?? "x";
@@ -518,6 +540,19 @@ export class Plot {
     } as CSSStyleDeclaration);
     container.appendChild(this.legendDiv);
 
+    // Colorbar (a DOM overlay too; positioned in the reserved side margin).
+    this.colorbarDiv = document.createElement("div");
+    Object.assign(this.colorbarDiv.style, {
+      position: "absolute",
+      display: "none",
+      zIndex: "3",
+      pointerEvents: "none",
+      flexDirection: "column",
+      gap: "10px",
+      justifyContent: "center",
+    } as CSSStyleDeclaration);
+    container.appendChild(this.colorbarDiv);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -573,8 +608,44 @@ export class Plot {
       top: this.baseMargin.top + (this.title ? TITLE_RESERVE : 0),
       bottom: this.baseMargin.bottom,
       left: this.baseMargin.left + Math.max(0, leftCount - 1) * Y_AXIS_GAP,
-      right: this.baseMargin.right + rightCount * Y_AXIS_GAP,
+      right: this.baseMargin.right + rightCount * Y_AXIS_GAP + (this.colorInfos().length ? COLORBAR_GAP : 0),
     };
+  }
+
+  /** Colour scales reported by the layers, in draw order. */
+  private colorInfos(): ColorInfo[] {
+    if (!this.colorbar) return [];
+    const out: ColorInfo[] = [];
+    for (const l of this.layers) {
+      if (this.hidden.has(l.id)) continue;
+      const info = l.colorInfo?.();
+      if (info) out.push(info);
+    }
+    return out;
+  }
+
+  /** Rebuild + place the colorbar stack in the reserved side margin. */
+  private updateColorbars(region: ReturnType<typeof plotRegion>): void {
+    const infos = this.colorInfos();
+    const cfg = this.colorbar;
+    if (!cfg || infos.length === 0) {
+      this.colorbarDiv.style.display = "none";
+      return;
+    }
+    renderColorbars(this.colorbarDiv, infos, cfg, {
+      text: cfg.textColor ?? this.theme.text,
+      border: cfg.borderColor ?? this.theme.axis,
+      font: cfg.font ?? "10px system-ui, -apple-system, sans-serif",
+    }, region.height);
+    // Sit just outside the plot region, on the far side of any extra y axes.
+    let rightAxes = 0;
+    for (const ya of this.yAxes.values()) if (ya.side === "right") rightAxes++;
+    const left = cfg.position === "left"
+      ? Math.max(4, region.left - COLORBAR_GAP + 8)
+      : region.left + region.width + rightAxes * Y_AXIS_GAP + 12;
+    this.colorbarDiv.style.left = `${left}px`;
+    this.colorbarDiv.style.top = `${region.top}px`;
+    this.colorbarDiv.style.height = `${region.height}px`;
   }
 
   private layout(): Layout {
@@ -651,6 +722,15 @@ export class Plot {
   /** The shared WebGL2 context, for constructing custom layers. */
   get context(): WebGL2RenderingContext {
     return this.gl;
+  }
+
+  /**
+   * The container this plot renders into (already `position: relative`), for
+   * custom overlays — a chart-specific tooltip, a colorbar, a caption. Append
+   * absolutely-positioned children with `zIndex >= 3` to sit above the canvases.
+   */
+  get element(): HTMLElement {
+    return this.container;
   }
 
   /**
@@ -1185,6 +1265,7 @@ export class Plot {
     const i = this.layers.indexOf(layer);
     if (i >= 0) {
       this.layers.splice(i, 1);
+      this.hidden.delete(layer.id);
       layer.dispose();
       this.autoscale();
       this.requestRender();
@@ -1332,6 +1413,7 @@ export class Plot {
     if (this.autoX) {
       let minX = Infinity, maxX = -Infinity, any = false;
       for (const l of this.layers) {
+        if (this.hidden.has(l.id)) continue;
         const b = l.bounds();
         if (!b) continue;
         any = true;
@@ -1345,7 +1427,7 @@ export class Plot {
       if (!ya.auto) continue;
       let minY = Infinity, maxY = -Infinity, any = false;
       for (const l of this.layers) {
-        if (l.yAxis !== ya.id) continue;
+        if (l.yAxis !== ya.id || this.hidden.has(l.id)) continue;
         const b = l.bounds();
         if (!b) continue;
         any = true;
@@ -1364,6 +1446,7 @@ export class Plot {
     this.tooltip.remove();
     this.infoBox.remove();
     this.legendDiv.remove();
+    this.colorbarDiv.remove();
     for (const l of this.layers) l.dispose();
     this.container.removeChild(this.gridCanvas);
     this.container.removeChild(this.dataCanvas);
@@ -1468,6 +1551,7 @@ export class Plot {
       log: this.scaleX.log,
     };
     for (const layer of this.layers) {
+      if (this.hidden.has(layer.id)) continue;
       const ya = this.yAxes.get(layer.yAxis)!;
       layer.draw({
         gl,
@@ -1533,21 +1617,53 @@ export class Plot {
 
     // Legend of named series.
     this.updateLegend(region);
+    // Colorbars for any value-mapped layers.
+    this.updateColorbars(region);
   }
 
   /** Named series that can appear in the legend: any layer exposing name + colorCss. */
-  private legendEntries(): Array<{ name: string; colorCss: string }> {
-    const out: Array<{ name: string; colorCss: string }> = [];
+  private legendEntries(): Array<{ layer: Layer; name: string; colorCss: string }> {
+    const out: Array<{ layer: Layer; name: string; colorCss: string }> = [];
     for (const l of this.layers) {
       const a = l as Partial<{ name: string; colorCss: string; id: string }>;
       // Skip layers left with their auto id (name === id) — only explicitly
       // named series belong in the legend, so a builder's helper layers (fills,
       // ICE curves, raw pre-smoothing lines) don't clutter it.
       if (typeof a.name === "string" && a.name && a.name !== a.id && typeof a.colorCss === "string") {
-        out.push({ name: a.name, colorCss: a.colorCss });
+        out.push({ layer: l, name: a.name, colorCss: a.colorCss });
       }
     }
     return out;
+  }
+
+  // ---- Series visibility ----------------------------------------------------
+
+  /** Whether a layer is currently drawn (hidden layers also drop out of autoscale). */
+  isLayerVisible(layer: Layer): boolean {
+    return !this.hidden.has(layer.id);
+  }
+
+  /** Show or hide a layer, re-fitting the auto axes to what remains visible. */
+  setLayerVisible(layer: Layer, visible: boolean): void {
+    const changed = visible ? this.hidden.delete(layer.id) : (this.hidden.add(layer.id), true);
+    if (!changed) return;
+    this.autoscale();
+    this.updateAria();
+    this.requestRender();
+    for (const cb of this.visibilityCbs) cb(layer, visible);
+  }
+
+  /** Flip a layer's visibility. Returns the new state. */
+  toggleLayer(layer: Layer): boolean {
+    const next = !this.isLayerVisible(layer);
+    this.setLayerVisible(layer, next);
+    return next;
+  }
+
+  /** Subscribe to show/hide changes (legend clicks included). Returns an unsubscribe fn. */
+  onVisibilityChange(cb: (layer: Layer, visible: boolean) => void): () => void {
+    this.visibilityCbs.push(cb);
+    return () => { this.visibilityCbs = this.visibilityCbs.filter((f) => f !== cb); };
   }
 
   /** Rebuild and position the legend overlay (or hide it). */
@@ -1568,8 +1684,12 @@ export class Plot {
     div.style.flexDirection = horizontal ? "row" : "column";
     div.style.gap = horizontal ? "12px" : "3px";
 
+    const interactive = cfg.interactive !== false;
+    div.style.pointerEvents = interactive ? "auto" : "none";
+
     div.replaceChildren();
     for (const e of entries) {
+      const visible = this.isLayerVisible(e.layer);
       const row = document.createElement("div");
       row.style.display = "flex";
       row.style.alignItems = "center";
@@ -1579,13 +1699,31 @@ export class Plot {
         width: "10px",
         height: "10px",
         borderRadius: "2px",
-        background: e.colorCss,
+        background: visible ? e.colorCss : "transparent",
+        border: `1px solid ${e.colorCss}`,
+        boxSizing: "border-box",
         flex: "0 0 auto",
       } as CSSStyleDeclaration);
       const label = document.createElement("span");
       label.textContent = e.name;
       row.appendChild(swatch);
       row.appendChild(label);
+      if (interactive) {
+        row.style.cursor = "pointer";
+        row.style.opacity = visible ? "1" : "0.45";
+        row.style.userSelect = "none";
+        row.tabIndex = 0;
+        row.setAttribute("role", "switch");
+        row.setAttribute("aria-checked", String(visible));
+        row.setAttribute("aria-label", `${e.name} series`);
+        row.addEventListener("click", () => this.toggleLayer(e.layer));
+        row.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            this.toggleLayer(e.layer);
+          }
+        });
+      }
       div.appendChild(row);
     }
 
@@ -1756,7 +1894,7 @@ export class Plot {
 
     const rows: Array<{ layer: Pickable; x: number; y: number }> = [];
     for (const layer of this.layers) {
-      if (!isPickable(layer)) continue;
+      if (!isPickable(layer) || this.hidden.has(layer.id)) continue;
       const ya = this.yAxes.get(layer.yAxis)!;
       const project = (x: number, y: number): [number, number] => [
         pxX(region, this.scaleX.norm(x)),
@@ -2133,7 +2271,7 @@ export class Plot {
     let hit: { layer: Pickable; x: number; y: number; index: number } | null = null;
     let hitDist = Infinity;
     for (const layer of this.layers) {
-      if (!isPickable(layer)) continue;
+      if (!isPickable(layer) || this.hidden.has(layer.id)) continue;
       const ya = this.yAxes.get(layer.yAxis)!;
       const project = (x: number, y: number): [number, number] => [
         pxX(region, this.scaleX.norm(x)),

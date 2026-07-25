@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import type { Range, RenderType } from "../types.js";
 import type { Bounds3, ColorInfo, Layer3D } from "./layer3d.js";
@@ -12,7 +12,7 @@ export interface SurfaceOptions {
   /** World extent of the grid footprint. Defaults to unit indices. */
   extentX?: Range;
   extentZ?: Range;
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Series name (colorbar label / legend). */
   name?: string;
   /** Render the grid as a wireframe (lines) instead of a lit filled surface. */
@@ -84,7 +84,7 @@ export class SurfaceLayer implements Layer3D {
   private uniforms: Record<string, WebGLUniformLocation | null>;
   private vertexCount!: number;
   private b3!: Bounds3;
-  private cmapName: ColormapName;
+  private cmapName: ColormapSpec;
   private vDomain: Range = [0, 1];
   private wireframe: boolean;
   private cols!: number;

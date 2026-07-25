@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { parseColor } from "../gl/context.js";
 import { bufferUsage, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_UNIFORMS } from "../gl/transform.js";
@@ -17,7 +17,7 @@ export interface PieOptions {
   /** Explicit per-slice colors; falls back to `colormap`, then a default palette. */
   colors?: (string | Color)[];
   /** Color slices by index through this colormap instead of the palette. */
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Center in data space. Default `[0, 0]`. */
   center?: [number, number];
   /** Outer radius in data units. Default `1`. */

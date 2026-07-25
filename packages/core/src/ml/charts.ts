@@ -5,7 +5,8 @@
  * `ml/reduce.ts` — the same free-function style as the finance builders. No new
  * WebGL layers. Import from `@photonviz/core`.
  */
-import type { ColormapName } from "../color/colormap.js";
+import type { ColormapSpec } from "../color/colormap.js";
+import { DEFAULT_PALETTE, palette as resolvePalette, type PaletteSpec } from "../color/palettes.js";
 import type { AreaLayer } from "../layers/area.js";
 import type { BarLayer } from "../layers/bar.js";
 import type { HeatmapLayer } from "../layers/heatmap.js";
@@ -15,14 +16,12 @@ import type { Plot } from "../plot.js";
 import { kde } from "../stats/index.js";
 import type { Range, RenderType } from "../types.js";
 import {
-  calibrationCurve, confusionMatrix, emaSmooth, prCurve, rocCurve,
+  calibrationCurve, confusionMatrix, emaSmooth, liftCurve, prCurve, r2, rocCurve,
 } from "./metrics.js";
 
 /** tab10 categorical palette, cycled by class index. */
-export const ML_PALETTE: readonly string[] = [
-  "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
-  "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
-];
+/** Series/class colours for the ML builders. Aliases the shared {@link DEFAULT_PALETTE} (Tableau 10). */
+export const ML_PALETTE: readonly string[] = DEFAULT_PALETTE;
 
 // ── Classification evaluation ────────────────────────────────────────────────
 
@@ -31,7 +30,7 @@ export interface ConfusionMatrixOptions {
   yPred: ArrayLike<number>;
   /** Number of classes; inferred from the labels when omitted. */
   classes?: number;
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Shade by row-normalized recall instead of raw counts. Default false. */
   normalize?: boolean;
   /** Draw the value inside each cell. Default true. */
@@ -166,8 +165,8 @@ export interface EmbeddingOptions {
   classNames?: string[];
   /** Continuous value per point → a single colormap series (ignored if `labels`). */
   colorBy?: ArrayLike<number>;
-  colormap?: ColormapName;
-  palette?: readonly string[];
+  colormap?: ColormapSpec;
+  palette?: PaletteSpec;
   size?: number;
   /** Per-point hover text (metadata). */
   text?: ArrayLike<string>;
@@ -194,7 +193,7 @@ export function addEmbedding(plot: Plot, opts: EmbeddingOptions): EmbeddingHandl
       })],
     };
   }
-  return { layers: [plot.addScatter({ x: opts.x, y: opts.y, size, color: (opts.palette ?? ML_PALETTE)[0], name: opts.name, labels: opts.text, renderType: opts.renderType })] };
+  return { layers: [plot.addScatter({ x: opts.x, y: opts.y, size, color: resolvePalette(opts.palette ?? ML_PALETTE)[0], name: opts.name, labels: opts.text, renderType: opts.renderType })] };
 }
 
 export interface DecisionBoundaryOptions {
@@ -203,7 +202,7 @@ export interface DecisionBoundaryOptions {
   cols: number;
   rows: number;
   extent: { x: Range; y: Range };
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   domain?: Range;
   /** Training points drawn over the field. */
   points?: {
@@ -211,7 +210,7 @@ export interface DecisionBoundaryOptions {
     y: ArrayLike<number>;
     labels?: ArrayLike<number> | string[];
     classNames?: string[];
-    palette?: readonly string[];
+    palette?: PaletteSpec;
     size?: number;
   };
 }
@@ -275,7 +274,7 @@ export interface ShapBeeswarmOptions {
   names: string[];
   /** Feature values (same shape) → point color via a diverging colormap. */
   featureValues?: number[][];
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   size?: number;
   /** Vertical spread of each feature band, 0..1. Default 0.8. */
   spread?: number;
@@ -348,7 +347,7 @@ export interface AttentionMapOptions {
   /** Required with a flat `weights`. */
   queries?: number;
   keys?: number;
-  colormap?: ColormapName;
+  colormap?: ColormapSpec;
   /** Draw each weight in its cell (small maps only). Default false. */
   annotate?: boolean;
 }
@@ -393,7 +392,7 @@ export interface TrainingCurvesOptions {
   /** Mark the best epoch of each series. */
   best?: "min" | "max";
   width?: number;
-  palette?: readonly string[];
+  palette?: PaletteSpec;
   renderType?: RenderType;
 }
 export interface TrainingCurvesHandle { raw: LineLayer[]; smoothed: LineLayer[]; }
@@ -404,7 +403,7 @@ export interface TrainingCurvesHandle { raw: LineLayer[]; smoothed: LineLayer[];
  * marks the best epoch. Pair with `renderType: "dynamic"` for live updates.
  */
 export function addTrainingCurves(plot: Plot, opts: TrainingCurvesOptions): TrainingCurvesHandle {
-  const palette = opts.palette ?? ML_PALETTE;
+  const palette = resolvePalette(opts.palette ?? ML_PALETTE);
   const smoothing = opts.smoothing ?? 0.6;
   const width = opts.width ?? 2;
   const raw: LineLayer[] = [], smoothed: LineLayer[] = [];
@@ -439,7 +438,7 @@ export interface RidgelineOptions {
   points?: number;
   /** Ridge overlap, 0 = touching, 1 = one full row of overlap. Default 1. */
   overlap?: number;
-  palette?: readonly string[];
+  palette?: PaletteSpec;
   /** Fill each ridge. Default true. */
   fill?: boolean;
   /** Shared x-range; inferred from the data when omitted. */
@@ -463,7 +462,7 @@ export function addRidgeline(plot: Plot, opts: RidgelineOptions): RidgelineHandl
   }
   if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo === hi) { lo = (lo || 0) - 1; hi = (hi || 0) + 1; }
   const points = opts.points ?? 96;
-  const palette = opts.palette ?? ML_PALETTE;
+  const palette = resolvePalette(opts.palette ?? ML_PALETTE);
   const height = 1 + Math.max(0, opts.overlap ?? 1);
   const areas: AreaLayer[] = [], lines: LineLayer[] = [];
   g.forEach((grp, i) => {
@@ -523,9 +522,10 @@ function scatterByClass(
   plot: Plot,
   x: ArrayLike<number>, y: ArrayLike<number>,
   labels?: ArrayLike<number> | string[], classNames?: string[],
-  palette: readonly string[] = ML_PALETTE, size = 4,
+  paletteSpec: PaletteSpec = ML_PALETTE, size = 4,
   text?: ArrayLike<string>, renderType?: RenderType,
 ): ScatterLayer[] {
+  const palette = resolvePalette(paletteSpec);
   const n = Math.min(x.length, y.length);
   if (!labels) return [plot.addScatter({ x, y, size, color: palette[0], labels: text, renderType })];
   // Unique labels in ascending (numeric) / first-seen (string) order.
@@ -559,4 +559,213 @@ function withAlpha(color: string, alpha: number): string {
     return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${alpha})`;
   }
   return color;
+}
+
+// ── Regression diagnostics ───────────────────────────────────────────────────
+
+export interface PredVsActualOptions {
+  yTrue: ArrayLike<number>;
+  yPred: ArrayLike<number>;
+  color?: string;
+  /** Colour of the y = x reference. */
+  referenceColor?: string;
+  size?: number;
+  name?: string;
+  renderType?: RenderType;
+}
+
+export interface PredVsActualHandle {
+  points: ScatterLayer;
+  reference: LineLayer;
+  r2: number;
+}
+
+/**
+ * Predicted against actual, with the y = x line a perfect model would sit on.
+ * The gap between the cloud and that line *is* the error, which is why this
+ * reads better than a lone R² number.
+ */
+export function addPredVsActual(plot: Plot, opts: PredVsActualOptions): PredVsActualHandle {
+  const n = Math.min(opts.yTrue.length, opts.yPred.length);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < n; i++) {
+    lo = Math.min(lo, opts.yTrue[i]!, opts.yPred[i]!);
+    hi = Math.max(hi, opts.yTrue[i]!, opts.yPred[i]!);
+  }
+  if (!Number.isFinite(lo)) { lo = 0; hi = 1; }
+  // The reference goes down first so the points paint over it.
+  const reference = plot.addLine({
+    x: Float64Array.from([lo, hi]),
+    y: Float64Array.from([lo, hi]),
+    color: opts.referenceColor ?? "#64748b",
+    width: 1.5,
+    dash: [6, 4],
+  });
+  const points = plot.addScatter({
+    x: opts.yTrue,
+    y: opts.yPred,
+    size: opts.size ?? 4,
+    color: opts.color ?? ML_PALETTE[0],
+    name: opts.name ?? `predictions · R²=${r2(opts.yTrue, opts.yPred).toFixed(3)}`,
+    renderType: opts.renderType,
+  });
+  return { points, reference, r2: r2(opts.yTrue, opts.yPred) };
+}
+
+export interface ResidualsOptions {
+  yTrue: ArrayLike<number>;
+  yPred: ArrayLike<number>;
+  /** Plot residuals against `"predicted"` (default) or `"index"` (order in the data). */
+  against?: "predicted" | "index";
+  color?: string;
+  size?: number;
+  name?: string;
+  renderType?: RenderType;
+}
+
+export interface ResidualsHandle {
+  points: ScatterLayer;
+  zero: LineLayer;
+  residuals: Float64Array;
+}
+
+/**
+ * Residuals (actual − predicted) against the prediction or the sample order,
+ * with a zero line. Structure here — a curve, a fan, a drift — means the model
+ * is missing something, which no single score will tell you.
+ */
+export function addResiduals(plot: Plot, opts: ResidualsOptions): ResidualsHandle {
+  const n = Math.min(opts.yTrue.length, opts.yPred.length);
+  const residuals = new Float64Array(n);
+  const xs = new Float64Array(n);
+  const byIndex = opts.against === "index";
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < n; i++) {
+    residuals[i] = opts.yTrue[i]! - opts.yPred[i]!;
+    xs[i] = byIndex ? i : opts.yPred[i]!;
+    if (xs[i]! < lo) lo = xs[i]!;
+    if (xs[i]! > hi) hi = xs[i]!;
+  }
+  if (!Number.isFinite(lo)) { lo = 0; hi = 1; }
+  const zero = plot.addLine({
+    x: Float64Array.from([lo, hi]),
+    y: Float64Array.from([0, 0]),
+    color: "#64748b",
+    width: 1.5,
+    dash: [6, 4],
+  });
+  const points = plot.addScatter({
+    x: xs,
+    y: residuals,
+    size: opts.size ?? 4,
+    color: opts.color ?? ML_PALETTE[2],
+    name: opts.name ?? "residuals",
+    renderType: opts.renderType,
+  });
+  return { points, zero, residuals };
+}
+
+// ── Ranking / targeting ──────────────────────────────────────────────────────
+
+export interface LiftCurveOptions {
+  scores: ArrayLike<number>;
+  labels: ArrayLike<number>;
+  /** `"gain"` (default) plots cumulative gain; `"lift"` plots the ratio over random. */
+  mode?: "gain" | "lift";
+  color?: string;
+  /** Colour of the random-baseline reference. */
+  baselineColor?: string;
+  width?: number;
+  name?: string;
+  renderType?: RenderType;
+}
+
+export interface LiftCurveHandle {
+  line: LineLayer;
+  baseline: LineLayer;
+  positives: number;
+}
+
+/**
+ * Cumulative gain (or lift) against the fraction of the population targeted,
+ * with the random baseline for reference — how a churn or marketing model is
+ * actually judged: "contact the top 20%, capture what share of the positives?"
+ */
+export function addLiftCurve(plot: Plot, opts: LiftCurveOptions): LiftCurveHandle {
+  const curve = liftCurve(opts.scores, opts.labels);
+  const gainMode = (opts.mode ?? "gain") === "gain";
+  const baseline = plot.addLine({
+    x: Float64Array.from([0, 1]),
+    y: gainMode ? Float64Array.from([0, 1]) : Float64Array.from([1, 1]),
+    color: opts.baselineColor ?? "#64748b",
+    width: 1.5,
+    dash: [6, 4],
+    name: "random",
+  });
+  const line = plot.addLine({
+    x: curve.fraction,
+    y: gainMode ? curve.gain : curve.lift,
+    color: opts.color ?? ML_PALETTE[0],
+    width: opts.width ?? 2,
+    name: opts.name ?? (gainMode ? "cumulative gain" : "lift"),
+    renderType: opts.renderType,
+  });
+  return { line, baseline, positives: curve.positives };
+}
+
+export interface LearningCurveOptions {
+  /** Training-set sizes the scores were measured at. */
+  sizes: ArrayLike<number>;
+  /** Mean training score per size. */
+  train: ArrayLike<number>;
+  /** Mean validation score per size. */
+  validation: ArrayLike<number>;
+  /** Optional ± spread per size (e.g. std across CV folds), drawn as bands. */
+  trainStd?: ArrayLike<number>;
+  validationStd?: ArrayLike<number>;
+  trainColor?: string;
+  validationColor?: string;
+  width?: number;
+  renderType?: RenderType;
+}
+
+export interface LearningCurveHandle {
+  train: LineLayer;
+  validation: LineLayer;
+  bands: AreaLayer[];
+}
+
+/**
+ * Score against training-set size for train and validation, with optional
+ * cross-validation spread bands. A gap that stays wide means variance (get more
+ * data); two curves that meet low mean bias (get a bigger model).
+ */
+export function addLearningCurve(plot: Plot, opts: LearningCurveOptions): LearningCurveHandle {
+  const trainColor = opts.trainColor ?? ML_PALETTE[0]!;
+  const valColor = opts.validationColor ?? ML_PALETTE[1]!;
+  const bands: AreaLayer[] = [];
+  const addBand = (mean: ArrayLike<number>, std: ArrayLike<number> | undefined, color: string): void => {
+    if (!std) return;
+    const n = Math.min(mean.length, std.length);
+    const upper = new Float64Array(n);
+    const lower = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      upper[i] = mean[i]! + std[i]!;
+      lower[i] = mean[i]! - std[i]!;
+    }
+    bands.push(plot.addArea({ x: opts.sizes, y: upper, base: lower, color: `${color}33`, renderType: opts.renderType }));
+  };
+  addBand(opts.train, opts.trainStd, trainColor);
+  addBand(opts.validation, opts.validationStd, valColor);
+  const train = plot.addLine({
+    x: opts.sizes, y: opts.train, color: trainColor, width: opts.width ?? 2,
+    name: "train", renderType: opts.renderType,
+  });
+  const validation = plot.addLine({
+    x: opts.sizes, y: opts.validation, color: valColor, width: opts.width ?? 2,
+    name: "validation", renderType: opts.renderType,
+  });
+  return { train, validation, bands };
 }

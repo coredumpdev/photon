@@ -4,6 +4,7 @@
  * centered label per stage. Import from `@photonviz/core`.
  */
 import { type Patch, type PatchesLayer } from "../layers/patches.js";
+import { DEFAULT_PALETTE, palette as resolvePalette, type PaletteSpec } from "../color/palettes.js";
 import type { Plot } from "../plot.js";
 import type { RenderType } from "../types.js";
 
@@ -34,10 +35,8 @@ export interface FunnelLayoutOptions {
 }
 
 /** tab10-ish default palette, cycled by index for stages without a color. */
-export const FUNNEL_PALETTE: readonly string[] = [
-  "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
-  "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
-];
+/** Stage colours when an item has no explicit `color`. Aliases the shared {@link DEFAULT_PALETTE} (Tableau 10). */
+export const FUNNEL_PALETTE: readonly string[] = DEFAULT_PALETTE;
 
 /**
  * Funnel layout: centered trapezoids stacked top-to-bottom, each stage's top
@@ -85,7 +84,7 @@ export interface FunnelOptions {
   height?: number;
   neck?: number;
   /** Palette cycled by index for stages lacking a `color`. Defaults to {@link FUNNEL_PALETTE}. */
-  colors?: string[];
+  colors?: PaletteSpec;
   opacity?: number;
   name?: string;
   renderType?: RenderType;
@@ -98,7 +97,7 @@ export interface FunnelOptions {
  * labels. Composes {@link Plot.addPatches} — low-risk, no new layer type.
  */
 export function addFunnel(plot: Plot, opts: FunnelOptions): PatchesLayer {
-  const palette = opts.colors && opts.colors.length ? opts.colors : FUNNEL_PALETTE;
+  const palette = resolvePalette(opts.colors ?? FUNNEL_PALETTE);
   const stages = funnelLayout(opts.items, opts);
 
   const patches: Patch[] = stages.map((s, i) => ({

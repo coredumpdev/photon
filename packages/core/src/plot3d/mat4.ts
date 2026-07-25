@@ -32,6 +32,21 @@ export function perspective(fovy: number, aspect: number, near: number, far: num
   return m;
 }
 
+/**
+ * Symmetric orthographic projection: the view volume is `2·halfHeight` tall and
+ * `2·halfHeight·aspect` wide, with no perspective divide — parallel edges stay
+ * parallel, which is what a technical/architecture diagram wants.
+ */
+export function orthographic(halfHeight: number, aspect: number, near: number, far: number): Mat4 {
+  const m = identity();
+  const halfWidth = halfHeight * aspect;
+  m[0] = 1 / halfWidth;
+  m[5] = 1 / halfHeight;
+  m[10] = 2 / (near - far);
+  m[14] = (far + near) / (near - far);
+  return m;
+}
+
 type V3 = [number, number, number];
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a: V3, b: V3): V3 => [

@@ -1,3 +1,4 @@
+import type { ColorInfo } from "../color/colormap.js";
 import type { AxisFrame } from "../gl/transform.js";
 import type { Range } from "../types.js";
 
@@ -20,6 +21,11 @@ export interface Layer {
   readonly yAxis: string;
   /** Data-space bounds of this layer, for autoscaling. `null` if empty. */
   bounds(): { x: Range; y: Range } | null;
+  /**
+   * Colormap + value range, when this layer maps values to colours — the plot
+   * uses it to draw a colorbar. `null`/absent for solid-coloured layers.
+   */
+  colorInfo?(): ColorInfo | null;
   draw(state: DrawState): void;
   dispose(): void;
 }

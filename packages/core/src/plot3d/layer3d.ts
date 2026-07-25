@@ -1,4 +1,4 @@
-import type { ColormapName } from "../color/colormap.js";
+import type { ColorInfo } from "../color/colormap.js";
 import type { Range } from "../types.js";
 import type { Mat4 } from "./mat4.js";
 
@@ -9,11 +9,7 @@ export interface Bounds3 {
 }
 
 /** A colormapped layer's scale, surfaced to {@link Plot3D} for a colorbar. */
-export interface ColorInfo {
-  colormap: ColormapName;
-  domain: Range;
-  label?: string;
-}
+export type { ColorInfo } from "../color/colormap.js";
 
 /** A drawable in the 3D scene. Positions are in world space; Plot3D supplies the MVP. */
 export interface Layer3D {

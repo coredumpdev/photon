@@ -1,4 +1,4 @@
-import { colormapLUT, type ColormapName } from "../color/colormap.js";
+import { colormapLUT, type ColormapSpec } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import type { Color, Range, RenderType } from "../types.js";
@@ -14,7 +14,7 @@ export interface PointCloudOptions {
   size?: number;
   /** Per-point diameter (px); overrides `size` where > 0. */
   sizes?: ArrayLike<number>;
-  colorBy?: { values: ArrayLike<number>; colormap?: ColormapName; domain?: Range };
+  colorBy?: { values: ArrayLike<number>; colormap?: ColormapSpec; domain?: Range };
   /** Per-point tooltip text (parallel to x/y/z). */
   labels?: ArrayLike<string>;
   /** Series name (legend / colorbar label). */

@@ -1,4 +1,4 @@
-import { colormap, type ColormapName } from "../color/colormap.js";
+import { colormap, type ColorInfo, type ColormapSpec } from "../color/colormap.js";
 import { parseColor, toColorCss } from "../gl/context.js";
 import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
@@ -22,7 +22,7 @@ export interface QuiverOptions {
   /** Color each arrow by a value (default: its magnitude) through a colormap. */
   colorBy?: {
     values?: ArrayLike<number>;
-    colormap?: ColormapName;
+    colormap?: ColormapSpec;
     domain?: Range;
   };
   /** Buffer-usage hint; set `"dynamic"` when streaming via setData. Default `"static"`. */
@@ -122,6 +122,8 @@ export class QuiverLayer implements Layer {
   private useVertexColor: boolean;
   private explicitScale: number | undefined;
   private colorBy: QuiverOptions["colorBy"];
+  private cInfo: ColorInfo | null = null;
+  private label?: string;
   private usage: number;
   private count!: number;
   private xRef = 0;
@@ -143,6 +145,7 @@ export class QuiverLayer implements Layer {
     this.useVertexColor = opts.colorBy != null;
     this.explicitScale = opts.scale;
     this.colorBy = opts.colorBy;
+    this.label = opts.name;
     this.usage = bufferUsage(gl, opts.renderType);
 
     const { arrows, colors } = this.build(opts.x, opts.y, opts.u, opts.v);
@@ -230,6 +233,13 @@ export class QuiverLayer implements Layer {
       }
     }
     const span = (hi - lo) || 1;
+    this.cInfo = this.useVertexColor
+      ? {
+          colormap: this.colorBy?.colormap ?? "viridis",
+          domain: [lo, hi],
+          ...(this.label ? { label: this.label } : {}),
+        }
+      : null;
 
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (let i = 0; i < n; i++) {
@@ -261,6 +271,10 @@ export class QuiverLayer implements Layer {
     gl.bufferData(gl.ARRAY_BUFFER, arrows, this.usage);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[2]!);
     gl.bufferData(gl.ARRAY_BUFFER, colors, this.usage);
+  }
+
+  colorInfo(): ColorInfo | null {
+    return this.cInfo;
   }
 
   bounds() {

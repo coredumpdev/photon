@@ -5,14 +5,13 @@
  * Import from `@photonviz/core`.
  */
 import { type LineLayer } from "../layers/line.js";
+import { DEFAULT_PALETTE } from "../color/palettes.js";
 import type { Plot } from "../plot.js";
 import type { RenderType } from "../types.js";
 
 /** tab10-ish default palette, cycled by row index (or by `colorBy` band). */
-export const PARALLEL_PALETTE: readonly string[] = [
-  "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
-  "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
-];
+/** Line colours when rows are coloured by class. Aliases the shared {@link DEFAULT_PALETTE} (Tableau 10). */
+export const PARALLEL_PALETTE: readonly string[] = DEFAULT_PALETTE;
 
 /** A laid-out axis: its dimension name, x position, and observed value range. */
 export interface ParallelAxis {
