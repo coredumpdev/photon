@@ -356,14 +356,20 @@ export interface AttentionMapHandle { heatmap: HeatmapLayer; queries: number; ke
 /** Transformer attention as a heatmap with query 0 at the top, key 0 at the left. */
 export function addAttentionMap(plot: Plot, opts: AttentionMapOptions): AttentionMapHandle {
   let flat: Float64Array, Q: number, K: number;
-  if (Array.isArray(opts.weights) && Array.isArray(opts.weights[0])) {
-    const w = opts.weights as number[][];
+  // Rows may arrive as number[] or as a typed array (the Python bridge sends
+  // one buffer per row), so test the element, not the container.
+  const outer = opts.weights as ArrayLike<unknown>;
+  if (outer.length > 0 && typeof outer[0] !== "number") {
+    const w = opts.weights as ArrayLike<ArrayLike<number>>;
     Q = w.length; K = w[0]!.length;
     flat = new Float64Array(Q * K);
     for (let q = 0; q < Q; q++) for (let k = 0; k < K; k++) flat[q * K + k] = w[q]![k]!;
   } else {
     Q = opts.queries ?? 0; K = opts.keys ?? 0;
     flat = Float64Array.from(opts.weights as ArrayLike<number>);
+    if (!(Q > 0) || !(K > 0)) {
+      throw new Error("addAttentionMap: a flat `weights` array needs `queries` and `keys`");
+    }
   }
   // Flip rows so query 0 is on top.
   const values = new Float64Array(Q * K);

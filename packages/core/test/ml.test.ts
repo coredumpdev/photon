@@ -3,7 +3,7 @@ import {
   calibrationCurve, confusionMatrix, emaSmooth, prCurve, rocCurve,
 } from "../src/ml/metrics.js";
 import { pca, standardize } from "../src/ml/reduce.js";
-import { beeswarmLayout } from "../src/ml/charts.js";
+import { addAttentionMap, beeswarmLayout } from "../src/ml/charts.js";
 
 describe("classification metrics", () => {
   it("confusionMatrix: counts, support, and row-normalization", () => {
@@ -114,5 +114,40 @@ describe("beeswarmLayout", () => {
     const y = beeswarmLayout([2, 2, 2, 2]);
     expect(y).toHaveLength(4);
     expect(y.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 10);
+  });
+});
+
+describe("addAttentionMap", () => {
+  /** Enough of a Plot to capture the heatmap the builder asks for. */
+  function stub(): { plot: Parameters<typeof addAttentionMap>[0]; last: () => any } {
+    let seen: any = null;
+    const plot = { addHeatmap: (o: any) => { seen = o; return o; }, addAnnotation: () => {} };
+    return { plot: plot as any, last: () => seen };
+  }
+
+  const rows = [[1, 2, 3], [4, 5, 6]];
+  const flat = [1, 2, 3, 4, 5, 6];
+
+  it("reads the shape off nested rows, plain or typed", () => {
+    // The Python bridge sends one buffer per row, so rows arrive typed.
+    for (const w of [rows, rows.map((r) => Float64Array.from(r))]) {
+      const s = stub();
+      const h = addAttentionMap(s.plot, { weights: w as never });
+      expect([h.queries, h.keys]).toEqual([2, 3]);
+      // Query 0 ends up on top, so the last row is drawn first.
+      expect(Array.from(s.last().values as Float64Array)).toEqual([4, 5, 6, 1, 2, 3]);
+    }
+  });
+
+  it("takes queries/keys for a flat array", () => {
+    const s = stub();
+    const h = addAttentionMap(s.plot, { weights: flat, queries: 2, keys: 3 });
+    expect([h.queries, h.keys]).toEqual([2, 3]);
+    expect(Array.from(s.last().values as Float64Array)).toEqual([4, 5, 6, 1, 2, 3]);
+  });
+
+  it("says so rather than drawing a 0x0 heatmap", () => {
+    expect(() => addAttentionMap(stub().plot, { weights: flat })).toThrow(/queries/);
+    expect(() => addAttentionMap(stub().plot, { weights: flat, queries: 2 })).toThrow(/keys/);
   });
 });

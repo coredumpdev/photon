@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import photonviz as pv
-from photonviz._arrays import as_array, encode_spec, is_array_like
+from photonviz._arrays import as_array, encode_spec, is_array_like, matrix_shape
 
 
 # -- array coercion + encoding ------------------------------------------------
@@ -444,3 +444,26 @@ def test_ml_builders_use_the_key_names_the_layer_reads():
     assert "pd" in s
     s = pv.Plot().attention_map([1, 2, 3, 4], queries=2, keys=2).to_spec()["series"][0]
     assert "weights" in s
+
+
+def test_attention_map_carries_the_shape_of_a_2d_matrix():
+    """A matrix flattens on the way over, so its shape has to travel with it."""
+    w = np.arange(24, dtype=float).reshape(4, 6)
+    for weights in (w, w.tolist()):
+        s = pv.Plot().attention_map(weights).to_spec()["series"][0]
+        assert (s["queries"], s["keys"]) == (4, 6)
+    # An explicit shape still wins, and a flat array is left alone.
+    s = pv.Plot().attention_map(w, queries=6, keys=4).to_spec()["series"][0]
+    assert (s["queries"], s["keys"]) == (6, 4)
+    s = pv.Plot().attention_map(w.ravel(), queries=4, keys=6).to_spec()["series"][0]
+    assert (s["queries"], s["keys"]) == (4, 6)
+
+
+def test_matrix_shape_only_fires_on_rectangular_2d():
+    assert matrix_shape(np.zeros((3, 5))) == (3, 5)
+    assert matrix_shape([[1, 2], [3, 4]]) == (2, 2)
+    assert matrix_shape(np.arange(6)) == (0, 0)
+    assert matrix_shape(np.zeros((2, 2, 2))) == (0, 0)
+    assert matrix_shape([[1, 2], [3]]) == (0, 0)  # ragged: not a matrix
+    assert matrix_shape("#ff0000") == (0, 0)
+    assert matrix_shape(None) == (0, 0)

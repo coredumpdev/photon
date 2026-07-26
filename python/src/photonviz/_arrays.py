@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 import numpy as np
 
-__all__ = ["as_array", "encode_spec", "is_array_like"]
+__all__ = ["as_array", "encode_spec", "is_array_like", "matrix_shape"]
 
 #: NumPy dtype -> the code the browser side uses to pick a typed-array view.
 _DTYPE_CODES = {
@@ -90,6 +90,21 @@ def is_array_like(value: Any) -> bool:
     if isinstance(value, Sequence):
         return len(value) > 0 and all(isinstance(v, (int, float, np.number)) for v in value)
     return False
+
+
+def matrix_shape(value: Any) -> Tuple[int, int]:
+    """``(rows, cols)`` for a rectangular 2-D input, ``(0, 0)`` for anything else.
+
+    Buffers cross the bridge flat, so a chart that takes a matrix has to send its
+    shape alongside — this is what tells it whether it was given one.
+    """
+    if isinstance(value, (str, bytes, dict)) or value is None:
+        return 0, 0
+    try:
+        arr = as_array(value)
+    except (TypeError, ValueError):
+        return 0, 0
+    return (int(arr.shape[0]), int(arr.shape[1])) if arr.ndim == 2 else (0, 0)
 
 
 def as_array(value: Any) -> np.ndarray:

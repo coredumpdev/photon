@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Sequence
 
-from ._arrays import series_dict
+from ._arrays import matrix_shape, series_dict
 from ._spec import ChartSpec
 from ._widget import ChartWidget, figure_size
 
@@ -330,7 +330,15 @@ class Axes(ChartSpec):
         return self.add("partialDependence", x=x, pd=pd, **opts)
 
     def attention_map(self, weights: Any, **opts: Any) -> "Axes":
-        """An attention matrix as a heatmap; give ``queries=``/``keys=`` for a flat array."""
+        """An attention matrix as a heatmap; give ``queries=``/``keys=`` for a flat array.
+
+        A 2-D ``weights`` needs neither — the matrix flattens on the way to the
+        browser, so its shape is read here and sent along with it.
+        """
+        rows, cols = matrix_shape(weights)
+        if rows:
+            opts.setdefault("queries", rows)
+            opts.setdefault("keys", cols)
         return self.add("attentionMap", weights=weights, **opts)
 
     def ridgeline(self, groups: Sequence[Dict[str, Any]], **opts: Any) -> "Axes":
