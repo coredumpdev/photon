@@ -185,7 +185,7 @@ export class GpuDecimator {
    * the CPU envelope layout: left endpoint, `cols` min/max pairs, right endpoint.
    * Returns the emitted point count, or null if the GPU path can't run this call.
    */
-  run(i0: number, i1: number, cols: number, decBuf: WebGLBuffer): number | null {
+  run(i0: number, i1: number, cols: number, decBuf: WebGLBuffer, xs?: ArrayLike<number>, xRef = 0): number | null {
     if (!this.supported || !this.tex || !this.prog) return null;
     const gl = this.gl;
     const outCount = 2 * cols + 2;
@@ -222,22 +222,31 @@ export class GpuDecimator {
     gl.bindVertexArray(null);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    // Check the first result before trusting the path. Some drivers link and run
-    // this shader without error yet write non-finite coordinates, which draws
-    // nothing at all — a silently blank chart, and the worst way to fail. One
-    // readback per context is cheap; after that the answer is cached.
+    // Check the first result before trusting the path. This shader has been seen
+    // to link and run without error yet produce garbage on two unrelated real
+    // configurations — non-finite x on one, a collapsed envelope on another —
+    // while behaving perfectly under a software rasteriser, which is why headless
+    // testing alone never caught it. One readback per series settles it.
     if (this.verified === null) {
-      this.verified = this.probe(decBuf, outCount);
+      this.verified = this.probe(decBuf, outCount, i0, i1, xs, xRef);
       if (!this.verified) return null;
     }
     return outCount;
   }
 
-  /** Read back a few emitted points and confirm they are finite. */
-  private probe(decBuf: WebGLBuffer, outCount: number): boolean {
+  /**
+   * Structural check on the emitted envelope.
+   *
+   * A correct envelope walks the visible window left to right: every coordinate
+   * finite, x non-decreasing, and the ends landing on the window's ends. Anything
+   * that fails is a driver producing nonsense, and the CPU path takes over.
+   */
+  private probe(
+    decBuf: WebGLBuffer, outCount: number,
+    i0: number, i1: number, xs?: ArrayLike<number>, xRef = 0,
+  ): boolean {
     const gl = this.gl;
-    const n = Math.min(outCount, 16);
-    const back = new Float32Array(n * 2);
+    const back = new Float32Array(outCount * 2);
     try {
       gl.bindBuffer(gl.ARRAY_BUFFER, decBuf);
       gl.getBufferSubData(gl.ARRAY_BUFFER, 0, back);
@@ -246,7 +255,22 @@ export class GpuDecimator {
       return false;
     }
     for (let i = 0; i < back.length; i++) if (!Number.isFinite(back[i]!)) return false;
-    return true;
+
+    let prev = -Infinity;
+    for (let i = 0; i < outCount; i++) {
+      const x = back[i * 2]!;
+      if (x < prev - 1e-3) return false;   // columns emitted out of order
+      prev = x;
+    }
+    if (!xs) return true;
+
+    // The ends must be the window's ends, or the reduction lost most of the range.
+    const wantLo = xs[i0]! - xRef;
+    const wantHi = xs[i1]! - xRef;
+    const span = Math.abs(wantHi - wantLo);
+    const tol = Math.max(1e-6, span * 1e-3);
+    return Math.abs(back[0]! - wantLo) <= tol
+      && Math.abs(back[(outCount - 1) * 2]! - wantHi) <= tol;
   }
 
   dispose(): void {

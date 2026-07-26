@@ -500,7 +500,7 @@ export class LineLayer implements Layer {
 
     // GPU path: reduce the envelope with transform feedback, no main-thread work.
     if (this.gpuDec) {
-      const outCount = this.gpuDec.run(i0, i1, cols, this.decBuf);
+      const outCount = this.gpuDec.run(i0, i1, cols, this.decBuf, this.xs, this.xRef);
       if (outCount != null) {
         this.decKey = key;
         this.decSegments = outCount - 1;
