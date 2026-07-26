@@ -1449,7 +1449,7 @@ function buildFields(grid: HTMLElement): void {
   tf.render();
 
   // A grid of linked panes inside one panel — the JS side of pv.subplots().
-  const gp = new PlotGrid(panel(grid, "Plot grid", "2x2 · linked x", false, "wide"), {
+  const gp = new PlotGrid(panel(grid, "Plot grid", "2x2 · linked x", false, "wide grid2"), {
     rows: 2, cols: 2, gap: 14, theme: "dark", linkX: true,
     title: "PlotGrid — pan one pane, all four follow",
   });

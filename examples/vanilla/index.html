@@ -37,6 +37,8 @@
       /* Architecture diagrams want the full row; the 3D one also wants depth. */
       .panel.wide { grid-column: 1 / -1; }
       .panel.tall .chart { height: 400px; }
+      /* A 2x2 grid splits its height twice, so it needs ~2x a normal panel. */
+      .panel.grid2 .chart { height: 560px; }
       /* Per-chart fullscreen button (top-right, shown on hover). */
       .fs-btn { position: absolute; top: 6px; right: 6px; z-index: 7; width: 24px; height: 24px; padding: 0;
         cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;
