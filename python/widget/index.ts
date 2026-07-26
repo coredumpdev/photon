@@ -10,17 +10,22 @@
 import {
   Plot,
   Plot3D,
+  PlotGrid,
   PolarPlot,
+  addBarbs,
   addBollinger,
   addCalibration,
+  addContourFilled,
   addConfusionMatrix,
   addCorrMatrix,
   addDepth,
   addDrawdown,
   addEcdf,
   addEmbedding,
+  addEventPlot,
   addFeatureImportance,
   addHeikinAshi,
+  addHist2d,
   addModelGraph,
   addModelGraph3D,
   modelGraphFromKeras,
@@ -28,14 +33,17 @@ import {
   modelGraphFromSklearn,
   modelGraphFromTorchFx,
   sequentialModel,
+  addPcolormesh,
   addPrCurve,
   addPsd,
   addRegression,
   addRenko,
   addRocCurve,
   addShapBeeswarm,
+  addStreamplot,
   addTrainingCurves,
   addVolumeProfile,
+  type CellPlacement,
   type Plot3DOptions,
   type PlotOptions,
   type PolarOptions,
@@ -67,6 +75,22 @@ type Spec = {
   layers?: Array<Record<string, unknown>>;
   annotations?: Array<Record<string, unknown>>;
   labels3d?: Array<Record<string, unknown>>;
+};
+
+/** A `pv.subplots(...)` figure: grid geometry plus one placed spec per panel. */
+type FigureSpec = {
+  kind: "figure";
+  rows?: number;
+  cols?: number;
+  gap?: number;
+  title?: string;
+  theme?: "light" | "dark";
+  background?: string;
+  rowRatios?: number[];
+  colRatios?: number[];
+  linkX?: boolean;
+  linkY?: boolean;
+  panels?: Array<CellPlacement & Spec>;
 };
 
 const VIEWS = {
@@ -167,6 +191,12 @@ function addSeries(plot: Plot, s: Any): void {
     case "ecdf": addEcdf(plot, s); break;
     case "corrMatrix": addCorrMatrix(plot, s); break;
     case "psd": addPsd(plot, s); break;
+    case "hist2d": addHist2d(plot, s); break;
+    case "eventplot": addEventPlot(plot, s); break;
+    case "contourf": addContourFilled(plot, s); break;
+    case "pcolormesh": addPcolormesh(plot, s); break;
+    case "streamplot": addStreamplot(plot, s); break;
+    case "barbs": addBarbs(plot, s); break;
     case "modelGraph": addModelGraph(plot, { ...s, graph: resolveGraph(s) }); break;
     default: throw new Error(`Unknown series type "${s.type}"`);
   }
@@ -206,50 +236,89 @@ function showError(el: HTMLElement, err: unknown): void {
   el.replaceChildren(box);
 }
 
-/** Build (or rebuild) the chart described by the model's current state. */
+/**
+ * Build one chart into `container`. The instance comes back alongside the
+ * teardown so a figure can hand it to {@link PlotGrid.adopt} for view linking.
+ */
+function buildChart(container: HTMLElement, spec: Spec): Plot | Plot3D | PolarPlot {
+  const options = (spec.options ?? {}) as Record<string, unknown>;
+
+  if (spec.kind === "plot3d") {
+    const plot = new Plot3D(container, options as Plot3DOptions);
+    for (const layer of spec.layers ?? []) addLayer3D(plot, layer);
+    for (const label of spec.labels3d ?? []) plot.addLabel3D(label as Any);
+    plot.refresh();
+    return plot;
+  }
+  if (spec.kind === "polar") {
+    const plot = new PolarPlot(container, options as PolarOptions);
+    for (const s of spec.series ?? []) {
+      const series = s as Any;
+      if (series.type === "scatter") plot.addScatter(series);
+      else plot.addLine(series);
+    }
+    return plot;
+  }
+
+  const plot = new Plot(container, options as PlotOptions);
+  for (const axis of spec.yAxes ?? []) {
+    const { id, ...rest } = axis as { id: string };
+    plot.addYAxis(id, rest as Any);
+  }
+  for (const s of spec.series ?? []) addSeries(plot, s);
+  for (const a of spec.annotations ?? []) plot.addAnnotation(a as Any);
+  plot.render();
+  return plot;
+}
+
+/** Build a grid of charts. A panel that fails shows its error in its own cell. */
+function buildFigure(container: HTMLElement, fig: FigureSpec): () => void {
+  const grid = new PlotGrid(container, {
+    rows: fig.rows,
+    cols: fig.cols,
+    gap: fig.gap,
+    title: fig.title,
+    theme: fig.theme,
+    background: fig.background,
+    rowRatios: fig.rowRatios,
+    colRatios: fig.colRatios,
+    linkX: fig.linkX,
+    linkY: fig.linkY,
+  });
+  for (const panel of fig.panels ?? []) {
+    const { row, col, rowSpan, colSpan, ...spec } = panel;
+    const cell = grid.cell({ row, col, rowSpan, colSpan });
+    try {
+      grid.adopt(buildChart(cell, spec as Spec));
+    } catch (err) {
+      showError(cell, err);
+    }
+  }
+  return () => grid.destroy();
+}
+
+/** Build (or rebuild) whatever the model's current state describes. */
 function build(el: HTMLElement, model: Model): () => void {
   const spec = (model.get("spec") ?? {}) as Spec;
   const buffers = (model.get("buffers") ?? []) as DataView[];
   const height = String(model.get("height") ?? "420px");
+  const width = String(model.get("width") ?? "100%");
 
   const container = document.createElement("div");
   Object.assign(container.style, {
     position: "relative",
-    width: "100%",
+    width,
+    // A `figsize` wider than the notebook must shrink, not overflow the cell.
+    maxWidth: "100%",
     height,
     minHeight: "80px",
   } as CSSStyleDeclaration);
   el.replaceChildren(container);
 
-  const hydrated = hydrate(spec, buffers) as Spec;
-  const options = (hydrated.options ?? {}) as Record<string, unknown>;
-
-  if (hydrated.kind === "plot3d") {
-    const plot = new Plot3D(container, options as Plot3DOptions);
-    for (const layer of hydrated.layers ?? []) addLayer3D(plot, layer);
-    for (const label of hydrated.labels3d ?? []) plot.addLabel3D(label as Any);
-    plot.refresh();
-    return () => plot.destroy();
-  }
-  if (hydrated.kind === "polar") {
-    const plot = new PolarPlot(container, options as PolarOptions);
-    for (const s of hydrated.series ?? []) {
-      const spec2 = s as Any;
-      if (spec2.type === "scatter") plot.addScatter(spec2);
-      else plot.addLine(spec2);
-    }
-    return () => plot.destroy();
-  }
-
-  const plot = new Plot(container, options as PlotOptions);
-  for (const axis of hydrated.yAxes ?? []) {
-    const { id, ...rest } = axis as { id: string };
-    plot.addYAxis(id, rest as Any);
-  }
-  for (const s of hydrated.series ?? []) addSeries(plot, s);
-  for (const a of hydrated.annotations ?? []) plot.addAnnotation(a as Any);
-  plot.render();
-  return () => plot.destroy();
+  const hydrated = hydrate(spec, buffers) as Spec | FigureSpec;
+  if (hydrated.kind === "figure") return buildFigure(container, hydrated as FigureSpec);
+  const chart = buildChart(container, hydrated as Spec);
+  return () => chart.destroy();
 }
 
 export default {
@@ -272,9 +341,11 @@ export default {
     // Re-render whenever Python assigns a new spec (e.g. `plot.line(...)` again).
     model.on("change:spec", rebuild);
     model.on("change:height", rebuild);
+    model.on("change:width", rebuild);
     return () => {
       model.off("change:spec", rebuild);
       model.off("change:height", rebuild);
+      model.off("change:width", rebuild);
       try {
         destroy?.();
       } catch {

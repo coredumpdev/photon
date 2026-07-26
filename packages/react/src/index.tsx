@@ -1116,3 +1116,19 @@ export type {
   ModelLayoutOptions, ModelLayoutResult, LayerCategory, ModelBlock,
   TorchFxNode, OnnxGraph, OnnxNode, KerasModelConfig, KerasLayerConfig, SklearnStep,
 } from "@photonviz/core";
+
+// Gridded + vector-field charts — matplotlib's contourf / pcolormesh /
+// streamplot / barbs / hist2d / eventplot, as imperative builders on a core Plot.
+export {
+  addContourFilled, addPcolormesh, addStreamplot, addBarbs, addHist2d, addEventPlot,
+  isobands, streamlines, hist2d,
+} from "@photonviz/core";
+export type {
+  ContourFilledOptions, PcolormeshOptions, StreamplotOptions, StreamplotHandle,
+  BarbsOptions, BarbsHandle, Hist2dOptions, Hist2dHandle, EventPlotOptions,
+  ScalarField, VectorField, IsobandPolygon, Streamline, Histogram2D,
+} from "@photonviz/core";
+
+// A grid of plots in one container (matplotlib's `subplots`), plus y-view linking.
+export { PlotGrid, linkY } from "@photonviz/core";
+export type { PlotGridOptions, GridTitleOptions, CellPlacement } from "@photonviz/core";

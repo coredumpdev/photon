@@ -52,6 +52,61 @@ export function histogram(
   return { edges, counts, centers, binWidth: width };
 }
 
+export interface Histogram2D {
+  /** Row-major counts, length `cols * rows`, row 0 at the bottom. */
+  values: Float64Array;
+  cols: number;
+  rows: number;
+  extent: { x: [number, number]; y: [number, number] };
+  xEdges: Float64Array;
+  yEdges: Float64Array;
+}
+
+/**
+ * Bin an (x, y) point cloud onto a regular grid — matplotlib's `hist2d`.
+ * The result feeds a heatmap directly; use {@link hexbin} geometry instead when
+ * hexagonal binning reads better.
+ */
+export function hist2d(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  opts: { bins?: number | [number, number]; range?: { x: [number, number]; y: [number, number] } } = {},
+): Histogram2D {
+  const n = Math.min(x.length, y.length);
+  const [cols, rows] = typeof opts.bins === "number"
+    ? [opts.bins, opts.bins]
+    : (opts.bins ?? [
+        Math.max(1, Math.ceil(Math.sqrt(n || 1))),
+        Math.max(1, Math.ceil(Math.sqrt(n || 1))),
+      ]);
+
+  const span = (vals: ArrayLike<number>, given?: [number, number]): [number, number] => {
+    if (given) return given;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) { const v = vals[i]!; if (v < lo) lo = v; if (v > hi) hi = v; }
+    if (!isFinite(lo) || !isFinite(hi) || lo === hi) return [(lo || 0) - 0.5, (hi || 0) + 0.5];
+    return [lo, hi];
+  };
+  const [x0, x1] = span(x, opts.range?.x);
+  const [y0, y1] = span(y, opts.range?.y);
+
+  const values = new Float64Array(cols * rows);
+  const dx = (x1 - x0) / cols, dy = (y1 - y0) / rows;
+  for (let i = 0; i < n; i++) {
+    const xv = x[i]!, yv = y[i]!;
+    if (xv < x0 || xv > x1 || yv < y0 || yv > y1) continue;
+    let c = Math.floor((xv - x0) / dx); if (c >= cols) c = cols - 1;
+    let r = Math.floor((yv - y0) / dy); if (r >= rows) r = rows - 1;
+    values[r * cols + c]! += 1;
+  }
+
+  const xEdges = new Float64Array(cols + 1);
+  for (let i = 0; i <= cols; i++) xEdges[i] = x0 + dx * i;
+  const yEdges = new Float64Array(rows + 1);
+  for (let i = 0; i <= rows; i++) yEdges[i] = y0 + dy * i;
+  return { values, cols, rows, extent: { x: [x0, x1], y: [y0, y1] }, xEdges, yEdges };
+}
+
 /** Quantile of a *sorted* array via linear interpolation (type-7, like NumPy). */
 export function quantileSorted(sorted: ArrayLike<number>, q: number): number {
   const n = sorted.length;

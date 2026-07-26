@@ -50,6 +50,11 @@ export interface RenkoOptions {
  * as wickless candles, so pair it with an `ordinal-time`/linear x axis.
  */
 export function addRenko(plot: Plot, opts: RenkoOptions): CandlestickLayer {
+  // No default is possible (brick size is a price-scale decision), and a missing
+  // one yields zero bricks — a blank chart with nothing to point at.
+  if (!(Number.isFinite(opts.brickSize) && opts.brickSize > 0)) {
+    throw new Error(`addRenko: \`brickSize\` must be a positive number, got ${opts.brickSize}`);
+  }
   const bricks: Brick[] = renko(opts.close, opts.brickSize);
   const n = bricks.length;
   const x = new Float64Array(n), open = new Float64Array(n), high = new Float64Array(n);

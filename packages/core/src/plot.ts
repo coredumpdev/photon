@@ -380,8 +380,10 @@ export class Plot {
   private pressPx: { x: number; y: number } | null = null;
   // Linked-pane plumbing (see linkX). View/cursor changes are emitted from render().
   private viewListeners: Array<(x: Range) => void> = [];
+  private yViewListeners: Array<(y: Range) => void> = [];
   private cursorListeners: Array<(dataX: number | null) => void> = [];
   private lastEmittedX: Range | null = null;
+  private lastEmittedY: Range | null = null;
   private lastEmittedCursor: number | null = NaN as unknown as null;
   private linkedCursorX: number | null = null;
   // Interactive drawing tools (see setDrawTool / drawingTools option).
@@ -1330,6 +1332,15 @@ export class Plot {
   }
 
   /**
+   * Subscribe to primary-y domain changes, the y counterpart of
+   * {@link onViewChange}. Returns an unsubscribe function. See {@link linkY}.
+   */
+  onYViewChange(cb: (y: Range) => void): () => void {
+    this.yViewListeners.push(cb);
+    return () => { this.yViewListeners = this.yViewListeners.filter((f) => f !== cb); };
+  }
+
+  /**
    * Subscribe to the hover cursor's data-space x (or `null` when it leaves the
    * plot). Returns an unsubscribe function. Used to share a crosshair across panes.
    */
@@ -1549,6 +1560,13 @@ export class Plot {
     if (!this.lastEmittedX || this.lastEmittedX[0] !== dx[0] || this.lastEmittedX[1] !== dx[1]) {
       this.lastEmittedX = [dx[0], dx[1]];
       for (const cb of this.viewListeners) cb(this.lastEmittedX);
+    }
+    if (this.yViewListeners.length) {
+      const dy = this.primaryY().scale.domain;
+      if (!this.lastEmittedY || this.lastEmittedY[0] !== dy[0] || this.lastEmittedY[1] !== dy[1]) {
+        this.lastEmittedY = [dy[0], dy[1]];
+        for (const cb of this.yViewListeners) cb(this.lastEmittedY);
+      }
     }
     if (this.cursorListeners.length) {
       const cx = this.hoverEnabled && this.hoverPx
@@ -2607,6 +2625,29 @@ export function linkX(plots: Plot[]): () => void {
     unsubs.push(
       p.onCursorMove((cx) => {
         for (const q of plots) if (q !== p) q.setLinkedCursor(cx);
+      }),
+    );
+  }
+  return () => { for (const u of unsubs) u(); };
+}
+
+/**
+ * Link the primary y-axis of several plots, the counterpart of {@link linkX}.
+ * Use it for a grid of panels that share a units axis (the same metric across
+ * cohorts), where a shared y is what makes the panels comparable at a glance.
+ *
+ * @returns a function that unlinks them again.
+ */
+export function linkY(plots: Plot[]): () => void {
+  let applying = false;
+  const unsubs: Array<() => void> = [];
+  for (const p of plots) {
+    unsubs.push(
+      p.onYViewChange((y) => {
+        if (applying) return;
+        applying = true;
+        for (const q of plots) if (q !== p) q.setView({ y });
+        applying = false;
       }),
     );
   }

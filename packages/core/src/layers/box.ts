@@ -151,6 +151,11 @@ export class BoxLayer implements Layer {
 
     for (const g of groups) {
       const cx = g.position;
+      // Without this every vertex is NaN and the layer renders an empty plot —
+      // a silent blank chart is far worse to debug than a thrown message.
+      if (!Number.isFinite(cx)) {
+        throw new Error(`BoxLayer: group ${JSON.stringify(g.label ?? "")} needs a numeric \`position\`, got ${cx}`);
+      }
       const base = Array.isArray(g.color) ? (g.color as Color) : parseColor((g.color as string) ?? DEFAULT_COLOR);
       const fill: Color = [base[0], base[1], base[2], 0.35];
       const stroke: Color = [base[0], base[1], base[2], 1];

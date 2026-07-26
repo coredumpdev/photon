@@ -59,6 +59,58 @@ pv.surface(z, cols, rows)                         # 3D — orbit with the mouse
 `Plot`, `Plot3D` and `Polar` are the full objects; the module-level names are
 one-line shortcuts. Pass `plot={...}` to configure the plot itself.
 
+Matplotlib's field and raster types are here too:
+
+```python
+pv.contourf(z, cols, rows, extent, levels=12, lines=True)   # filled contours
+pv.pcolormesh(z, x_edges, y_edges)                          # uneven cells
+pv.hist2d(x, y, bins=[64, 48])
+pv.eventplot([spikes_a, spikes_b, spikes_c])                # one row per train
+pv.streamplot(u, v, cols, rows, extent, colormap="plasma")
+pv.barbs(x, y, u, v)                                        # wind barbs
+```
+
+## figsize and subplots
+
+`figsize` is matplotlib's `(width, height)` **in inches** at `dpi` (100 by
+default), so `figsize=(12, 7)` is a 1200×700 figure. It works on any chart:
+
+```python
+pv.Plot(figsize=(8, 4)).line(x, y)
+pv.line(x, y, figsize=(8, 4))          # shortcuts take it too
+```
+
+`pv.subplots` returns `(figure, axes)` exactly like matplotlib — `squeeze` drops
+length-1 dimensions, so `axes[i, j]`, `axes[i]` and `axes.flat` all work:
+
+```python
+fig, axes = pv.subplots(2, 2, figsize=(12, 7), sharex=True, theme="dark")
+axes[0, 0].line(t, loss).title("Loss")
+axes[0, 1].roc_curve(scores, labels)
+axes[1, 0].confusion_matrix(y_true, y_pred)
+axes[1, 1].histogram(residuals)
+fig
+```
+
+`sharex` / `sharey` link the panels' views, so panning or zooming one moves them
+all. Extra keywords (`theme`, `legend`, …) become every panel's defaults, and a
+panel's own `options(...)` wins over them.
+
+For a layout that isn't a uniform grid, build it up by hand — panels can span
+cells, and each one picks its own kind:
+
+```python
+fig = pv.figure(figsize=(12, 8), rows=2, cols=2, theme="dark")
+fig.add_subplot(colspan=2).line(t, price)          # full-width top row
+fig.add_subplot(row=1, col=0).histogram(returns)
+fig.add_subplot(row=1, col=1, kind="plot3d").surface(z, cols, rows)
+fig
+```
+
+The whole grid is **one** widget: the panels share a single comm and a single
+copy of the bundled engine, so a 2×2 figure does not put four copies of the
+engine in your notebook file.
+
 ## Model architecture
 
 Hand a **PyTorch**, **Keras**, **scikit-learn** or **ONNX** model straight over —

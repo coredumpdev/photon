@@ -1,4 +1,4 @@
-export { Plot, linkX } from "./plot.js";
+export { Plot, linkX, linkY } from "./plot.js";
 export type {
   PlotOptions,
   AxisScaleOptions,
@@ -14,6 +14,9 @@ export type {
   Annotation,
   DrawTool,
 } from "./plot.js";
+
+export { PlotGrid } from "./grid.js";
+export type { PlotGridOptions, GridTitleOptions, CellPlacement } from "./grid.js";
 
 export { createToolbar } from "./ui/toolbar.js";
 export type { ToolbarHost, ToolbarTheme } from "./ui/toolbar.js";
@@ -96,8 +99,8 @@ export { LinearScale, LogScale, TimeScale, CategoricalScale, OrdinalTimeScale, m
 export type { Scale, ScaleType } from "./scales/scale.js";
 
 // Stats
-export { histogram, boxStats, quantileSorted, kde, fft, spectrogram } from "./stats/index.js";
-export type { Histogram, BoxStats, Density, Spectrogram } from "./stats/index.js";
+export { histogram, hist2d, boxStats, quantileSorted, kde, fft, spectrogram } from "./stats/index.js";
+export type { Histogram, Histogram2D, BoxStats, Density, Spectrogram } from "./stats/index.js";
 // Signal processing: windows, Welch PSD, Savitzky-Golay, cross-correlation.
 export { windowFunction, welch, savitzkyGolay, crossCorrelate } from "./stats/signal.js";
 export type { WindowName, Psd, WelchOptions, Correlation } from "./stats/signal.js";
@@ -151,6 +154,9 @@ export * from "./ml/charts.js";
 // Model architecture graphs (PyTorch / ONNX → 2D DAG or 3D tensor blocks).
 export * from "./ml/model.js";
 export * from "./ml/model-chart.js";
+
+// --- Charts: gridded + vector fields (contourf, pcolormesh, streamplot, barbs)
+export * from "./charts/fields.js";
 
 // --- Charts: hierarchy / flow / composition diagrams -------------------------
 export * from "./charts/treemap.js";

@@ -61,6 +61,7 @@ _NEVER_BINARY = frozenset(
         "extentX",
         "extentZ",
         "dims",
+        "bins",
         "center",
         "range",
         "sizeRange",

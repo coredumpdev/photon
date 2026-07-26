@@ -12,27 +12,35 @@ from __future__ import annotations
 import inspect
 import pathlib
 import sys
-from typing import Any, List
+from typing import Any, Dict, List
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
 import photonviz as pv  # noqa: E402
 from photonviz import charts, models  # noqa: E402
+from photonviz.figure import Figure, figure as figure_fn, subplots as subplots_fn  # noqa: E402
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "docs" / "python" / "api.md"
 
 #: Chart classes, in the order they should appear.
-CLASSES = [charts.Plot, charts.Plot3D, charts.Polar]
+CLASSES = [charts.Plot, charts.Plot3D, charts.Polar, Figure]
+
+#: Figure constructors, documented above the classes.
+FIGURE_FUNCTIONS = [("subplots", subplots_fn), ("figure", figure_fn)]
 
 #: Module-level shortcuts, grouped for readability.
 SHORTCUT_GROUPS = [
     ("Basic marks", ["line", "scatter", "bar", "area", "step", "histogram", "box",
-                     "heatmap", "contour", "hexbin", "errorbar", "stem", "quiver", "pie"]),
-    ("Finance", ["candlestick", "ohlc", "heikin_ashi", "bollinger", "volume_profile", "drawdown"]),
+                     "heatmap", "contour", "hexbin", "errorbar", "stem", "quiver", "pie",
+                     "grouped_bars", "stacked_bars", "stacked_area", "patches", "graph"]),
+    ("Fields and rasters", ["contourf", "pcolormesh", "hist2d", "eventplot", "streamplot", "barbs"]),
+    ("Finance", ["candlestick", "ohlc", "heikin_ashi", "bollinger", "renko", "depth",
+                 "volume_profile", "drawdown"]),
     ("Statistics", ["regression", "ecdf", "corr_matrix", "psd"]),
     ("Machine learning", ["confusion_matrix", "roc_curve", "pr_curve", "calibration",
-                          "embedding", "feature_importance", "training_curves"]),
-    ("3D", ["surface", "scatter3d", "line3d", "bar3d", "isosurface", "volume"]),
+                          "embedding", "feature_importance", "shap_beeswarm", "training_curves"]),
+    ("3D", ["surface", "scatter3d", "line3d", "bar3d", "isosurface", "volume",
+            "boxes3d", "quiver3d", "contour3d"]),
     ("Polar", ["polar_line", "polar_scatter"]),
     ("Model architecture", ["model_graph", "model_graph_3d"]),
 ]
@@ -75,13 +83,22 @@ def signature(obj: Any, name: str, drop_self: bool = False) -> str:
 
 
 def own_methods(cls: type) -> List[tuple[str, Any]]:
-    """Public methods defined on `cls` itself, in source order."""
-    out = []
-    for name, member in vars(cls).items():
-        if name.startswith("_") or not callable(member):
+    """
+    Public methods the package defines on `cls` or its own bases.
+
+    Walking the MRO matters since the drawing API lives on `Axes` while the
+    widget classes only add the comm plumbing — `vars(Plot)` alone is nearly
+    empty. Traitlets / anywidget bases are skipped: that machinery is noise here.
+    """
+    out: Dict[str, Any] = {}
+    for base in reversed(cls.__mro__):
+        if not getattr(base, "__module__", "").startswith("photonviz"):
             continue
-        out.append((name, member))
-    return out
+        for name, member in vars(base).items():
+            if name.startswith("_") or not callable(member):
+                continue
+            out[name] = member
+    return list(out.items())
 
 
 def render() -> str:
@@ -102,6 +119,23 @@ def render() -> str:
     add("`python python/scripts/gen_api_docs.py` — run it after changing the Python API.")
     add(":::")
     add("")
+
+    # -- figures --------------------------------------------------------------
+    add("## Figures")
+    add("")
+    add("`figsize` is matplotlib's `(width, height)` in inches at `dpi` (100 by")
+    add("default), so `figsize=(12, 7)` is a 1200x700 figure. It works on a single")
+    add("chart too: `pv.Plot(figsize=(8, 4))`.")
+    add("")
+    for name, fn in FIGURE_FUNCTIONS:
+        add(f"### `{name}`")
+        add("")
+        add(f"```python\n{signature(fn, name)}\n```")
+        add("")
+        doc = full_doc(fn)
+        if doc:
+            add(doc)
+            add("")
 
     # -- classes --------------------------------------------------------------
     for cls in CLASSES:

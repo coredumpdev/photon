@@ -6,8 +6,10 @@ import type { ColormapSpec } from "../color/colormap.js";
 import type { AreaLayer } from "../layers/area.js";
 import type { HeatmapLayer } from "../layers/heatmap.js";
 import type { LineLayer } from "../layers/line.js";
+import type { Patch, PatchesLayer } from "../layers/patches.js";
 import type { Plot } from "../plot.js";
 import type { RenderType } from "../types.js";
+import { hist2d, type Histogram2D } from "./index.js";
 import { corrMatrix, ecdf, linearRegression, linearTrend, loess, type LinearFit } from "./regression.js";
 import { welch, type WindowName } from "./signal.js";
 
@@ -197,4 +199,106 @@ export function addPsd(plot: Plot, opts: PsdOptions): PsdHandle {
     renderType: opts.renderType,
   });
   return { line, frequencies: psd.frequencies, power: psd.power };
+}
+
+export interface Hist2dOptions {
+  x: ArrayLike<number>;
+  y: ArrayLike<number>;
+  /** Bin count, or `[cols, rows]`. Defaults to √n per axis. */
+  bins?: number | [number, number];
+  /** Fixed binning range; defaults to the data extent. */
+  range?: { x: [number, number]; y: [number, number] };
+  colormap?: ColormapSpec;
+  /** Count range mapped to the colormap. Defaults to `[0, max]`. */
+  domain?: [number, number];
+  /** Interpolate between cells. Default false — a histogram has hard bins. */
+  smooth?: boolean;
+  name?: string;
+  yAxis?: string;
+  renderType?: RenderType;
+}
+
+export interface Hist2dHandle {
+  heatmap: HeatmapLayer;
+  bins: Histogram2D;
+}
+
+/**
+ * A 2-D histogram (matplotlib's `hist2d`): rectangular binning of a point cloud,
+ * drawn as a heatmap. Reach for `addHexbin` instead when the cloud is dense —
+ * hexagons have no preferred direction, so they read density more evenly.
+ */
+export function addHist2d(plot: Plot, opts: Hist2dOptions): Hist2dHandle {
+  const bins = hist2d(opts.x, opts.y, { bins: opts.bins, range: opts.range });
+  let max = 0;
+  for (let i = 0; i < bins.values.length; i++) if (bins.values[i]! > max) max = bins.values[i]!;
+  const heatmap = plot.addHeatmap({
+    values: bins.values,
+    cols: bins.cols,
+    rows: bins.rows,
+    extent: bins.extent,
+    colormap: opts.colormap ?? "viridis",
+    domain: opts.domain ?? [0, max || 1],
+    smooth: opts.smooth ?? false,
+    name: opts.name ?? "count",
+    yAxis: opts.yAxis,
+    renderType: opts.renderType,
+  });
+  return { heatmap, bins };
+}
+
+export interface EventPlotOptions {
+  /** One array of event positions per row. */
+  positions: ReadonlyArray<ArrayLike<number>>;
+  /** Row centres. Defaults to `0, 1, 2, …`. */
+  offsets?: ArrayLike<number>;
+  /** Tick height in data units. Default 0.7. */
+  lineLength?: number;
+  /** Tick width in data units. Defaults to 1/400 of the position span. */
+  lineWidth?: number;
+  /** Lay the ticks out along y instead of x. Default `"horizontal"`. */
+  orientation?: "horizontal" | "vertical";
+  /** One colour, or one per row. */
+  color?: string | string[];
+  name?: string;
+  yAxis?: string;
+  renderType?: RenderType;
+}
+
+/**
+ * An event raster (matplotlib's `eventplot`): one row of tick marks per series —
+ * spike trains, arrival times, anything where *when* matters and magnitude does
+ * not. Ticks are thin quads, so one layer covers every row.
+ */
+export function addEventPlot(plot: Plot, opts: EventPlotOptions): PatchesLayer {
+  const rows = opts.positions.length;
+  const height = opts.lineLength ?? 0.7;
+  let lo = Infinity, hi = -Infinity;
+  for (const row of opts.positions) {
+    for (let i = 0; i < row.length; i++) { const v = row[i]!; if (v < lo) lo = v; if (v > hi) hi = v; }
+  }
+  const width = opts.lineWidth ?? (isFinite(hi - lo) && hi > lo ? (hi - lo) / 400 : 0.01);
+  const vertical = opts.orientation === "vertical";
+
+  const patches: Patch[] = [];
+  for (let r = 0; r < rows; r++) {
+    const centre = opts.offsets?.[r] ?? r;
+    const color = Array.isArray(opts.color) ? opts.color[r % opts.color.length] : opts.color;
+    const a = centre - height / 2, b = centre + height / 2;
+    const row = opts.positions[r]!;
+    for (let i = 0; i < row.length; i++) {
+      const t = row[i]!;
+      if (!isFinite(t)) continue;
+      const x = vertical ? [a, b, b, a] : [t - width / 2, t + width / 2, t + width / 2, t - width / 2];
+      const y = vertical ? [t - width / 2, t - width / 2, t + width / 2, t + width / 2] : [a, a, b, b];
+      patches.push({ x: Float64Array.from(x), y: Float64Array.from(y), ...(color ? { color } : {}) });
+    }
+  }
+  return plot.addPatches({
+    patches,
+    color: Array.isArray(opts.color) ? undefined : (opts.color ?? "#60a5fa"),
+    name: opts.name,
+    yAxis: opts.yAxis,
+    renderType: opts.renderType,
+  });
 }

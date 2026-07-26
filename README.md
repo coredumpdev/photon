@@ -11,7 +11,6 @@
   <a href="https://github.com/coredumpdev/photon/actions/workflows/ci.yml"><img src="https://github.com/coredumpdev/photon/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/v/@photonviz/core?color=cb3837&logo=npm" alt="npm version"/></a>
   <a href="https://www.npmjs.com/package/@photonviz/core"><img src="https://img.shields.io/npm/dm/@photonviz/core?color=cb3837" alt="npm downloads"/></a>
-  <a href="https://bundlephobia.com/package/@photonviz/core"><img src="https://img.shields.io/bundlephobia/minzip/@photonviz/core?label=core%20minzip" alt="bundle size"/></a>
   <img src="https://img.shields.io/badge/WebGL2-required-8b5cf6" alt="WebGL2"/>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/deps-zero-16a34a" alt="Zero dependencies"/>

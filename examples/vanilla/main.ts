@@ -7,6 +7,7 @@ import {
   addEmbedding, addDecisionBoundary, addFeatureImportance, addShapBeeswarm,
   addPartialDependence, addAttentionMap, addRidgeline, pca,
   addModelGraph, addModelGraph3D, modelGraphFromTorchFx, modelGraphFromSklearn, sequentialModel,
+  addContourFilled, addPcolormesh, addStreamplot, addBarbs, addHist2d, addEventPlot, PlotGrid,
   paletteColor,
 } from "@photonviz/core";
 
@@ -1339,6 +1340,108 @@ function buildLiveCandles(grid: HTMLElement): void {
 
 // ============================ DIAGRAM PANELS ===============================
 // Hierarchy / flow / composition charts built on the charts module (patches/line).
+// ============================================================================
+// Fields + grids — matplotlib's contourf / pcolormesh / hist2d / eventplot /
+// streamplot / barbs, plus a PlotGrid of linked panes.
+// ============================================================================
+function buildFields(grid: HTMLElement): void {
+  const N = 96;
+  const wave = new Float64Array(N * N);
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const u = -1 + (2 * c) / (N - 1);
+      const v = -1 + (2 * r) / (N - 1);
+      wave[r * N + c] = Math.sin(u * 3) * Math.cos(v * 3) * Math.exp(-(u * u + v * v) * 0.8);
+    }
+  }
+
+  const cf = new Plot(panel(grid, "Filled contours", "contourf · 12 bands"), { theme: "dark" });
+  addContourFilled(cf, {
+    values: wave, cols: N, rows: N, extent: { x: [-1, 1], y: [-1, 1] },
+    levels: 12, colormap: "viridis", lines: true, name: "amplitude",
+  });
+  cf.render();
+
+  // Uneven cells: linear early, coarse late on x; geometric on y.
+  const xe = new Float64Array(21);
+  for (let i = 0; i < 12; i++) xe[i] = (i / 11) * 5;
+  for (let i = 12; i < 21; i++) xe[i] = 6 + ((i - 12) / 8) * 24;
+  const ye = new Float64Array(16);
+  for (let i = 0; i < 16; i++) ye[i] = Math.pow(200, i / 15);
+  const cells = new Float64Array(20 * 15);
+  for (let i = 0; i < cells.length; i++) cells[i] = Math.abs(Math.sin(i * 0.3)) * 4;
+  const pm = new Plot(panel(grid, "Colour mesh", "pcolormesh · uneven cells"), { theme: "dark" });
+  addPcolormesh(pm, { values: cells, xEdges: xe, yEdges: ye, colormap: "viridis", name: "power" });
+  pm.render();
+
+  const hx = new Float64Array(30000);
+  const hy = new Float64Array(30000);
+  for (let i = 0; i < hx.length; i++) { hx[i] = gaussian(0, 1); hy[i] = gaussian(0, 1.6); }
+  const h2 = new Plot(panel(grid, "2D histogram", "hist2d · 48x32 bins"), { theme: "dark" });
+  addHist2d(h2, { x: hx, y: hy, bins: [48, 32], colormap: "magma" });
+  h2.render();
+
+  const trains = Array.from({ length: 7 }, (_, k) => {
+    const n = 40 + Math.floor(rand() * 30);
+    const t = new Float64Array(n);
+    for (let i = 0; i < n; i++) t[i] = rand() * 10 + Math.sin(k) * 0.4;
+    return t.sort();
+  });
+  const ev = new Plot(panel(grid, "Event raster", "eventplot · 7 spike trains"), { theme: "dark" });
+  addEventPlot(ev, { positions: trains, color: "#a78bfa", lineLength: 0.75 });
+  ev.render();
+
+  const M = 48;
+  const su = new Float64Array(M * M);
+  const sv = new Float64Array(M * M);
+  for (let r = 0; r < M; r++) {
+    for (let c = 0; c < M; c++) {
+      const x = -2 + (4 * c) / (M - 1);
+      const y = -2 + (4 * r) / (M - 1);
+      const d1 = Math.max(0.05, (x + 1) ** 2 + y * y);
+      const d2 = Math.max(0.05, (x - 1) ** 2 + y * y);
+      su[r * M + c] = (x + 1) / d1 - (x - 1) / d2;
+      sv[r * M + c] = y / d1 - y / d2;
+    }
+  }
+  const sp = new Plot(panel(grid, "Streamlines", "streamplot · dipole"), { theme: "dark", equalAspect: true });
+  addStreamplot(sp, { u: su, v: sv, cols: M, rows: M, extent: { x: [-2, 2], y: [-2, 2] }, colormap: "plasma", density: 1.1 });
+  sp.render();
+
+  const B = 9;
+  const bxs: number[] = [], bys: number[] = [], bu: number[] = [], bv: number[] = [];
+  for (let r = 0; r < B; r++) {
+    for (let c = 0; c < B; c++) {
+      const i = r * B + c;
+      const speed = 2 + (63 * i) / (B * B - 1);
+      const ang = (2 * Math.PI * i) / (B * B);
+      bxs.push(c); bys.push(r); bu.push(speed * Math.cos(ang)); bv.push(speed * Math.sin(ang));
+    }
+  }
+  const bp = new Plot(panel(grid, "Wind barbs", "barbs · 2–65 kt"), { theme: "dark" });
+  addBarbs(bp, { x: bxs, y: bys, u: bu, v: bv });
+  bp.render();
+
+  // A grid of linked panes inside one panel — the JS side of pv.subplots().
+  const gp = new PlotGrid(panel(grid, "Plot grid", "2x2 · linked x", false, "wide"), {
+    rows: 2, cols: 2, gap: 14, theme: "dark", linkX: true,
+    title: "PlotGrid — pan one pane, all four follow",
+  });
+  const gx = new Float64Array(600);
+  for (let i = 0; i < gx.length; i++) gx[i] = (i / (gx.length - 1)) * 12;
+  const series: Array<[string, (t: number) => number, string]> = [
+    ["signal", Math.sin, "#60a5fa"],
+    ["quadrature", Math.cos, "#f472b6"],
+    ["envelope", (t) => Math.exp(-t / 6), "#34d399"],
+    ["beat", (t) => Math.sin(t) * Math.cos(t * 3), "#fbbf24"],
+  ];
+  for (const [title, fn, color] of series) {
+    gp.addPlot({}, { theme: "dark", title, showToolbar: false })
+      .addLine({ x: gx, y: Float64Array.from(gx, (t) => fn(t) + gaussian(0, 0.05)), color, width: 2 });
+  }
+  gp.refresh();
+}
+
 function buildDiagrams(grid: HTMLElement): void {
   // Treemap
   const tmItems = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"].map((label) => ({ label, value: 10 + rand() * 90 }));
@@ -1749,7 +1852,12 @@ function buildML(grid: HTMLElement): void {
 
 const built = { static: false, dynamic: false, finance: false, ml: false };
 
-function buildStatic(): void { reseed(); for (const b of CHARTS) b(gridStatic, false); buildDiagrams(gridStatic); }
+function buildStatic(): void {
+  reseed();
+  for (const b of CHARTS) b(gridStatic, false);
+  buildFields(gridStatic);
+  buildDiagrams(gridStatic);
+}
 function buildDynamic(): void { reseed(); for (const b of CHARTS) b(gridDynamic, true); buildLinkedFinance(gridDynamic); }
 
 type TabName = "static" | "dynamic" | "finance" | "ml";

@@ -222,3 +222,166 @@ def test_from_sklearn_expands_an_mlp_into_dense_layers():
     dense = [layer for layer in src["layers"] if layer["type"] == "Linear"]
     assert dense[0]["params"] == 5 * 8 + 8
     assert dense[-1]["shape"] == [3]
+
+
+# -- figures: figsize + subplots ----------------------------------------------
+
+
+def test_figsize_is_inches_at_dpi():
+    plot = pv.Plot(figsize=(8, 4))
+    assert (plot.width, plot.height) == ("800px", "400px")
+    assert pv.Plot(figsize=(8, 4), dpi=50).width == "400px"
+    # An explicit height wins; figsize still sets the width.
+    plot = pv.Plot(figsize=(10, 4), height="600px")
+    assert (plot.width, plot.height) == ("1000px", "600px")
+    # No figsize -> fill the cell, as before.
+    assert pv.Plot().width == "100%"
+
+
+def test_figsize_rejects_nonsense():
+    with pytest.raises(ValueError, match="figsize"):
+        pv.Plot(figsize=(8,))
+    with pytest.raises(ValueError, match="positive"):
+        pv.Plot(figsize=(0, 4))
+
+
+def test_figsize_flows_through_the_shortcuts():
+    assert pv.line([0, 1], [0, 1], figsize=(6, 3)).width == "600px"
+
+
+def test_subplots_squeezes_like_matplotlib():
+    _, ax = pv.subplots()
+    assert isinstance(ax, pv.Axes)
+    _, axes = pv.subplots(1, 3)
+    assert axes.shape == (3,)
+    _, axes = pv.subplots(3, 1)
+    assert axes.shape == (3,)
+    _, axes = pv.subplots(2, 3)
+    assert axes.shape == (2, 3)
+    _, axes = pv.subplots(squeeze=False)
+    assert axes.shape == (1, 1)
+
+
+def test_subplots_builds_one_widget_holding_every_panel():
+    fig, axes = pv.subplots(2, 2, figsize=(12, 6), sharex=True, title="Run 41", theme="dark")
+    axes[0, 0].line([0, 1], [0, 1])
+    axes[1, 1].bar([0, 1], [2, 3])
+    spec = fig.to_spec()
+
+    assert spec["kind"] == "figure"
+    assert (spec["rows"], spec["cols"]) == (2, 2)
+    assert spec["linkX"] is True
+    assert "linkY" not in spec
+    assert spec["title"] == "Run 41"
+    assert spec["theme"] == "dark"
+    assert len(spec["panels"]) == 4
+    assert [(p["row"], p["col"]) for p in spec["panels"]] == [(0, 0), (0, 1), (1, 0), (1, 1)]
+    # Figure options become each panel's defaults.
+    assert all(p["options"]["theme"] == "dark" for p in spec["panels"])
+    assert spec["panels"][0]["series"][0]["type"] == "line"
+    assert spec["panels"][3]["series"][0]["type"] == "bar"
+
+
+def test_panel_options_win_over_the_figure_defaults():
+    fig, axes = pv.subplots(1, 2, theme="dark", legend=True)
+    axes[1].options(theme="light")
+    panels = fig.to_spec()["panels"]
+    assert panels[0]["options"] == {"theme": "dark", "legend": True}
+    assert panels[1]["options"] == {"theme": "light", "legend": True}
+
+
+def test_drawing_on_a_panel_resyncs_the_figure():
+    fig, axes = pv.subplots(1, 2)
+    before = len(fig.buffers)
+    axes[0].line([0, 1, 2], [3, 4, 5])
+    assert len(fig.buffers) > before
+    assert fig.spec["panels"][0]["series"][0]["x"]["dtype"] == "f8"
+
+
+def test_figure_add_subplot_spans_and_kinds():
+    fig = pv.figure(figsize=(10, 6), rows=2, cols=2)
+    fig.add_subplot(colspan=2).line([0, 1], [0, 1])
+    fig.add_subplot(row=1, col=0, kind="polar").line([0, 1], [1, 1])
+    fig.add_subplot(row=1, col=1, kind="plot3d").surface([0, 0, 0, 0], 2, 2)
+    panels = fig.to_spec()["panels"]
+    assert panels[0]["colSpan"] == 2 and "row" not in panels[0]
+    assert [p["kind"] for p in panels] == ["plot", "polar", "plot3d"]
+    assert (panels[2]["row"], panels[2]["col"]) == (1, 1)
+
+
+def test_figure_rejects_an_unknown_subplot_kind():
+    with pytest.raises(ValueError, match="unknown subplot kind"):
+        pv.figure().add_subplot(kind="nope")
+
+
+def test_suptitle_and_ratios_reach_the_spec():
+    fig, _ = pv.subplots(2, 1, height_ratios=[3, 1], width_ratios=[1], sharey=True)
+    fig.suptitle("Later")
+    spec = fig.to_spec()
+    assert spec["title"] == "Later"
+    assert spec["rowRatios"] == [3, 1]
+    assert spec["linkY"] is True
+
+
+# -- key normalization: the silent-blank-chart class of bug -------------------
+
+
+def test_box_groups_accept_x_and_reach_js_as_position():
+    plot = pv.Plot().box([{"x": 2, "values": [1, 2, 3]}])
+    group = plot.to_spec()["series"][0]["groups"][0]
+    assert group["position"] == 2 and "x" not in group
+    # `position` still works, and is not doubled up.
+    assert pv.Plot().box([{"position": 5, "values": [1]}]).to_spec()["series"][0]["groups"][0]["position"] == 5
+
+
+def test_box_groups_without_a_position_fail_loudly():
+    with pytest.raises(ValueError, match="position"):
+        pv.Plot().box([{"values": [1, 2, 3]}])
+    with pytest.raises(ValueError, match="values"):
+        pv.Plot().box([{"x": 0}])
+
+
+def test_training_curves_accept_values_or_y():
+    plot = pv.Plot().training_curves([{"name": "a", "values": [1, 2]}, {"name": "b", "y": [3, 4]}])
+    series = plot.to_spec()["series"][0]["series"]
+    assert all("y" in s and "values" not in s for s in series)
+    with pytest.raises(ValueError, match="y"):
+        pv.Plot().training_curves([{"name": "a"}])
+
+
+# -- the chart types that had no Python method -------------------------------
+
+
+def test_every_new_series_type_is_reachable():
+    values = np.zeros(9)
+    built = {
+        "groupedBars": pv.Plot().grouped_bars([0, 1], [{"y": [1, 2]}]),
+        "stackedBars": pv.Plot().stacked_bars([0, 1], [{"y": [1, 2]}]),
+        "stackedArea": pv.Plot().stacked_area([0, 1], [{"y": [1, 2]}]),
+        "patches": pv.Plot().patches([{"x": [0, 1, 1], "y": [0, 0, 1]}]),
+        "graph": pv.Plot().graph([[0, 1], [1, 2]]),
+        "renko": pv.Plot().renko([1, 2, 3], brick_size=0.5),
+        "depth": pv.Plot().depth([[1, 2]], [[3, 4]]),
+        "shapBeeswarm": pv.Plot().shap_beeswarm(["a"], [[0.1, -0.2]]),
+        "contourf": pv.Plot().contourf(values, 3, 3, {"x": [0, 1], "y": [0, 1]}),
+        "pcolormesh": pv.Plot().pcolormesh([1, 2, 3, 4], [0, 1, 2], [0, 1, 2]),
+        "hist2d": pv.Plot().hist2d([0, 1], [0, 1]),
+        "eventplot": pv.Plot().eventplot([[0.1, 0.5], [0.2]]),
+        "streamplot": pv.Plot().streamplot(values, values, 3, 3, {"x": [0, 1], "y": [0, 1]}),
+        "barbs": pv.Plot().barbs([0], [0], [1], [1]),
+    }
+    for expected, chart in built.items():
+        assert chart.to_spec()["series"][0]["type"] == expected, expected
+
+    assert pv.Plot3D().contour3d(values, 3, 3).to_spec()["layers"][0]["type"] == "contour3d"
+
+
+def test_bins_stays_json_so_js_can_branch_on_it():
+    # A [cols, rows] pair is geometry; as a buffer the JS side could not read it.
+    spec = pv.Plot().hist2d([0, 1], [0, 1], bins=[4, 8]).spec
+    assert spec["series"][0]["bins"] == [4, 8]
+
+
+def test_renko_needs_a_brick_size():
+    with pytest.raises(TypeError):
+        pv.Plot().renko([1, 2, 3])

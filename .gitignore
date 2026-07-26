@@ -22,3 +22,6 @@ __pycache__/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/api/
+
+# Jupyter autosaves
+.ipynb_checkpoints/
