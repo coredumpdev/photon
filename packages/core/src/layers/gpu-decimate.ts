@@ -137,6 +137,8 @@ export class GpuDecimator {
   private emptyVao: WebGLVertexArrayObject | null = null;
   private texW = 0;
   private decCapacity = -1; // point capacity currently allocated in the draw buffer
+  /** Null until the first run has been checked; false disables the path for good. */
+  private verified: boolean | null = null;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -220,7 +222,31 @@ export class GpuDecimator {
     gl.bindVertexArray(null);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
+    // Check the first result before trusting the path. Some drivers link and run
+    // this shader without error yet write non-finite coordinates, which draws
+    // nothing at all — a silently blank chart, and the worst way to fail. One
+    // readback per context is cheap; after that the answer is cached.
+    if (this.verified === null) {
+      this.verified = this.probe(decBuf, outCount);
+      if (!this.verified) return null;
+    }
     return outCount;
+  }
+
+  /** Read back a few emitted points and confirm they are finite. */
+  private probe(decBuf: WebGLBuffer, outCount: number): boolean {
+    const gl = this.gl;
+    const n = Math.min(outCount, 16);
+    const back = new Float32Array(n * 2);
+    try {
+      gl.bindBuffer(gl.ARRAY_BUFFER, decBuf);
+      gl.getBufferSubData(gl.ARRAY_BUFFER, 0, back);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    } catch {
+      return false;
+    }
+    for (let i = 0; i < back.length; i++) if (!Number.isFinite(back[i]!)) return false;
+    return true;
   }
 
   dispose(): void {

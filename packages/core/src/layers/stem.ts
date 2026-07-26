@@ -3,7 +3,7 @@ import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
-import { pickNearest, type PickMode, type Picked } from "./pick.js";
+import { pickNearest, type PickMode, type PickProjection, type Picked } from "./pick.js";
 
 export interface StemOptions {
   x: ArrayLike<number>;
@@ -110,6 +110,8 @@ export class StemLayer implements Layer {
   private xRef = 0;
   private yRef = 0;
   private xs!: Float64Array;
+  /** Whether x is non-decreasing, which lets hover binary-search instead of scanning. */
+  private sortedX = true;
   private ys!: Float64Array;
   private xBounds: Range = [0, 0];
   private yBounds: Range = [0, 0];
@@ -182,8 +184,10 @@ export class StemLayer implements Layer {
     const tips = new Float32Array(n * 2);
     let minX = Infinity, maxX = -Infinity;
     let minY = Math.min(this.baseline, Infinity), maxY = Math.max(this.baseline, -Infinity);
+    let sorted = true;
     for (let i = 0; i < n; i++) {
       const xi = x[i]!, yi = y[i]!;
+      if (i > 0 && xi < this.xs[i - 1]!) sorted = false;
       this.xs[i] = xi; this.ys[i] = yi;
       segs[i * 4] = xi - this.xRef; segs[i * 4 + 1] = this.baseline - this.yRef;
       segs[i * 4 + 2] = xi - this.xRef; segs[i * 4 + 3] = yi - this.yRef;
@@ -191,6 +195,7 @@ export class StemLayer implements Layer {
       if (xi < minX) minX = xi; if (xi > maxX) maxX = xi;
       if (yi < minY) minY = yi; if (yi > maxY) maxY = yi;
     }
+    this.sortedX = sorted;
     this.xBounds = [minX, maxX];
     this.yBounds = [minY, maxY];
     return { segs, tips };
@@ -215,9 +220,10 @@ export class StemLayer implements Layer {
     mode: PickMode,
     cursorPx: number,
     cursorPy: number,
-    project: (x: number, y: number) => [number, number],
+    project: PickProjection,
   ): Picked | null {
-    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project);
+    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project,
+                       Infinity, this.sortedX);
   }
 
   draw(state: DrawState): void {

@@ -43,7 +43,7 @@ import {
 import { canvasToBlob, copyCanvasToClipboard, downloadCanvas, type ExportOptions } from "./render/export.js";
 import { renderColorbars, type ColorbarOptions } from "./render/colorbar.js";
 import type { ColorInfo } from "./color/colormap.js";
-import type { PickMode } from "./layers/pick.js";
+import type { PickMode, PickProjection } from "./layers/pick.js";
 import { LinearScale, makeScale, type Scale, type ScaleType } from "./scales/scale.js";
 import { createToolbar } from "./ui/toolbar.js";
 import type { AxisConfig, Dim, InteractionMode, Range } from "./types.js";
@@ -272,7 +272,7 @@ interface Pickable {
     mode: PickMode,
     cursorPx: number,
     cursorPy: number,
-    project: (x: number, y: number) => [number, number],
+    project: PickProjection,
   ): { x: number; y: number; index: number } | null;
   /** Optional user-supplied detail lines for a point index (click info). */
   infoAt?(index: number): string[] | null;
@@ -408,6 +408,9 @@ export class Plot {
   private legendDiv: HTMLDivElement;
   private colorbar: ColorbarOptions | null;
   private colorbarDiv: HTMLDivElement;
+  /** Signatures of what the legend / colorbars last drew, so an unchanged frame skips the rebuild. */
+  private legendKey = "";
+  private colorbarKey = "";
   /** Ids of layers hidden via the legend / {@link setLayerVisible}. */
   private hidden = new Set<string>();
   private visibilityCbs: Array<(layer: Layer, visible: boolean) => void> = [];
@@ -635,6 +638,7 @@ export class Plot {
     const cfg = this.colorbar;
     if (!cfg || infos.length === 0) {
       this.colorbarDiv.style.display = "none";
+      this.colorbarKey = "";
       return;
     }
     // Sit just outside the plot region, on the far side of any extra y axes.
@@ -656,11 +660,20 @@ export class Plot {
     }
     const height = Math.max(24, region.height - (top - region.top));
 
-    renderColorbars(this.colorbarDiv, infos, cfg, {
-      text: cfg.textColor ?? this.theme.text,
-      border: cfg.borderColor ?? this.theme.axis,
-      font: cfg.font ?? "10px system-ui, -apple-system, sans-serif",
-    }, height);
+    // A bar is a gradient, a caption and a handful of tick labels — all DOM, all
+    // rebuilt from scratch by renderColorbars. Nothing about it changes while a
+    // series streams, so redo it only when its inputs or its height do.
+    const key = infos.map((i) => `${i.colormap} ${i.domain[0]} ${i.domain[1]} ${i.label ?? ""}`)
+      .join("") + `${Math.round(height)}`;
+    if (key !== this.colorbarKey) {
+      this.colorbarKey = key;
+      renderColorbars(this.colorbarDiv, infos, cfg, {
+        text: cfg.textColor ?? this.theme.text,
+        border: cfg.borderColor ?? this.theme.axis,
+        font: cfg.font ?? "10px system-ui, -apple-system, sans-serif",
+      }, height);
+    }
+    this.colorbarDiv.style.display = "flex";
     this.colorbarDiv.style.left = `${left}px`;
     this.colorbarDiv.style.top = `${top}px`;
     this.colorbarDiv.style.height = `${height}px`;
@@ -1780,6 +1793,35 @@ export class Plot {
     const interactive = cfg.interactive !== false;
     div.style.pointerEvents = interactive ? "auto" : "none";
 
+    // Rebuilding the rows means new nodes and new listeners every frame, which a
+    // streaming plot pays 60x a second for nothing. Only the position moves.
+    const key = entries.map((e) => `${e.name}\u0000${e.colorCss}\u0000${this.isLayerVisible(e.layer) ? 1 : 0}`)
+      .join("\u0001") + `\u0002${interactive}${horizontal}`;
+    if (key !== this.legendKey) {
+      this.legendKey = key;
+      this.buildLegendRows(div, entries, interactive);
+    }
+    // Position inside the plot region, inset from the chosen corner.
+    const inset = 8;
+    const pos = cfg.position ?? "top-right";
+    const w = div.offsetWidth;
+    const h = div.offsetHeight;
+    const left = pos.endsWith("left")
+      ? region.left + inset
+      : region.left + region.width - w - inset;
+    const top = pos.startsWith("top")
+      ? region.top + inset
+      : region.top + region.height - h - inset;
+    div.style.left = `${Math.max(0, left)}px`;
+    div.style.top = `${Math.max(0, top)}px`;
+  }
+
+  /** Build the legend rows. Split out so `updateLegend` can skip it when nothing changed. */
+  private buildLegendRows(
+    div: HTMLDivElement,
+    entries: Array<{ layer: Layer; name: string; colorCss: string }>,
+    interactive: boolean,
+  ): void {
     div.replaceChildren();
     for (const e of entries) {
       const visible = this.isLayerVisible(e.layer);
@@ -1819,20 +1861,6 @@ export class Plot {
       }
       div.appendChild(row);
     }
-
-    // Position inside the plot region, inset from the chosen corner.
-    const inset = 8;
-    const pos = cfg.position ?? "top-right";
-    const w = div.offsetWidth;
-    const h = div.offsetHeight;
-    const left = pos.endsWith("left")
-      ? region.left + inset
-      : region.left + region.width - w - inset;
-    const top = pos.startsWith("top")
-      ? region.top + inset
-      : region.top + region.height - h - inset;
-    div.style.left = `${Math.max(0, left)}px`;
-    div.style.top = `${Math.max(0, top)}px`;
   }
 
   /** Draw all annotations, projected through the scales and clipped to the region. */
@@ -1989,13 +2017,13 @@ export class Plot {
     for (const layer of this.layers) {
       if (!isPickable(layer) || this.hidden.has(layer.id)) continue;
       const ya = this.yAxes.get(layer.yAxis)!;
-      const project = (x: number, y: number): [number, number] => [
-        pxX(region, this.scaleX.norm(x)),
-        pxY(region, ya.scale.norm(y)),
-      ];
+      const project: PickProjection = {
+        x: (v) => pxX(region, this.scaleX.norm(v)),
+        y: (v) => pxY(region, ya.scale.norm(v)),
+      };
       const p = layer.pick(this.pickMode, cursor.x, cursor.y, project);
       if (!p) continue;
-      const [px, py] = project(p.x, p.y);
+      const px = project.x(p.x), py = project.y(p.y);
       drawMarker(this.axisCtx, px, py, layer.colorCss);
       rows.push({ layer, x: p.x, y: p.y });
     }
@@ -2366,13 +2394,13 @@ export class Plot {
     for (const layer of this.layers) {
       if (!isPickable(layer) || this.hidden.has(layer.id)) continue;
       const ya = this.yAxes.get(layer.yAxis)!;
-      const project = (x: number, y: number): [number, number] => [
-        pxX(region, this.scaleX.norm(x)),
-        pxY(region, ya.scale.norm(y)),
-      ];
+      const project: PickProjection = {
+        x: (v) => pxX(region, this.scaleX.norm(v)),
+        y: (v) => pxY(region, ya.scale.norm(v)),
+      };
       const p = layer.pick("xy", cursorPx, cursorPy, project);
       if (!p) continue;
-      const [ppx, ppy] = project(p.x, p.y);
+      const ppx = project.x(p.x), ppy = project.y(p.y);
       const d = Math.hypot(ppx - cursorPx, ppy - cursorPy);
       if (d < hitDist) {
         hitDist = d;

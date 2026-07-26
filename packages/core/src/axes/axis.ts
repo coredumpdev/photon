@@ -10,6 +10,15 @@ import { resolveTicks, withMinorTicks } from "./ticks.js";
  */
 export class Axis {
   config: AxisConfig;
+  /**
+   * Last resolved tick list, keyed on what it was resolved from.
+   *
+   * A plot re-resolves its ticks every frame, but the domain only moves when the
+   * user pans or zooms — so a streaming series regenerates and re-formats the
+   * same labels sixty times a second. The cache is a plain identity check on the
+   * inputs; anything that could change the outcome is in the key.
+   */
+  private cache: { min: number; max: number; config: AxisConfig; scale: Scale; ticks: Tick[] } | null = null;
 
   constructor(config: AxisConfig = {}) {
     this.config = config;
@@ -17,11 +26,16 @@ export class Axis {
 
   update(patch: Partial<AxisConfig>): void {
     this.config = { ...this.config, ...patch };
+    this.cache = null;
   }
 
   /** Resolve the concrete tick list (labels filled) for the scale's domain. */
   resolve(scale: Scale): Tick[] {
     const [min, max] = scale.domain;
+    const hit = this.cache;
+    if (hit && hit.min === min && hit.max === max && hit.config === this.config && hit.scale === scale) {
+      return hit.ticks;
+    }
     const explicit = resolveTicks(this.config.ticks, min, max);
 
     let ticks: Tick[];
@@ -45,7 +59,7 @@ export class Axis {
     }
 
     const fmt = this.config.format ?? ((v: number) => scale.formatTick(v));
-    return ticks
+    const resolved = ticks
       .filter((t) => t.value >= min && t.value <= max)
       .map((t) => ({
         value: t.value,
@@ -53,5 +67,7 @@ export class Axis {
         minor: t.minor ?? false,
         grid: t.grid ?? !t.minor,
       }));
+    this.cache = { min, max, config: this.config, scale, ticks: resolved };
+    return resolved;
   }
 }

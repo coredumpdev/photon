@@ -4,7 +4,7 @@ import { bufferUsage, createProgram, uniformLocations } from "../gl/program.js";
 import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/transform.js";
 import type { Color, Range, RenderType } from "../types.js";
 import type { DrawState, Layer } from "./layer.js";
-import { pickNearest, type PickMode, type Picked } from "./pick.js";
+import { pickNearest, type PickMode, type PickProjection, type Picked } from "./pick.js";
 
 /** Marker glyph shape for a scatter series. */
 export type MarkerShape = "circle" | "square" | "triangle" | "diamond" | "cross" | "plus";
@@ -164,6 +164,8 @@ export class ScatterLayer implements Layer {
   private xRef = 0;
   private yRef = 0;
   private xs: Float64Array;
+  /** Whether x is non-decreasing, which lets hover binary-search instead of scanning. */
+  private sortedX = true;
   private ys: Float64Array;
   private xBounds: Range = [0, 0];
   private yBounds: Range = [0, 0];
@@ -191,9 +193,10 @@ export class ScatterLayer implements Layer {
     this.xRef = n > 0 ? opts.x[0]! : 0;
     this.yRef = n > 0 ? opts.y[0]! : 0;
     const pos = new Float32Array(n * 2);
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, sorted = true;
     for (let i = 0; i < n; i++) {
       const x = opts.x[i]!, y = opts.y[i]!;
+      if (i > 0 && x < this.xs[i - 1]!) sorted = false;
       this.xs[i] = x; this.ys[i] = y;
       pos[i * 2] = x - this.xRef;
       pos[i * 2 + 1] = y - this.yRef;
@@ -203,6 +206,7 @@ export class ScatterLayer implements Layer {
       if (y > maxY) maxY = y;
     }
     this.xBounds = [minX, maxX];
+    this.sortedX = sorted;
     this.yBounds = [minY, maxY];
 
     // Per-point sizes (optional; 0 means "use the uniform size").
@@ -308,12 +312,13 @@ export class ScatterLayer implements Layer {
     mode: PickMode,
     cursorPx: number,
     cursorPy: number,
-    project: (x: number, y: number) => [number, number],
+    project: PickProjection,
   ): Picked | null {
     // Only a hit when the cursor is within the marker (+ a couple px of slack),
     // so a far-away point never highlights.
     const gatePx = this.maxSize / 2 + 4;
-    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project, gatePx);
+    return pickNearest(this.xs, this.ys, this.count, mode, cursorPx, cursorPy, project,
+                       gatePx, this.sortedX);
   }
 
   /** User-supplied text for a point, shown when it is clicked. */
@@ -331,15 +336,17 @@ export class ScatterLayer implements Layer {
     this.xRef = n > 0 ? x[0]! : 0;
     this.yRef = n > 0 ? y[0]! : 0;
     const pos = new Float32Array(n * 2);
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, sorted = true;
     for (let i = 0; i < n; i++) {
       const vx = x[i]!, vy = y[i]!;
+      if (i > 0 && vx < this.xs[i - 1]!) sorted = false;
       this.xs[i] = vx; this.ys[i] = vy;
       pos[i * 2] = vx - this.xRef; pos[i * 2 + 1] = vy - this.yRef;
       if (vx < minX) minX = vx; if (vx > maxX) maxX = vx;
       if (vy < minY) minY = vy; if (vy > maxY) maxY = vy;
     }
     this.xBounds = [minX, maxX]; this.yBounds = [minY, maxY];
+    this.sortedX = sorted;
     this.useVertexColor = false;
     this.cInfo = null;
     this.maxSize = this.size;
