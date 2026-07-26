@@ -366,7 +366,7 @@ export class Plot {
   private mode: InteractionMode;
   private selectionDiv: HTMLDivElement;
   private modeChangeCbs: Array<(mode: InteractionMode) => void> = [];
-  private toolbarHandle: { destroy: () => void } | null = null;
+  private toolbarHandle: { element: HTMLElement; destroy: () => void } | null = null;
 
   private hoverEnabled: boolean;
   private hoverPx: { x: number; y: number } | null = null;
@@ -637,20 +637,33 @@ export class Plot {
       this.colorbarDiv.style.display = "none";
       return;
     }
+    // Sit just outside the plot region, on the far side of any extra y axes.
+    let rightAxes = 0;
+    for (const ya of this.yAxes.values()) if (ya.side === "right") rightAxes++;
+    const onLeft = cfg.position === "left";
+    const left = onLeft
+      ? Math.max(4, region.left - COLORBAR_GAP + 8)
+      : region.left + region.width + rightAxes * Y_AXIS_GAP + 12;
+
+    // A right-hand colorbar shares the top-right corner with the toolbar, and a
+    // captioned bar puts its text exactly where the buttons are. Start below them
+    // — but only when there is a caption, so an unlabelled bar keeps its full height.
+    let top = region.top;
+    const captioned = infos.some((i) => cfg.label ?? i.label);
+    const toolbar = onLeft || !captioned ? null : this.toolbarHandle?.element;
+    if (toolbar && toolbar.offsetParent !== null) {
+      top = Math.max(top, toolbar.offsetTop + toolbar.offsetHeight + 6);
+    }
+    const height = Math.max(24, region.height - (top - region.top));
+
     renderColorbars(this.colorbarDiv, infos, cfg, {
       text: cfg.textColor ?? this.theme.text,
       border: cfg.borderColor ?? this.theme.axis,
       font: cfg.font ?? "10px system-ui, -apple-system, sans-serif",
-    }, region.height);
-    // Sit just outside the plot region, on the far side of any extra y axes.
-    let rightAxes = 0;
-    for (const ya of this.yAxes.values()) if (ya.side === "right") rightAxes++;
-    const left = cfg.position === "left"
-      ? Math.max(4, region.left - COLORBAR_GAP + 8)
-      : region.left + region.width + rightAxes * Y_AXIS_GAP + 12;
+    }, height);
     this.colorbarDiv.style.left = `${left}px`;
-    this.colorbarDiv.style.top = `${region.top}px`;
-    this.colorbarDiv.style.height = `${region.height}px`;
+    this.colorbarDiv.style.top = `${top}px`;
+    this.colorbarDiv.style.height = `${height}px`;
   }
 
   private layout(): Layout {
