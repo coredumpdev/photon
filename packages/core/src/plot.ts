@@ -695,8 +695,8 @@ export class Plot {
     // A bar is a gradient, a caption and a handful of tick labels — all DOM, all
     // rebuilt from scratch by renderColorbars. Nothing about it changes while a
     // series streams, so redo it only when its inputs or its height do.
-    const key = infos.map((i) => `${i.colormap} ${i.domain[0]} ${i.domain[1]} ${i.label ?? ""}`)
-      .join("") + `${Math.round(height)}`;
+    const key = infos.map((i) => `${i.colormap}\u0000${i.domain[0]}\u0000${i.domain[1]}\u0000${i.label ?? ""}`)
+      .join("\u0001") + `\u0002${Math.round(height)}`;
     if (key !== this.colorbarKey) {
       this.colorbarKey = key;
       renderColorbars(this.colorbarDiv, infos, cfg, {
@@ -1480,10 +1480,14 @@ export class Plot {
    */
   private compositeCanvas(background?: string): HTMLCanvasElement {
     // Export is explicit, so it draws even when culling would have skipped it.
-    const wasOnScreen = this.onScreen;
-    this.onScreen = true;
-    this.render(); // ensure the blitted data canvas holds this plot's latest frame
-    this.onScreen = wasOnScreen;
+    // A container with no box is the exception: its layout would be degenerate and
+    // redrawing would only overwrite the last real frame with an empty one.
+    if (this.container.clientWidth > 0 && this.container.clientHeight > 0) {
+      const wasOnScreen = this.onScreen;
+      this.onScreen = true;
+      this.render(); // ensure the blitted data canvas holds this plot's latest frame
+      this.onScreen = wasOnScreen;
+    }
     const w = this.dataCanvas.width, h = this.dataCanvas.height;
     const out = document.createElement("canvas");
     out.width = w; out.height = h;
@@ -1577,6 +1581,10 @@ export class Plot {
    */
   private syncCanvasSize(): boolean {
     const dpr = window.devicePixelRatio || 1;
+    // A hidden (display:none) or detached container measures 0. Collapsing the
+    // buffers to 1x1 would throw away the last good frame — which is the frame an
+    // export still wants. Keep them; the observer re-syncs when the box returns.
+    if (this.container.clientWidth === 0 || this.container.clientHeight === 0) return false;
     const w = Math.max(1, Math.round(this.container.clientWidth * dpr));
     const h = Math.max(1, Math.round(this.container.clientHeight * dpr));
     if (this.dpr === dpr && this.dataCanvas.width === w && this.dataCanvas.height === h) return false;

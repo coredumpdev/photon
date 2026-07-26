@@ -247,6 +247,7 @@ export class PolarPlot {
     const entry: Entry = { layer, closed, maxR, theta: opts.theta, r: opts.r };
     this.entries.push(entry);
     this.refit();
+    this.requestRender();
     return this.handle(entry);
   }
 
@@ -256,6 +257,7 @@ export class PolarPlot {
     const entry: Entry = { layer, closed: false, maxR, theta: opts.theta, r: opts.r, labels: opts.labels };
     this.entries.push(entry);
     this.refit();
+    this.requestRender();
     return this.handle(entry);
   }
 
