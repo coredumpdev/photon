@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import { Plot as CorePlot, linkX } from "@photonviz/core";
   import FsButton from "./FsButton.svelte";
 
@@ -25,15 +25,24 @@
     return out;
   }
 
-  let priceNode: HTMLDivElement;
-  let volNode: HTMLDivElement;
+  let priceNode: HTMLDivElement | undefined;
+  let volNode: HTMLDivElement | undefined;
   let fps = 0;
 
   let raf = 0;
   let priceP: CorePlot | undefined;
   let volP: CorePlot | undefined;
 
-  onMount(() => {
+  // `use:` actions rather than bind:this + onMount. An action is named by the
+  // template, so a production build can never conclude the setup is dead code —
+  // which is exactly what happened to the onMount version: Rollup dropped the
+  // whole call and both panes came up empty, in the build only.
+  const pricePane = (node: HTMLDivElement) => { priceNode = node; build(); };
+  const volPane = (node: HTMLDivElement) => { volNode = node; build(); };
+
+  /** Both panes are linked, so wait until the second action has run. */
+  function build(): void {
+    if (!priceNode || !volNode || priceP) return;
     const N = 60;
     const times = businessDays(N, Date.UTC(2024, 0, 1));
     const idx = Float64Array.from({ length: N }, (_, i) => i);
@@ -128,7 +137,7 @@
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-  });
+  }
 
   onDestroy(() => {
     cancelAnimationFrame(raf);
@@ -142,11 +151,11 @@
   <h2>Linked finance<span> — candlesticks + volume · ordinal-time · linkX</span></h2>
   <div class="finance">
     <div class="chartwrap">
-      <div class="chart" bind:this={priceNode}></div>
+      <div class="chart" use:pricePane></div>
       <div class="fps">{fps} fps</div>
     </div>
     <div class="chartwrap">
-      <div class="chart chart--short" bind:this={volNode}></div>
+      <div class="chart chart--short" use:volPane></div>
     </div>
   </div>
 </section>

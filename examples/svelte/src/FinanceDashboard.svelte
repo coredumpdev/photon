@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import { Plot as CorePlot, linkX } from "@photonviz/core";
   import { rsi, macd, firstFinite } from "@photonviz/svelte";
   import FsButton from "./FsButton.svelte";
@@ -12,12 +12,21 @@
   export let low: Float64Array;
   export let close: Float64Array;
 
-  let priceNode: HTMLDivElement;
-  let rsiNode: HTMLDivElement;
-  let macdNode: HTMLDivElement;
+  let priceNode: HTMLDivElement | undefined;
+  let rsiNode: HTMLDivElement | undefined;
+  let macdNode: HTMLDivElement | undefined;
   const plots: CorePlot[] = [];
 
-  onMount(() => {
+  // `use:` actions rather than bind:this + onMount: an action is named by the
+  // template, so a production build can never conclude the setup is dead code —
+  // which is what happened to the onMount version, leaving all three panes empty.
+  const pricePane = (node: HTMLDivElement) => { priceNode = node; build(); };
+  const rsiPane = (node: HTMLDivElement) => { rsiNode = node; build(); };
+  const macdPane = (node: HTMLDivElement) => { macdNode = node; build(); };
+
+  /** The three panes are linked, so wait until the last action has run. */
+  function build(): void {
+    if (!priceNode || !rsiNode || !macdNode || plots.length) return;
     /** Slice a series past its warm-up NaNs (indicators return leading NaN). */
     const trim = (y: Float64Array): { x: Float64Array; y: Float64Array } => {
       const s = Math.max(0, firstFinite(y));
@@ -49,7 +58,7 @@
     // Pan/zoom on any pane drives all three.
     linkX([priceP, rsiP, macdP]);
     plots.push(priceP, rsiP, macdP);
-  });
+  }
 
   onDestroy(() => {
     for (const p of plots) p.destroy();
@@ -59,9 +68,9 @@
 <section class="card wide">
   <FsButton />
   <h2>Linked dashboard<span> — price · RSI(14) · MACD(12/26/9) · linkX</span></h2>
-  <div class="chart" bind:this={priceNode}></div>
-  <div class="chart chart--short" bind:this={rsiNode}></div>
-  <div class="chart chart--short" bind:this={macdNode}></div>
+  <div class="chart" use:pricePane></div>
+  <div class="chart chart--short" use:rsiPane></div>
+  <div class="chart chart--short" use:macdPane></div>
 </section>
 
 <style>
