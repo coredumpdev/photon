@@ -8,6 +8,7 @@ import {
   addPartialDependence, addAttentionMap, addRidgeline, pca,
   addModelGraph, addModelGraph3D, modelGraphFromTorchFx, modelGraphFromSklearn, sequentialModel,
   addContourFilled, addPcolormesh, addStreamplot, addBarbs, addHist2d, addEventPlot, PlotGrid,
+  addTriplot, addTripcolor, addTricontour, addTricontourf,
   paletteColor,
 } from "@photonviz/core";
 
@@ -1421,6 +1422,31 @@ function buildFields(grid: HTMLElement): void {
   const bp = new Plot(panel(grid, "Wind barbs", "barbs · 2–65 kt"), { theme: "dark" });
   addBarbs(bp, { x: bxs, y: bys, u: bu, v: bv });
   bp.render();
+
+  // Scattered samples: the tri* family triangulates before drawing.
+  const TN = 600;
+  const scx = new Float64Array(TN), scy = new Float64Array(TN), scz = new Float64Array(TN);
+  for (let i = 0; i < TN; i++) {
+    scx[i] = rand() * 6 - 3;
+    scy[i] = rand() * 6 - 3;
+    scz[i] = Math.sin(scx[i]!) * Math.cos(scy[i]!) * Math.exp(-(scx[i]! ** 2 + scy[i]! ** 2) / 12);
+  }
+
+  const tp = new Plot(panel(grid, "Triangulation", "triplot · Delaunay"), { theme: "dark" });
+  addTriplot(tp, { x: scx, y: scy, showPoints: true });
+  tp.render();
+
+  const tc = new Plot(panel(grid, "Flat shading", "tripcolor · scattered"), { theme: "dark" });
+  addTripcolor(tc, { x: scx, y: scy, z: scz, edges: true, name: "amplitude" });
+  tc.render();
+
+  const tl = new Plot(panel(grid, "Iso-lines", "tricontour · 10 levels"), { theme: "dark" });
+  addTricontour(tl, { x: scx, y: scy, z: scz, levels: 10 });
+  tl.render();
+
+  const tf = new Plot(panel(grid, "Filled bands", "tricontourf · 12 bands"), { theme: "dark" });
+  addTricontourf(tf, { x: scx, y: scy, z: scz, levels: 12, lines: true, name: "amplitude" });
+  tf.render();
 
   // A grid of linked panes inside one panel — the JS side of pv.subplots().
   const gp = new PlotGrid(panel(grid, "Plot grid", "2x2 · linked x", false, "wide"), {

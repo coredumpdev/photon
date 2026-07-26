@@ -13,6 +13,7 @@ import type { LineLayer } from "../layers/line.js";
 import type { Patch, PatchesLayer } from "../layers/patches.js";
 import type { Plot } from "../plot.js";
 import type { Range, RenderType } from "../types.js";
+import { clipScalar, segmentQuad } from "./_geom.js";
 
 /** A grid of scalar values sampled at the nodes of a regular lattice. */
 export interface ScalarField {
@@ -44,31 +45,6 @@ function autoLevels(values: ArrayLike<number>, count: number): number[] {
   if (!isFinite(lo) || !isFinite(hi)) return [0, 1];
   if (lo === hi) { lo -= 0.5; hi += 0.5; }
   return Array.from({ length: count + 1 }, (_, i) => lo + ((hi - lo) * i) / count);
-}
-
-/**
- * Clip a polygon by a scalar half-space, interpolating along crossed edges
- * (Sutherland–Hodgman with the scalar itself as the clip predicate).
- */
-function clipScalar(
-  px: number[], py: number[], pv: number[], t: number, keepAbove: boolean,
-): { x: number[]; y: number[]; v: number[] } {
-  const x: number[] = [], y: number[] = [], v: number[] = [];
-  const n = px.length;
-  const inside = (val: number): boolean => (keepAbove ? val >= t : val <= t);
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const vi = pv[i]!, vj = pv[j]!;
-    const ini = inside(vi), inj = inside(vj);
-    if (ini) { x.push(px[i]!); y.push(py[i]!); v.push(vi); }
-    if (ini !== inj) {
-      const f = (t - vi) / (vj - vi || 1e-12);
-      x.push(px[i]! + (px[j]! - px[i]!) * f);
-      y.push(py[i]! + (py[j]! - py[i]!) * f);
-      v.push(t);
-    }
-  }
-  return { x, y, v };
 }
 
 /**
@@ -495,18 +471,6 @@ export interface BarbsHandle {
   pennants?: PatchesLayer;
 }
 
-/** A thin quad along a segment — the stroke primitive the barbs are built from. */
-function segment(ax: number, ay: number, bx: number, by: number, w: number, color: string): Patch {
-  const dx = bx - ax, dy = by - ay;
-  const m = Math.hypot(dx, dy) || 1e-12;
-  const nx = (-dy / m) * (w / 2), ny = (dx / m) * (w / 2);
-  return {
-    x: Float64Array.from([ax + nx, bx + nx, bx - nx, ax - nx]),
-    y: Float64Array.from([ay + ny, by + ny, by - ny, ay - ny]),
-    color,
-  };
-}
-
 /**
  * Wind barbs (matplotlib's `barbs`) — the meteorological glyph where speed is
  * read off the ticks rather than the arrow length: a half tick per `increment`,
@@ -533,14 +497,14 @@ export function addBarbs(plot: Plot, opts: BarbsOptions): BarbsHandle {
     if (speed < inc / 2) {
       // Calm: matplotlib draws a small open circle; a short cross reads the same
       // at this size and needs no curve.
-      strokes.push(segment(px - tick * 0.2, py, px + tick * 0.2, py, stroke, color));
-      strokes.push(segment(px, py - tick * 0.2, px, py + tick * 0.2, stroke, color));
+      strokes.push(segmentQuad(px - tick * 0.2, py, px + tick * 0.2, py, stroke, color));
+      strokes.push(segmentQuad(px, py - tick * 0.2, px, py + tick * 0.2, stroke, color));
       continue;
     }
     // The staff points *into* the wind, as the convention requires.
     const dx = -u / speed, dy = -v / speed;
     const tipX = px + dx * len, tipY = py + dy * len;
-    strokes.push(segment(px, py, tipX, tipY, stroke, color));
+    strokes.push(segmentQuad(px, py, tipX, tipY, stroke, color));
 
     // Barb ticks hang off the tip end, at 60 degrees back along the staff.
     const bx = -dx * Math.cos(Math.PI / 3) - dy * Math.sin(Math.PI / 3);
@@ -564,14 +528,14 @@ export function addBarbs(plot: Plot, opts: BarbsOptions): BarbsHandle {
     }
     while (left >= 2) {
       const [ax, ay] = anchor(slot);
-      strokes.push(segment(ax, ay, ax + bx * tick, ay + by * tick, stroke, color));
+      strokes.push(segmentQuad(ax, ay, ax + bx * tick, ay + by * tick, stroke, color));
       left -= 2;
       slot += 1;
     }
     if (left >= 1) {
       // A lone half-barb sits one slot in, so it is never mistaken for a full one.
       const [ax, ay] = anchor(slot === 0 ? 1 : slot);
-      strokes.push(segment(ax, ay, ax + bx * tick * 0.5, ay + by * tick * 0.5, stroke, color));
+      strokes.push(segmentQuad(ax, ay, ax + bx * tick * 0.5, ay + by * tick * 0.5, stroke, color));
     }
   }
 

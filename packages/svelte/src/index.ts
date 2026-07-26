@@ -41,6 +41,39 @@ import {
   type SurfaceOptions,
   type YAxisOptions,
   addBarbs,
+  addDrawdown,
+  addConfusionMatrix,
+  addRocCurve,
+  addPrCurve,
+  addCalibration,
+  addEmbedding,
+  addDecisionBoundary,
+  addFeatureImportance,
+  addShapBeeswarm,
+  addPartialDependence,
+  addAttentionMap,
+  addTrainingCurves,
+  addRidgeline,
+  addPredVsActual,
+  addResiduals,
+  addLiftCurve,
+  addLearningCurve,
+  addTriplot,
+  addTripcolor,
+  addTricontour,
+  addTricontourf,
+  addTreemap,
+  addFunnel,
+  addSunburst,
+  addGauge,
+  addSankey,
+  addChord,
+  addParallelCoordinates,
+  addRegression,
+  addEcdf,
+  addCorrMatrix,
+  addPsd,
+  collectLayers,
   addContourFilled,
   addEventPlot,
   addHeikinAshi,
@@ -52,6 +85,38 @@ import {
   addModelGraph,
   addModelGraph3D,
   type BarbsOptions,
+  type DrawdownOptions,
+  type ConfusionMatrixOptions,
+  type RocCurveOptions,
+  type PrCurveOptions,
+  type CalibrationOptions,
+  type EmbeddingOptions,
+  type DecisionBoundaryOptions,
+  type FeatureImportanceOptions,
+  type ShapBeeswarmOptions,
+  type PartialDependenceOptions,
+  type AttentionMapOptions,
+  type TrainingCurvesOptions,
+  type RidgelineOptions,
+  type PredVsActualOptions,
+  type ResidualsOptions,
+  type LiftCurveOptions,
+  type LearningCurveOptions,
+  type TriplotOptions,
+  type TripcolorOptions,
+  type TricontourOptions,
+  type TricontourfOptions,
+  type TreemapOptions,
+  type FunnelOptions,
+  type SunburstOptions,
+  type GaugeOptions,
+  type SankeyOptions,
+  type ChordOptions,
+  type ParallelOptions,
+  type RegressionOptions,
+  type EcdfOptions,
+  type CorrMatrixOptions,
+  type PsdOptions,
   type ContourFilledOptions,
   type EventPlotOptions,
   type Hist2dOptions,
@@ -92,6 +157,38 @@ export type SeriesSpec =
   | ({ type: "eventplot" } & EventPlotOptions)
   | ({ type: "streamplot" } & StreamplotOptions)
   | ({ type: "barbs" } & BarbsOptions)
+  | ({ type: "drawdown" } & DrawdownOptions)
+  | ({ type: "confusionMatrix" } & ConfusionMatrixOptions)
+  | ({ type: "rocCurve" } & RocCurveOptions)
+  | ({ type: "prCurve" } & PrCurveOptions)
+  | ({ type: "calibration" } & CalibrationOptions)
+  | ({ type: "embedding" } & EmbeddingOptions)
+  | ({ type: "decisionBoundary" } & DecisionBoundaryOptions)
+  | ({ type: "featureImportance" } & FeatureImportanceOptions)
+  | ({ type: "shapBeeswarm" } & ShapBeeswarmOptions)
+  | ({ type: "partialDependence" } & PartialDependenceOptions)
+  | ({ type: "attentionMap" } & AttentionMapOptions)
+  | ({ type: "trainingCurves" } & TrainingCurvesOptions)
+  | ({ type: "ridgeline" } & RidgelineOptions)
+  | ({ type: "predVsActual" } & PredVsActualOptions)
+  | ({ type: "residuals" } & ResidualsOptions)
+  | ({ type: "liftCurve" } & LiftCurveOptions)
+  | ({ type: "learningCurve" } & LearningCurveOptions)
+  | ({ type: "triplot" } & TriplotOptions)
+  | ({ type: "tripcolor" } & TripcolorOptions)
+  | ({ type: "tricontour" } & TricontourOptions)
+  | ({ type: "tricontourf" } & TricontourfOptions)
+  | ({ type: "treemap" } & TreemapOptions)
+  | ({ type: "funnel" } & FunnelOptions)
+  | ({ type: "sunburst" } & SunburstOptions)
+  | ({ type: "gauge" } & GaugeOptions)
+  | ({ type: "sankey" } & SankeyOptions)
+  | ({ type: "chord" } & ChordOptions)
+  | ({ type: "parallelCoordinates" } & ParallelOptions)
+  | ({ type: "regression" } & RegressionOptions)
+  | ({ type: "ecdf" } & EcdfOptions)
+  | ({ type: "corrMatrix" } & CorrMatrixOptions)
+  | ({ type: "psd" } & PsdOptions)
   | ({ type: "modelGraph" } & ModelGraphOptions);
 
 export interface YAxisSpec extends YAxisOptions {
@@ -133,6 +230,38 @@ function addSeries(p: CorePlot, s: SeriesSpec): Layer[] {
     case "eventplot": return [addEventPlot(p, s)];
     case "streamplot": { const h = addStreamplot(p, s); return h.arrows ? [...h.lines, h.arrows] : h.lines; }
     case "barbs": { const h = addBarbs(p, s); return h.pennants ? [h.staff, h.pennants] : [h.staff]; }
+    case "drawdown": return collectLayers(addDrawdown(p, s));
+    case "confusionMatrix": return collectLayers(addConfusionMatrix(p, s));
+    case "rocCurve": return collectLayers(addRocCurve(p, s));
+    case "prCurve": return collectLayers(addPrCurve(p, s));
+    case "calibration": return collectLayers(addCalibration(p, s));
+    case "embedding": return collectLayers(addEmbedding(p, s));
+    case "decisionBoundary": return collectLayers(addDecisionBoundary(p, s));
+    case "featureImportance": return collectLayers(addFeatureImportance(p, s));
+    case "shapBeeswarm": return collectLayers(addShapBeeswarm(p, s));
+    case "partialDependence": return collectLayers(addPartialDependence(p, s));
+    case "attentionMap": return collectLayers(addAttentionMap(p, s));
+    case "trainingCurves": return collectLayers(addTrainingCurves(p, s));
+    case "ridgeline": return collectLayers(addRidgeline(p, s));
+    case "predVsActual": return collectLayers(addPredVsActual(p, s));
+    case "residuals": return collectLayers(addResiduals(p, s));
+    case "liftCurve": return collectLayers(addLiftCurve(p, s));
+    case "learningCurve": return collectLayers(addLearningCurve(p, s));
+    case "triplot": return collectLayers(addTriplot(p, s));
+    case "tripcolor": return collectLayers(addTripcolor(p, s));
+    case "tricontour": return collectLayers(addTricontour(p, s));
+    case "tricontourf": return collectLayers(addTricontourf(p, s));
+    case "treemap": return collectLayers(addTreemap(p, s));
+    case "funnel": return collectLayers(addFunnel(p, s));
+    case "sunburst": return collectLayers(addSunburst(p, s));
+    case "gauge": return collectLayers(addGauge(p, s));
+    case "sankey": return collectLayers(addSankey(p, s));
+    case "chord": return collectLayers(addChord(p, s));
+    case "parallelCoordinates": return collectLayers(addParallelCoordinates(p, s));
+    case "regression": return collectLayers(addRegression(p, s));
+    case "ecdf": return collectLayers(addEcdf(p, s));
+    case "corrMatrix": return collectLayers(addCorrMatrix(p, s));
+    case "psd": return collectLayers(addPsd(p, s));
     // Labels are Canvas2D annotations, not layers, so they need no removal here.
     case "modelGraph": { const h = addModelGraph(p, s); return [h.nodes, h.edges]; }
   }

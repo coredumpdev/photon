@@ -176,6 +176,55 @@ class Axes(ChartSpec):
         """
         return self.add("graph", edges=[list(e) for e in edges], **opts)
 
+    # -- triangulations (scattered samples) -----------------------------------
+
+    def triplot(self, x: Any, y: Any, **opts: Any) -> "Axes":
+        """The triangulation itself — every mesh edge. Delaunay unless ``triangles=`` is given."""
+        return self.add("triplot", x=x, y=y, **opts)
+
+    def tripcolor(self, x: Any, y: Any, z: Any, **opts: Any) -> "Axes":
+        """Flat-shaded triangles over scattered samples — matplotlib's ``tripcolor``."""
+        return self.add("tripcolor", x=x, y=y, z=z, **opts)
+
+    def tricontour(self, x: Any, y: Any, z: Any, **opts: Any) -> "Axes":
+        """Iso-lines over a triangulation — matplotlib's ``tricontour``."""
+        return self.add("tricontour", x=x, y=y, z=z, **opts)
+
+    def tricontourf(self, x: Any, y: Any, z: Any, **opts: Any) -> "Axes":
+        """Filled contour bands over a triangulation — matplotlib's ``tricontourf``."""
+        return self.add("tricontourf", x=x, y=y, z=z, **opts)
+
+    # -- diagrams -------------------------------------------------------------
+
+    def treemap(self, items: Sequence[Dict[str, Any]], **opts: Any) -> "Axes":
+        """Squarified treemap from ``[{"label": ..., "value": ...}, …]``."""
+        return self.add("treemap", items=list(items), **opts)
+
+    def funnel(self, items: Sequence[Dict[str, Any]], **opts: Any) -> "Axes":
+        """Conversion funnel from ``[{"label": ..., "value": ...}, …]``."""
+        return self.add("funnel", items=list(items), **opts)
+
+    def sunburst(self, root: Dict[str, Any], **opts: Any) -> "Axes":
+        """Radial hierarchy from a nested ``{"label", "value", "children"}`` tree."""
+        return self.add("sunburst", root=root, **opts)
+
+    def gauge(self, value: float, **opts: Any) -> "Axes":
+        """A single value on an arc; ``min=`` / ``max=`` set the span."""
+        return self.add("gauge", value=value, **opts)
+
+    def sankey(self, nodes: Sequence[Any], links: Sequence[Dict[str, Any]], **opts: Any) -> "Axes":
+        """Flow diagram: nodes joined by proportional ribbons."""
+        return self.add("sankey", nodes=list(nodes), links=list(links), **opts)
+
+    def chord(self, matrix: Sequence[Any], **opts: Any) -> "Axes":
+        """Chord diagram of a square flow matrix."""
+        return self.add("chord", matrix=[row for row in matrix], **opts)
+
+    def parallel_coordinates(self, dimensions: Sequence[str], rows: Sequence[Sequence[float]], **opts: Any) -> "Axes":
+        """Parallel coordinates: axis ``dimensions`` names plus one ``rows`` entry per record."""
+        return self.add("parallelCoordinates", dimensions=list(dimensions),
+                        rows=[list(r) for r in rows], **opts)
+
     # -- finance --------------------------------------------------------------
 
     def candlestick(self, x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any) -> "Axes":
@@ -261,6 +310,38 @@ class Axes(ChartSpec):
     def training_curves(self, series: Sequence[Dict[str, Any]], **opts: Any) -> "Axes":
         """Loss/metric curves from ``[{"y": [...], "name": "train"}, …]``, EMA-smoothed with a best-epoch marker."""
         return self.add("trainingCurves", series=[_training_series(s) for s in series], **opts)
+
+    def decision_boundary(self, x: Any, y: Any, labels: Any, grid: Any, **opts: Any) -> "Axes":
+        """A classifier's decision regions under the sample points."""
+        return self.add("decisionBoundary", x=x, y=y, labels=labels, grid=grid, **opts)
+
+    def partial_dependence(self, x: Any, pd: Any, **opts: Any) -> "Axes":
+        """Partial-dependence curve; pass ``ice=`` for the per-sample fan."""
+        return self.add("partialDependence", x=x, pd=pd, **opts)
+
+    def attention_map(self, weights: Any, **opts: Any) -> "Axes":
+        """An attention matrix as a heatmap; give ``queries=``/``keys=`` for a flat array."""
+        return self.add("attentionMap", weights=weights, **opts)
+
+    def ridgeline(self, groups: Sequence[Dict[str, Any]], **opts: Any) -> "Axes":
+        """Stacked density ridges from ``[{"name": ..., "values": [...]}, …]``."""
+        return self.add("ridgeline", groups=list(groups), **opts)
+
+    def pred_vs_actual(self, y_true: Any, y_pred: Any, **opts: Any) -> "Axes":
+        """Predicted against actual, with the identity line."""
+        return self.add("predVsActual", yTrue=y_true, yPred=y_pred, **opts)
+
+    def residuals(self, y_true: Any, y_pred: Any, **opts: Any) -> "Axes":
+        """Residuals against the fitted value (or ``against="index"``)."""
+        return self.add("residuals", yTrue=y_true, yPred=y_pred, **opts)
+
+    def lift_curve(self, scores: Any, labels: Any, **opts: Any) -> "Axes":
+        """Lift / gain curve against the random baseline."""
+        return self.add("liftCurve", scores=scores, labels=labels, **opts)
+
+    def learning_curve(self, sizes: Any, train: Any, validation: Any, **opts: Any) -> "Axes":
+        """Train and validation score against training-set size."""
+        return self.add("learningCurve", sizes=sizes, train=train, validation=validation, **opts)
 
     def model_graph(self, model: Any, **opts: Any) -> "Axes":
         """

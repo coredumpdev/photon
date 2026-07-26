@@ -232,6 +232,7 @@ export default class Chart extends Component {
 | Event raster | `addEventPlot(plot, { positions, offsets?, orientation? })` | matplotlib `eventplot`; one row per train |
 | Streamlines | `addStreamplot(plot, { u, v, cols, rows, extent, density?, colormap? })` | matplotlib `streamplot`; RK4 with even seeding |
 | Wind barbs | `addBarbs(plot, { x, y, u, v, increment? })` | matplotlib `barbs`; half / full / pennant ticks |
+| Triangulated samples | `addTriplot` · `addTripcolor` · `addTricontour` · `addTricontourf` | matplotlib `tri*`; Delaunay via `delaunay(x, y)`, or bring your own mesh |
 | Pie / Donut | `plot.addPie({ values, innerRadius?, colormap? })` | Wedges (set `equalAspect`) |
 | Patches | `plot.addPatches({ patches, colormap? })` | Filled polygons (earcut), choropleth |
 | Graph | `plot.addGraph({ edges, nodes? })` | Node-link; auto force layout |

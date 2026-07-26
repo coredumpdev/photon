@@ -98,6 +98,17 @@ Plot(height: str | None = None, figsize: Sequence[float] | None = None, dpi: flo
 | `image(source: str, extent: Dict[str, Any], **opts: Any)` | A bitmap placed in data space. |
 | `patches(patches: Sequence[Dict[str, Any]], **opts: Any)` | Filled polygons from ``[{"x": [...], "y": [...], "color": "#..."}, …]``. |
 | `graph(edges: Sequence[Sequence[int]], **opts: Any)` | A node-link graph from ``[[i, j], …]`` index pairs. |
+| `triplot(x: Any, y: Any, **opts: Any)` | The triangulation itself — every mesh edge. Delaunay unless ``triangles=`` is given. |
+| `tripcolor(x: Any, y: Any, z: Any, **opts: Any)` | Flat-shaded triangles over scattered samples — matplotlib's ``tripcolor``. |
+| `tricontour(x: Any, y: Any, z: Any, **opts: Any)` | Iso-lines over a triangulation — matplotlib's ``tricontour``. |
+| `tricontourf(x: Any, y: Any, z: Any, **opts: Any)` | Filled contour bands over a triangulation — matplotlib's ``tricontourf``. |
+| `treemap(items: Sequence[Dict[str, Any]], **opts: Any)` | Squarified treemap from ``[{"label": ..., "value": ...}, …]``. |
+| `funnel(items: Sequence[Dict[str, Any]], **opts: Any)` | Conversion funnel from ``[{"label": ..., "value": ...}, …]``. |
+| `sunburst(root: Dict[str, Any], **opts: Any)` | Radial hierarchy from a nested ``{"label", "value", "children"}`` tree. |
+| `gauge(value: float, **opts: Any)` | A single value on an arc; ``min=`` / ``max=`` set the span. |
+| `sankey(nodes: Sequence[Any], links: Sequence[Dict[str, Any]], **opts: Any)` | Flow diagram: nodes joined by proportional ribbons. |
+| `chord(matrix: Sequence[Any], **opts: Any)` | Chord diagram of a square flow matrix. |
+| `parallel_coordinates(dimensions: Sequence[str], rows: Sequence[Sequence[float]], **opts: Any)` | Parallel coordinates: axis ``dimensions`` names plus one ``rows`` entry per record. |
 | `candlestick(x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any)` | OHLC candles. |
 | `ohlc(x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any)` | OHLC bars (open/close ticks on a high-low line). |
 | `heikin_ashi(x: Any, open: Any, high: Any, low: Any, close: Any, **opts: Any)` | Heikin-Ashi candles — a smoothed OHLC that filters noise. |
@@ -118,6 +129,14 @@ Plot(height: str | None = None, figsize: Sequence[float] | None = None, dpi: flo
 | `feature_importance(names: Sequence[str], values: Any, **opts: Any)` | Sorted horizontal importance bars. |
 | `shap_beeswarm(names: Sequence[str], values: Sequence[Any], **opts: Any)` | SHAP beeswarm: one row per feature (``values[f]`` is that feature's row), sorted by mean \|SHAP\|. |
 | `training_curves(series: Sequence[Dict[str, Any]], **opts: Any)` | Loss/metric curves from ``[{"y": [...], "name": "train"}, …]``, EMA-smoothed with a best-epoch marker. |
+| `decision_boundary(x: Any, y: Any, labels: Any, grid: Any, **opts: Any)` | A classifier's decision regions under the sample points. |
+| `partial_dependence(x: Any, pd: Any, **opts: Any)` | Partial-dependence curve; pass ``ice=`` for the per-sample fan. |
+| `attention_map(weights: Any, **opts: Any)` | An attention matrix as a heatmap; give ``queries=``/``keys=`` for a flat array. |
+| `ridgeline(groups: Sequence[Dict[str, Any]], **opts: Any)` | Stacked density ridges from ``[{"name": ..., "values": [...]}, …]``. |
+| `pred_vs_actual(y_true: Any, y_pred: Any, **opts: Any)` | Predicted against actual, with the identity line. |
+| `residuals(y_true: Any, y_pred: Any, **opts: Any)` | Residuals against the fitted value (or ``against="index"``). |
+| `lift_curve(scores: Any, labels: Any, **opts: Any)` | Lift / gain curve against the random baseline. |
+| `learning_curve(sizes: Any, train: Any, validation: Any, **opts: Any)` | Train and validation score against training-set size. |
 | `model_graph(model: Any, **opts: Any)` | Draw a model's layers as a flat DAG. |
 | `set_height(height: str)` | Set the CSS height of the output area (e.g. ``"600px"``). |
 | `set_width(width: str)` | Set the CSS width of the output area. Default ``"100%"`` (fills the cell). |

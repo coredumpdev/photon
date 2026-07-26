@@ -13,6 +13,25 @@ import {
   PlotGrid,
   PolarPlot,
   addBarbs,
+  addTriplot,
+  addTripcolor,
+  addTricontour,
+  addTricontourf,
+  addTreemap,
+  addFunnel,
+  addSunburst,
+  addGauge,
+  addSankey,
+  addChord,
+  addParallelCoordinates,
+  addDecisionBoundary,
+  addPartialDependence,
+  addAttentionMap,
+  addRidgeline,
+  addPredVsActual,
+  addResiduals,
+  addLiftCurve,
+  addLearningCurve,
   addBollinger,
   addCalibration,
   addContourFilled,
@@ -197,6 +216,25 @@ function addSeries(plot: Plot, s: Any): void {
     case "pcolormesh": addPcolormesh(plot, s); break;
     case "streamplot": addStreamplot(plot, s); break;
     case "barbs": addBarbs(plot, s); break;
+    case "triplot": addTriplot(plot, s); break;
+    case "tripcolor": addTripcolor(plot, s); break;
+    case "tricontour": addTricontour(plot, s); break;
+    case "tricontourf": addTricontourf(plot, s); break;
+    case "treemap": addTreemap(plot, s); break;
+    case "funnel": addFunnel(plot, s); break;
+    case "sunburst": addSunburst(plot, s); break;
+    case "gauge": addGauge(plot, s); break;
+    case "sankey": addSankey(plot, s); break;
+    case "chord": addChord(plot, s); break;
+    case "parallelCoordinates": addParallelCoordinates(plot, s); break;
+    case "decisionBoundary": addDecisionBoundary(plot, s); break;
+    case "partialDependence": addPartialDependence(plot, s); break;
+    case "attentionMap": addAttentionMap(plot, s); break;
+    case "ridgeline": addRidgeline(plot, s); break;
+    case "predVsActual": addPredVsActual(plot, s); break;
+    case "residuals": addResiduals(plot, s); break;
+    case "liftCurve": addLiftCurve(plot, s); break;
+    case "learningCurve": addLearningCurve(plot, s); break;
     case "modelGraph": addModelGraph(plot, { ...s, graph: resolveGraph(s) }); break;
     default: throw new Error(`Unknown series type "${s.type}"`);
   }

@@ -59,6 +59,7 @@ export type { GraphOptions, GraphData } from "./layers/graph.js";
 export { forceLayout } from "./graph/force.js";
 export type { ForceLayoutOptions } from "./graph/force.js";
 export type { Layer, DrawState } from "./layers/layer.js";
+export { isLayer, collectLayers } from "./layers/layer.js";
 export type { PickMode, Picked } from "./layers/pick.js";
 
 // Polar
@@ -157,6 +158,9 @@ export * from "./ml/model-chart.js";
 
 // --- Charts: gridded + vector fields (contourf, pcolormesh, streamplot, barbs)
 export * from "./charts/fields.js";
+export * from "./charts/tri.js";
+export { delaunay, triangleEdges } from "./geo/delaunay.js";
+export type { Triangulation } from "./geo/delaunay.js";
 
 // --- Charts: hierarchy / flow / composition diagrams -------------------------
 export * from "./charts/treemap.js";

@@ -14,7 +14,38 @@ import {
   type RenkoOptions,
   type VolumeProfileOptions,
   type BarbsOptions,
-  type BollingerOptions,
+  type DrawdownOptions,
+  type ConfusionMatrixOptions,
+  type RocCurveOptions,
+  type PrCurveOptions,
+  type CalibrationOptions,
+  type EmbeddingOptions,
+  type DecisionBoundaryOptions,
+  type FeatureImportanceOptions,
+  type ShapBeeswarmOptions,
+  type PartialDependenceOptions,
+  type AttentionMapOptions,
+  type TrainingCurvesOptions,
+  type RidgelineOptions,
+  type PredVsActualOptions,
+  type ResidualsOptions,
+  type LiftCurveOptions,
+  type LearningCurveOptions,
+  type TriplotOptions,
+  type TripcolorOptions,
+  type TricontourOptions,
+  type TricontourfOptions,
+  type TreemapOptions,
+  type FunnelOptions,
+  type SunburstOptions,
+  type GaugeOptions,
+  type SankeyOptions,
+  type ChordOptions,
+  type ParallelOptions,
+  type RegressionOptions,
+  type EcdfOptions,
+  type CorrMatrixOptions,
+  type PsdOptions,  type BollingerOptions,
   type ContourFilledOptions,
   type EventPlotOptions,
   type Hist2dOptions,
@@ -24,6 +55,39 @@ import {
   addRenko,
   addVolumeProfile,
   addBarbs,
+  addDrawdown,
+  addConfusionMatrix,
+  addRocCurve,
+  addPrCurve,
+  addCalibration,
+  addEmbedding,
+  addDecisionBoundary,
+  addFeatureImportance,
+  addShapBeeswarm,
+  addPartialDependence,
+  addAttentionMap,
+  addTrainingCurves,
+  addRidgeline,
+  addPredVsActual,
+  addResiduals,
+  addLiftCurve,
+  addLearningCurve,
+  addTriplot,
+  addTripcolor,
+  addTricontour,
+  addTricontourf,
+  addTreemap,
+  addFunnel,
+  addSunburst,
+  addGauge,
+  addSankey,
+  addChord,
+  addParallelCoordinates,
+  addRegression,
+  addEcdf,
+  addCorrMatrix,
+  addPsd,
+  collectLayers,
   addBollinger,
   addContourFilled,
   addDepth,
@@ -911,6 +975,134 @@ export const Barbs = defineComponent({
     return () => null;
   },
 });
+
+// --- Composed builders -------------------------------------------------------
+// Statistics, ML, diagram and triangulation charts. Their handles come in every
+// shape, so `collectLayers` finds the layers to remove rather than each
+// component naming them. Static: built on mount, torn down on unmount.
+
+function builderComponent<O extends object>(
+  label: string,
+  build: (plot: CorePlot, opts: O) => unknown,
+): new () => { $props: O } {
+  return defineComponent({
+    name: `Photon${label}`,
+    inheritAttrs: false,
+    setup(_props, { attrs }) {
+      const plotRef = inject(PlotKey);
+      if (!plotRef) throw new Error(`<${label}> must be used inside <Plot>`);
+      let layers: Layer[] = [];
+      onMounted(() => {
+        const p = plotRef.value;
+        if (!p) return;
+        layers = collectLayers(build(p, attrs as unknown as O)).map((l) => markRaw(l));
+        p.render();
+      });
+      onUnmounted(() => {
+        const p = plotRef.value;
+        if (p) for (const l of layers) p.removeLayer(l);
+        layers = [];
+      });
+      return () => null;
+    },
+  }) as unknown as new () => { $props: O };
+}
+
+/** Underwater equity curve, with the worst stretch marked. */
+export const Drawdown = builderComponent<DrawdownOptions>("Drawdown", addDrawdown);
+
+/** Confusion matrix with per-cell counts and a colorbar. */
+export const ConfusionMatrix = builderComponent<ConfusionMatrixOptions>("ConfusionMatrix", addConfusionMatrix);
+
+/** ROC curve with the chance diagonal; AUC lands in the legend. */
+export const RocCurve = builderComponent<RocCurveOptions>("RocCurve", addRocCurve);
+
+/** Precision-recall curve with the no-skill baseline; AP in the legend. */
+export const PrCurve = builderComponent<PrCurveOptions>("PrCurve", addPrCurve);
+
+/** Reliability diagram plus the expected calibration error. */
+export const Calibration = builderComponent<CalibrationOptions>("Calibration", addCalibration);
+
+/** 2-D embedding scatter, coloured by class. */
+export const Embedding = builderComponent<EmbeddingOptions>("Embedding", addEmbedding);
+
+/** A classifier's decision regions under the sample points. */
+export const DecisionBoundary = builderComponent<DecisionBoundaryOptions>("DecisionBoundary", addDecisionBoundary);
+
+/** Sorted horizontal importance bars. */
+export const FeatureImportance = builderComponent<FeatureImportanceOptions>("FeatureImportance", addFeatureImportance);
+
+/** SHAP beeswarm, features ordered by mean |SHAP|. */
+export const ShapBeeswarm = builderComponent<ShapBeeswarmOptions>("ShapBeeswarm", addShapBeeswarm);
+
+/** Partial-dependence curve with an optional ICE fan. */
+export const PartialDependence = builderComponent<PartialDependenceOptions>("PartialDependence", addPartialDependence);
+
+/** An attention matrix as a heatmap. */
+export const AttentionMap = builderComponent<AttentionMapOptions>("AttentionMap", addAttentionMap);
+
+/** Loss/metric curves, EMA-smoothed with a best-epoch marker. */
+export const TrainingCurves = builderComponent<TrainingCurvesOptions>("TrainingCurves", addTrainingCurves);
+
+/** Stacked density ridges, one row per group. */
+export const Ridgeline = builderComponent<RidgelineOptions>("Ridgeline", addRidgeline);
+
+/** Predicted against actual, with the identity line. */
+export const PredVsActual = builderComponent<PredVsActualOptions>("PredVsActual", addPredVsActual);
+
+/** Residuals against the fitted value. */
+export const Residuals = builderComponent<ResidualsOptions>("Residuals", addResiduals);
+
+/** Lift / gain curve against the random baseline. */
+export const LiftCurve = builderComponent<LiftCurveOptions>("LiftCurve", addLiftCurve);
+
+/** Train and validation score against training-set size. */
+export const LearningCurve = builderComponent<LearningCurveOptions>("LearningCurve", addLearningCurve);
+
+/** The triangulation itself — every mesh edge, drawn once. */
+export const Triplot = builderComponent<TriplotOptions>("Triplot", addTriplot);
+
+/** Flat-shaded triangles over scattered samples. */
+export const Tripcolor = builderComponent<TripcolorOptions>("Tripcolor", addTripcolor);
+
+/** Iso-lines over a triangulation. */
+export const Tricontour = builderComponent<TricontourOptions>("Tricontour", addTricontour);
+
+/** Filled contour bands over a triangulation. */
+export const Tricontourf = builderComponent<TricontourfOptions>("Tricontourf", addTricontourf);
+
+/** Squarified treemap of a flat item list. */
+export const Treemap = builderComponent<TreemapOptions>("Treemap", addTreemap);
+
+/** Conversion funnel, one band per stage. */
+export const Funnel = builderComponent<FunnelOptions>("Funnel", addFunnel);
+
+/** Radial hierarchy, one ring per depth. */
+export const Sunburst = builderComponent<SunburstOptions>("Sunburst", addSunburst);
+
+/** A single value on an arc. */
+export const Gauge = builderComponent<GaugeOptions>("Gauge", addGauge);
+
+/** Flow diagram: nodes joined by proportional ribbons. */
+export const Sankey = builderComponent<SankeyOptions>("Sankey", addSankey);
+
+/** Chord diagram of a square flow matrix. */
+export const Chord = builderComponent<ChordOptions>("Chord", addChord);
+
+/** Parallel-coordinates plot over several dimensions. */
+export const ParallelCoordinates = builderComponent<ParallelOptions>("ParallelCoordinates", addParallelCoordinates);
+
+/** OLS trend (optionally with a band) or a LOESS local fit. */
+export const Regression = builderComponent<RegressionOptions>("Regression", addRegression);
+
+/** The empirical CDF as a step line. */
+export const Ecdf = builderComponent<EcdfOptions>("Ecdf", addEcdf);
+
+/** Correlation heatmap on a diverging scale locked to ±1. */
+export const CorrMatrix = builderComponent<CorrMatrixOptions>("CorrMatrix", addCorrMatrix);
+
+/** Welch power spectral density. */
+export const Psd = builderComponent<PsdOptions>("Psd", addPsd);
 
 /** A model architecture as a flat layered DAG (PyTorch / ONNX / Keras / sklearn). */
 export const ModelGraph = defineComponent({

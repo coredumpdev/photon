@@ -385,3 +385,62 @@ def test_bins_stays_json_so_js_can_branch_on_it():
 def test_renko_needs_a_brick_size():
     with pytest.raises(TypeError):
         pv.Plot().renko([1, 2, 3])
+
+
+# -- triangulations, diagrams, and the rest of the ML pack --------------------
+
+
+def test_tri_family_reaches_the_right_series_types():
+    x = [0.0, 1.0, 0.5, 1.5]
+    y = [0.0, 0.0, 1.0, 1.0]
+    z = [1.0, 2.0, 3.0, 4.0]
+    assert pv.Plot().triplot(x, y).to_spec()["series"][0]["type"] == "triplot"
+    assert pv.Plot().tripcolor(x, y, z).to_spec()["series"][0]["type"] == "tripcolor"
+    assert pv.Plot().tricontour(x, y, z).to_spec()["series"][0]["type"] == "tricontour"
+    assert pv.Plot().tricontourf(x, y, z).to_spec()["series"][0]["type"] == "tricontourf"
+
+
+def test_tri_accepts_an_explicit_mesh():
+    """A finite-element result already knows its connectivity — don't re-triangulate."""
+    spec = pv.Plot().tripcolor([0, 1, 0], [0, 0, 1], [1, 2, 3], triangles=[0, 1, 2]).to_spec()
+    assert spec["series"][0]["triangles"] == [0, 1, 2]
+
+
+def test_diagram_builders_are_reachable():
+    built = {
+        "treemap": pv.Plot().treemap([{"label": "a", "value": 1}]),
+        "funnel": pv.Plot().funnel([{"label": "a", "value": 10}, {"label": "b", "value": 4}]),
+        "sunburst": pv.Plot().sunburst({"label": "r", "children": [{"label": "a", "value": 1}]}),
+        "gauge": pv.Plot().gauge(50),
+        "sankey": pv.Plot().sankey(["a", "b"], [{"source": 0, "target": 1, "value": 1}]),
+        "chord": pv.Plot().chord([[0, 1], [1, 0]]),
+        "parallelCoordinates": pv.Plot().parallel_coordinates(["a", "b"], [[0, 1], [1, 0]]),
+    }
+    for expected, chart in built.items():
+        assert chart.to_spec()["series"][0]["type"] == expected, expected
+
+
+def test_remaining_ml_builders_are_reachable():
+    scores = [0.1, 0.9, 0.4, 0.8]
+    labels = [0, 1, 0, 1]
+    built = {
+        "partialDependence": pv.Plot().partial_dependence([0, 1], [0.2, 0.4]),
+        "attentionMap": pv.Plot().attention_map([1, 2, 3, 4], queries=2, keys=2),
+        "ridgeline": pv.Plot().ridgeline([{"name": "g", "values": [1, 2, 3]}]),
+        "predVsActual": pv.Plot().pred_vs_actual([1, 2], [1.1, 1.9]),
+        "residuals": pv.Plot().residuals([1, 2], [1.1, 1.9]),
+        "liftCurve": pv.Plot().lift_curve(scores, labels),
+        "learningCurve": pv.Plot().learning_curve([10, 20], [0.6, 0.7], [0.5, 0.6]),
+    }
+    for expected, chart in built.items():
+        assert chart.to_spec()["series"][0]["type"] == expected, expected
+
+
+def test_ml_builders_use_the_key_names_the_layer_reads():
+    """These were guessed wrong once and rendered an error box, not a chart."""
+    s = pv.Plot().pred_vs_actual([1, 2], [1.1, 1.9]).to_spec()["series"][0]
+    assert "yTrue" in s and "yPred" in s
+    s = pv.Plot().partial_dependence([0, 1], [0.2, 0.4]).to_spec()["series"][0]
+    assert "pd" in s
+    s = pv.Plot().attention_map([1, 2, 3, 4], queries=2, keys=2).to_spec()["series"][0]
+    assert "weights" in s

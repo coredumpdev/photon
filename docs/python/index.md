@@ -70,6 +70,20 @@ pv.streamplot(u, v, cols, rows, extent, colormap="plasma")
 pv.barbs(x, y, u, v)                                        # wind barbs
 ```
 
+Scattered samples get triangulated first:
+
+```python
+pv.tripcolor(x, y, z, edges=True)          # flat-shaded triangles + the mesh
+pv.tricontourf(x, y, z, levels=12)         # filled bands over the triangulation
+pv.triplot(x, y, showPoints=True)          # the mesh on its own
+```
+
+Diagrams and the rest of the ML pack are one-liners too — `pv.treemap`,
+`pv.funnel`, `pv.sunburst`, `pv.gauge`, `pv.sankey`, `pv.chord`,
+`pv.parallel_coordinates`, `pv.ridgeline`, `pv.partial_dependence`,
+`pv.attention_map`, `pv.pred_vs_actual`, `pv.residuals`, `pv.lift_curve`,
+`pv.learning_curve`, `pv.decision_boundary`.
+
 ## figsize and subplots
 
 `figsize` is matplotlib's `(width, height)` **in inches** at `dpi` (100 by

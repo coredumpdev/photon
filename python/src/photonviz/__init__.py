@@ -40,7 +40,7 @@ from .charts import Axes, Axes3D, Plot, Plot3D, Polar, PolarAxes, _shortcut
 from .figure import Figure, figure, subplots
 from .models import from_keras, from_layers, from_onnx, from_sklearn, from_torch, to_source
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # -- One-liners: pv.line(x, y) == pv.Plot().line(x, y) ------------------------
 line = _shortcut(Plot, "line")
@@ -59,6 +59,18 @@ hist2d = _shortcut(Plot, "hist2d")
 eventplot = _shortcut(Plot, "eventplot")
 streamplot = _shortcut(Plot, "streamplot")
 barbs = _shortcut(Plot, "barbs")
+triplot = _shortcut(Plot, "triplot")
+tripcolor = _shortcut(Plot, "tripcolor")
+tricontour = _shortcut(Plot, "tricontour")
+tricontourf = _shortcut(Plot, "tricontourf")
+
+treemap = _shortcut(Plot, "treemap")
+funnel = _shortcut(Plot, "funnel")
+sunburst = _shortcut(Plot, "sunburst")
+gauge = _shortcut(Plot, "gauge")
+sankey = _shortcut(Plot, "sankey")
+chord = _shortcut(Plot, "chord")
+parallel_coordinates = _shortcut(Plot, "parallel_coordinates")
 errorbar = _shortcut(Plot, "errorbar")
 stem = _shortcut(Plot, "stem")
 quiver = _shortcut(Plot, "quiver")
@@ -90,6 +102,14 @@ calibration = _shortcut(Plot, "calibration")
 embedding = _shortcut(Plot, "embedding")
 feature_importance = _shortcut(Plot, "feature_importance")
 shap_beeswarm = _shortcut(Plot, "shap_beeswarm")
+decision_boundary = _shortcut(Plot, "decision_boundary")
+partial_dependence = _shortcut(Plot, "partial_dependence")
+attention_map = _shortcut(Plot, "attention_map")
+ridgeline = _shortcut(Plot, "ridgeline")
+pred_vs_actual = _shortcut(Plot, "pred_vs_actual")
+residuals = _shortcut(Plot, "residuals")
+lift_curve = _shortcut(Plot, "lift_curve")
+learning_curve = _shortcut(Plot, "learning_curve")
 training_curves = _shortcut(Plot, "training_curves")
 model_graph = _shortcut(Plot, "model_graph")
 
@@ -142,6 +162,9 @@ __all__ = [
     "line", "scatter", "bar", "area", "step", "histogram", "box", "heatmap",
     "contour", "contourf", "pcolormesh", "hexbin", "hist2d", "eventplot",
     "errorbar", "stem", "quiver", "streamplot", "barbs", "pie",
+    "triplot", "tripcolor", "tricontour", "tricontourf",
+    # diagrams
+    "treemap", "funnel", "sunburst", "gauge", "sankey", "chord", "parallel_coordinates",
     "grouped_bars", "stacked_bars", "stacked_area", "patches", "graph",
     # finance
     "candlestick", "ohlc", "heikin_ashi", "bollinger", "renko", "depth",
@@ -150,7 +173,9 @@ __all__ = [
     "regression", "ecdf", "corr_matrix", "psd",
     # machine learning
     "confusion_matrix", "roc_curve", "pr_curve", "calibration", "embedding",
-    "feature_importance", "shap_beeswarm", "training_curves",
+    "feature_importance", "shap_beeswarm", "training_curves", "decision_boundary",
+    "partial_dependence", "attention_map", "ridgeline", "pred_vs_actual", "residuals",
+    "lift_curve", "learning_curve",
     # 3D + polar
     "surface", "scatter3d", "line3d", "bar3d", "isosurface", "volume",
     "boxes3d", "quiver3d", "contour3d",

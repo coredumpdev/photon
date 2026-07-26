@@ -20,6 +20,39 @@ import {
   ScatterLayer,
   StemLayer,
   addBarbs,
+  addDrawdown,
+  addConfusionMatrix,
+  addRocCurve,
+  addPrCurve,
+  addCalibration,
+  addEmbedding,
+  addDecisionBoundary,
+  addFeatureImportance,
+  addShapBeeswarm,
+  addPartialDependence,
+  addAttentionMap,
+  addTrainingCurves,
+  addRidgeline,
+  addPredVsActual,
+  addResiduals,
+  addLiftCurve,
+  addLearningCurve,
+  addTriplot,
+  addTripcolor,
+  addTricontour,
+  addTricontourf,
+  addTreemap,
+  addFunnel,
+  addSunburst,
+  addGauge,
+  addSankey,
+  addChord,
+  addParallelCoordinates,
+  addRegression,
+  addEcdf,
+  addCorrMatrix,
+  addPsd,
+  collectLayers,
   addBollinger,
   addContourFilled,
   addDepth,
@@ -35,6 +68,39 @@ import {
   type AreaOptions,
   type BarOptions,
   type BarbsOptions,
+  type DrawdownOptions,
+  type ConfusionMatrixOptions,
+  type RocCurveOptions,
+  type PrCurveOptions,
+  type CalibrationOptions,
+  type EmbeddingOptions,
+  type DecisionBoundaryOptions,
+  type FeatureImportanceOptions,
+  type ShapBeeswarmOptions,
+  type PartialDependenceOptions,
+  type AttentionMapOptions,
+  type TrainingCurvesOptions,
+  type RidgelineOptions,
+  type PredVsActualOptions,
+  type ResidualsOptions,
+  type LiftCurveOptions,
+  type LearningCurveOptions,
+  type TriplotOptions,
+  type TripcolorOptions,
+  type TricontourOptions,
+  type TricontourfOptions,
+  type TreemapOptions,
+  type FunnelOptions,
+  type SunburstOptions,
+  type GaugeOptions,
+  type SankeyOptions,
+  type ChordOptions,
+  type ParallelOptions,
+  type RegressionOptions,
+  type EcdfOptions,
+  type CorrMatrixOptions,
+  type PsdOptions,
+  type Layer,
   type BollingerHandle,
   type BollingerOptions,
   type ContourFilledOptions,
@@ -854,6 +920,271 @@ export function Barbs(props: BarbsProps) {
   }, [plot, props.x, props.y, props.u, props.v, props.increment, props.length,
       props.color, props.width, props.name, props.yAxis, props.renderType]);
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Composed builders
+//
+// Statistics, ML, diagram and triangulation charts are free functions that
+// compose layers rather than layer classes, and their handles come in every
+// shape — a bare layer, `{ upper, middle, lower }`, `{ lines: Layer[] }`.
+// `collectLayers` finds the layers in whichever shape, so a rebuild cannot
+// leave one behind. They are static: a shallow option change rebuilds.
+// ---------------------------------------------------------------------------
+
+function shallowEqual(a: object, b: object): boolean {
+  const ra = a as Record<string, unknown>, rb = b as Record<string, unknown>;
+  const ka = Object.keys(ra), kb = Object.keys(rb);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (!Object.is(ra[k], rb[k])) return false;
+  return true;
+}
+
+function useBuilder<O extends object>(build: (plot: CorePlot, opts: O) => unknown, opts: O): null {
+  const plot = useContext(PlotContext);
+  const state = useRef<{ opts: O; layers: Layer[] } | null>(null);
+  // No dependency array: the shallow compare is the dependency check, since the
+  // option set differs per builder and a stable deps list cannot be written once.
+  useEffect(() => {
+    if (!plot) return;
+    if (state.current && shallowEqual(state.current.opts, opts)) return;
+    if (state.current) for (const l of state.current.layers) plot.removeLayer(l);
+    const layers = collectLayers(build(plot, opts));
+    plot.render();
+    state.current = { opts, layers };
+  });
+  useEffect(() => {
+    if (!plot) return;
+    return () => {
+      if (state.current) for (const l of state.current.layers) plot.removeLayer(l);
+      state.current = null;
+    };
+  }, [plot]);
+  return null;
+}
+
+export type DrawdownProps = DrawdownOptions;
+
+/** Underwater equity curve, with the worst stretch marked. */
+export function Drawdown(props: DrawdownProps) {
+  return useBuilder(addDrawdown, props);
+}
+
+export type ConfusionMatrixProps = ConfusionMatrixOptions;
+
+/** Confusion matrix with per-cell counts and a colorbar. */
+export function ConfusionMatrix(props: ConfusionMatrixProps) {
+  return useBuilder(addConfusionMatrix, props);
+}
+
+export type RocCurveProps = RocCurveOptions;
+
+/** ROC curve with the chance diagonal; AUC lands in the legend. */
+export function RocCurve(props: RocCurveProps) {
+  return useBuilder(addRocCurve, props);
+}
+
+export type PrCurveProps = PrCurveOptions;
+
+/** Precision-recall curve with the no-skill baseline; AP in the legend. */
+export function PrCurve(props: PrCurveProps) {
+  return useBuilder(addPrCurve, props);
+}
+
+export type CalibrationProps = CalibrationOptions;
+
+/** Reliability diagram plus the expected calibration error. */
+export function Calibration(props: CalibrationProps) {
+  return useBuilder(addCalibration, props);
+}
+
+export type EmbeddingProps = EmbeddingOptions;
+
+/** 2-D embedding scatter, coloured by class. */
+export function Embedding(props: EmbeddingProps) {
+  return useBuilder(addEmbedding, props);
+}
+
+export type DecisionBoundaryProps = DecisionBoundaryOptions;
+
+/** A classifier's decision regions under the sample points. */
+export function DecisionBoundary(props: DecisionBoundaryProps) {
+  return useBuilder(addDecisionBoundary, props);
+}
+
+export type FeatureImportanceProps = FeatureImportanceOptions;
+
+/** Sorted horizontal importance bars. */
+export function FeatureImportance(props: FeatureImportanceProps) {
+  return useBuilder(addFeatureImportance, props);
+}
+
+export type ShapBeeswarmProps = ShapBeeswarmOptions;
+
+/** SHAP beeswarm, features ordered by mean |SHAP|. */
+export function ShapBeeswarm(props: ShapBeeswarmProps) {
+  return useBuilder(addShapBeeswarm, props);
+}
+
+export type PartialDependenceProps = PartialDependenceOptions;
+
+/** Partial-dependence curve with an optional ICE fan. */
+export function PartialDependence(props: PartialDependenceProps) {
+  return useBuilder(addPartialDependence, props);
+}
+
+export type AttentionMapProps = AttentionMapOptions;
+
+/** An attention matrix as a heatmap. */
+export function AttentionMap(props: AttentionMapProps) {
+  return useBuilder(addAttentionMap, props);
+}
+
+export type TrainingCurvesProps = TrainingCurvesOptions;
+
+/** Loss/metric curves, EMA-smoothed with a best-epoch marker. */
+export function TrainingCurves(props: TrainingCurvesProps) {
+  return useBuilder(addTrainingCurves, props);
+}
+
+export type RidgelineProps = RidgelineOptions;
+
+/** Stacked density ridges, one row per group. */
+export function Ridgeline(props: RidgelineProps) {
+  return useBuilder(addRidgeline, props);
+}
+
+export type PredVsActualProps = PredVsActualOptions;
+
+/** Predicted against actual, with the identity line. */
+export function PredVsActual(props: PredVsActualProps) {
+  return useBuilder(addPredVsActual, props);
+}
+
+export type ResidualsProps = ResidualsOptions;
+
+/** Residuals against the fitted value. */
+export function Residuals(props: ResidualsProps) {
+  return useBuilder(addResiduals, props);
+}
+
+export type LiftCurveProps = LiftCurveOptions;
+
+/** Lift / gain curve against the random baseline. */
+export function LiftCurve(props: LiftCurveProps) {
+  return useBuilder(addLiftCurve, props);
+}
+
+export type LearningCurveProps = LearningCurveOptions;
+
+/** Train and validation score against training-set size. */
+export function LearningCurve(props: LearningCurveProps) {
+  return useBuilder(addLearningCurve, props);
+}
+
+export type TriplotProps = TriplotOptions;
+
+/** The triangulation itself — every mesh edge, drawn once. */
+export function Triplot(props: TriplotProps) {
+  return useBuilder(addTriplot, props);
+}
+
+export type TripcolorProps = TripcolorOptions;
+
+/** Flat-shaded triangles over scattered samples. */
+export function Tripcolor(props: TripcolorProps) {
+  return useBuilder(addTripcolor, props);
+}
+
+export type TricontourProps = TricontourOptions;
+
+/** Iso-lines over a triangulation. */
+export function Tricontour(props: TricontourProps) {
+  return useBuilder(addTricontour, props);
+}
+
+export type TricontourfProps = TricontourfOptions;
+
+/** Filled contour bands over a triangulation. */
+export function Tricontourf(props: TricontourfProps) {
+  return useBuilder(addTricontourf, props);
+}
+
+export type TreemapProps = TreemapOptions;
+
+/** Squarified treemap of a flat item list. */
+export function Treemap(props: TreemapProps) {
+  return useBuilder(addTreemap, props);
+}
+
+export type FunnelProps = FunnelOptions;
+
+/** Conversion funnel, one band per stage. */
+export function Funnel(props: FunnelProps) {
+  return useBuilder(addFunnel, props);
+}
+
+export type SunburstProps = SunburstOptions;
+
+/** Radial hierarchy, one ring per depth. */
+export function Sunburst(props: SunburstProps) {
+  return useBuilder(addSunburst, props);
+}
+
+export type GaugeProps = GaugeOptions;
+
+/** A single value on an arc. */
+export function Gauge(props: GaugeProps) {
+  return useBuilder(addGauge, props);
+}
+
+export type SankeyProps = SankeyOptions;
+
+/** Flow diagram: nodes joined by proportional ribbons. */
+export function Sankey(props: SankeyProps) {
+  return useBuilder(addSankey, props);
+}
+
+export type ChordProps = ChordOptions;
+
+/** Chord diagram of a square flow matrix. */
+export function Chord(props: ChordProps) {
+  return useBuilder(addChord, props);
+}
+
+export type ParallelCoordinatesProps = ParallelOptions;
+
+/** Parallel-coordinates plot over several dimensions. */
+export function ParallelCoordinates(props: ParallelCoordinatesProps) {
+  return useBuilder(addParallelCoordinates, props);
+}
+
+export type RegressionProps = RegressionOptions;
+
+/** OLS trend (optionally with a band) or a LOESS local fit. */
+export function Regression(props: RegressionProps) {
+  return useBuilder(addRegression, props);
+}
+
+export type EcdfProps = EcdfOptions;
+
+/** The empirical CDF as a step line. */
+export function Ecdf(props: EcdfProps) {
+  return useBuilder(addEcdf, props);
+}
+
+export type CorrMatrixProps = CorrMatrixOptions;
+
+/** Correlation heatmap on a diverging scale locked to ±1. */
+export function CorrMatrix(props: CorrMatrixProps) {
+  return useBuilder(addCorrMatrix, props);
+}
+
+export type PsdProps = PsdOptions;
+
+/** Welch power spectral density. */
+export function Psd(props: PsdProps) {
+  return useBuilder(addPsd, props);
 }
 
 // ---------------------------------------------------------------------------
