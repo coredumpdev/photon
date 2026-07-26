@@ -348,3 +348,27 @@ const slicedCnn = sequentialModel([
     labels: "full",
   });
 }
+
+// 17 — Voxels: `slices: "voxels"` subdivides all three axes, so a layer is a
+// real channels × height × width grid of cubes. The count is a product of
+// three dims, so `maxVoxels` bounds it — small tensors here to stay honest.
+{
+  const voxelCnn = sequentialModel([
+    { name: "input", type: "Input", shape: [3, 24, 24] },
+    { name: "conv1", type: "Conv2d", shape: [8, 12, 12], params: 1792 },
+    { name: "pool1", type: "MaxPool2d", shape: [8, 6, 6] },
+    { name: "fc", type: "Linear", shape: [10], params: 2570 },
+  ], "VoxelCNN");
+
+  const p3 = new Plot3D(panel("Model graph · 3D voxels", "slices: voxels · one cube per activation", "wide tall"), {
+    background: [0.04, 0.06, 0.13, 1],
+    aspectMode: "data",
+    projection: "orthographic",
+    showAxes: false,
+    gridPlanes: false,
+    azimuth: 0.62, elevation: 0.34, distance: 2.4,
+    title: "Every cube is one activation",
+    downloadButton: false,
+  });
+  addModelGraph3D(p3, { graph: voxelCnn, slices: "voxels", maxSlices: 24, maxVoxels: 30_000, rankSpacing: 1.1, maxFace: 2.2, labels: "name" });
+}

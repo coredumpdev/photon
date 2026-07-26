@@ -160,7 +160,9 @@ export type Annotation =
   | { type: "span"; dim: Dim; value: number; color?: string; width?: number; dash?: number[]; yAxis?: string }
   | { type: "band"; dim: Dim; from: number; to: number; color?: string; yAxis?: string }
   | { type: "box"; x: Range; y: Range; color?: string; border?: string; label?: string; yAxis?: string }
-  | { type: "label"; x: number; y: number; text: string; color?: string; font?: string; align?: "left" | "center" | "right"; yAxis?: string }
+  // `dx`/`dy` nudge a label in screen pixels after projection, so a stack of
+  // lines keeps its spacing at any zoom instead of fanning out with the scale.
+  | { type: "label"; x: number; y: number; text: string; color?: string; font?: string; align?: "left" | "center" | "right"; baseline?: CanvasTextBaseline; dx?: number; dy?: number; yAxis?: string }
   | { type: "line"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; label?: string; yAxis?: string }
   | { type: "ray"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; label?: string; yAxis?: string }
   | { type: "fib"; x0: number; x1: number; high: number; low: number; ratios?: number[]; color?: string; fill?: boolean; label?: string; yAxis?: string };
@@ -1284,6 +1286,26 @@ export class Plot {
     this.requestRender();
   }
 
+  /**
+   * Keep data-units-per-pixel equal on both axes, so nothing is distorted when
+   * the container's aspect changes (the looser axis is expanded to match).
+   * Essential for anything whose shape carries meaning — maps, pie charts,
+   * schematics.
+   */
+  setEqualAspect(on: boolean): void {
+    if (this.equalAspect === on) return;
+    this.equalAspect = on;
+    // Re-fit either way: turning it on should balance the data extent, not
+    // whatever the previous free-aspect view happened to be.
+    this.autoscale();
+    this.requestRender();
+  }
+
+  /** Whether {@link setEqualAspect} is currently on. */
+  isEqualAspect(): boolean {
+    return this.equalAspect;
+  }
+
   /** Set (or lock) the visible domain. `y` targets the primary axis; use `yAxes` for others. */
   setView(view: { x?: Range; y?: Range; yAxes?: Record<string, Range> }): void {
     if (view.x) {
@@ -1467,6 +1489,11 @@ export class Plot {
     this.gridCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.dataCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.axisCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // `applyAspect` only ever *expands* the looser axis, so without re-fitting
+    // first it would compound its own previous output and the view would ratchet
+    // outwards on every resize (fullscreen and back would shrink the data).
+    // Panning or zooming clears the `auto` flags, so a user-set view is kept.
+    if (this.equalAspect) this.autoscale();
     this.render();
   }
 
@@ -1800,8 +1827,8 @@ export class Plot {
         ctx.fillStyle = a.color ?? this.theme.text;
         ctx.font = a.font ?? this.theme.font;
         ctx.textAlign = a.align ?? "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(a.text, px(a.x), py(s, a.y));
+        ctx.textBaseline = a.baseline ?? "middle";
+        ctx.fillText(a.text, px(a.x) + (a.dx ?? 0), py(s, a.y) + (a.dy ?? 0));
       } else if (a.type === "line" || a.type === "ray") {
         const s = yScaleOf(a.yAxis);
         ctx.strokeStyle = a.color ?? this.theme.axis;

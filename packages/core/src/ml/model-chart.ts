@@ -99,6 +99,15 @@ export interface ModelGraphOptions extends ModelLayoutOptions {
   theme?: "light" | "dark";
   /** Blank the axes — a diagram has no meaningful coordinates. Default true. */
   hideAxes?: boolean;
+  /**
+   * Lock data-units-per-pixel on both axes. Default true, and you almost never
+   * want it off: box proportions, corner radii and arrowheads are all in data
+   * units, so a free aspect stretches every one of them when the container
+   * changes shape (resizing, or going fullscreen).
+   */
+  equalAspect?: boolean;
+  /** Vertical gap between label lines, in CSS px. Default 15. */
+  labelLineHeight?: number;
   /** Legend name for the box layer. Omitted by default (diagrams use their own key). */
   name?: string;
 }
@@ -191,8 +200,9 @@ function arrowHead(
  * family, residual/skip connections route around the trunk, and each box shows
  * its type, name and output shape.
  *
- * Pair it with `new Plot(el, { equalAspect: true, hover: false })` — the diagram
- * is a schematic, so a square aspect and no series tooltip read best.
+ * The aspect is locked for you (a schematic must not shear), the axes are
+ * blanked, and a purpose-built hover tooltip is attached — so pair it with
+ * `new Plot(el, { hover: false })` to suppress the series tooltip it replaces.
  */
 export function addModelGraph(plot: Plot, opts: ModelGraphOptions): ModelGraphHandle {
   const layout = modelLayout(opts.graph, opts);
@@ -269,17 +279,18 @@ export function addModelGraph(plot: Plot, opts: ModelGraphOptions): ModelGraphHa
           .join("  ");
         if (detail) lines.push({ text: detail, sub: true });
       }
-      // Cap the line spacing at the unscaled box height: a `sizeBy`-inflated box
-      // should keep its label block tight, not spread it across the whole face.
-      const step = Math.min(b.h, opts.nodeHeight ?? 0.9) * 0.27;
-      const top = ((lines.length - 1) / 2) * step;
+      // All lines share the box centre and are offset in *pixels*, so the block
+      // stays tight whatever the zoom or the box's data-space height.
+      const step = opts.labelLineHeight ?? 15;
+      const top = -((lines.length - 1) / 2) * step;
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]!;
         disposers.push(
           plot.addAnnotation({
             type: "label",
             x: b.x,
-            y: b.y + top - i * step,
+            y: b.y,
+            dy: top + i * step,
             text: line.text,
             align: "center",
             color: line.sub ? subLabelColor : labelColor,
@@ -294,6 +305,8 @@ export function addModelGraph(plot: Plot, opts: ModelGraphOptions): ModelGraphHa
     plot.setAxis("x", { ticks: [], showAxisLine: false });
     plot.setAxis("y", { ticks: [], showAxisLine: false });
   }
+  // Without this the diagram shears whenever the container's aspect changes.
+  if (opts.equalAspect !== false) plot.setEqualAspect(true);
 
   const nodeAt = (x: number, y: number): ModelNodeBox | null => {
     for (let i = layout.nodes.length - 1; i >= 0; i--) {
@@ -390,15 +403,27 @@ export interface ModelGraph3DOptions extends ModelLayoutOptions, ModelBoxSizing 
    * three separate planes rather than a single slab.
    *
    * `"channels"` uses the layer's own channel count, a number uses that many for
-   * every layer, `"none"` (default) keeps one block. The stack occupies exactly
-   * the same space either way, so the layout does not shift.
+   * every layer, `"none"` (default) keeps one block. `"voxels"` goes further and
+   * subdivides all three axes — a `[3, 224, 224]` layer becomes a real
+   * channels × height × width grid of cubes rather than 3 planes.
+   *
+   * The stack occupies exactly the same space either way, so the layout does not
+   * shift.
    */
-  slices?: "none" | "channels" | number;
+  slices?: "none" | "channels" | "voxels" | number;
   /**
-   * Cap on slices per layer, so a 512-channel block does not become a solid
-   * smear. Default 12. Set it higher when the model is small.
+   * Cap per axis, so a 512-channel block does not become a solid smear. Default
+   * 12. With `slices: "voxels"` this bounds every axis, so the default draws at
+   * most 12³ cubes per layer — raise it for the literal grid.
    */
   maxSlices?: number;
+  /**
+   * Total cube budget per layer for `slices: "voxels"`. When the capped grid
+   * would exceed it, all three axes are scaled down together so the proportions
+   * survive. Default 20 000 — raise it deliberately, since the count is the
+   * product of three dimensions.
+   */
+  maxVoxels?: number;
   /** Fraction of each slice's cell left empty as the gap, 0..1. Default 0.35. */
   sliceGap?: number;
   /** Draw connectors between blocks. Default true. */
@@ -425,12 +450,85 @@ export interface ModelGraph3DOptions extends ModelLayoutOptions, ModelBoxSizing 
  */
 function sliceCount(
   node: ModelNode,
-  mode: NonNullable<ModelGraph3DOptions["slices"]>,
+  mode: "none" | "channels" | "voxels" | number,
   maxSlices: number,
 ): number {
   if (mode === "none") return 1;
-  const wanted = mode === "channels" ? tensorMetrics(node.shape)[0] : mode;
+  // "voxels" is 3D-only; along one axis it degenerates to the channel count.
+  const wanted = typeof mode === "number" ? mode : tensorMetrics(node.shape)[0];
   return Math.max(1, Math.min(Math.floor(maxSlices), Math.floor(wanted) || 1));
+}
+
+/**
+ * Cubes per axis for `slices: "voxels"` — the tensor's own dimensions, each
+ * capped, then all three scaled down together if the product blows the budget.
+ * Scaling them together keeps the grid's proportions honest.
+ */
+function voxelCounts(node: ModelNode, maxSlices: number, maxVoxels: number): [number, number, number] {
+  const cap = Math.max(1, Math.floor(maxSlices));
+  const dims = tensorMetrics(node.shape).map((d) => Math.max(1, Math.min(cap, Math.floor(d)))) as
+    [number, number, number];
+  let total = dims[0] * dims[1] * dims[2];
+  if (total <= maxVoxels) return dims;
+  // Shrink uniformly: the cube root of the overshoot applies to each axis.
+  const factor = Math.cbrt(maxVoxels / total);
+  const scaled = dims.map((d) => Math.max(1, Math.floor(d * factor))) as [number, number, number];
+  // Floor can leave headroom; spend it on the longest axis first.
+  total = scaled[0] * scaled[1] * scaled[2];
+  for (let guard = 0; guard < 8 && total < maxVoxels; guard++) {
+    const order = [0, 1, 2].sort((a, b) => dims[b]! - dims[a]!);
+    let grew = false;
+    for (const axis of order) {
+      if (scaled[axis]! >= dims[axis]!) continue;
+      const next = total / scaled[axis]! * (scaled[axis]! + 1);
+      if (next > maxVoxels) continue;
+      scaled[axis]!++;
+      total = next;
+      grew = true;
+      break;
+    }
+    if (!grew) break;
+  }
+  return scaled;
+}
+
+/**
+ * Fill a block with an `nx × ny × nz` grid of cubes, occupying exactly the
+ * extent the solid cuboid did.
+ */
+function voxelBoxes(
+  block: ModelBlock,
+  counts: [number, number, number],
+  gap: number,
+  color: string,
+  label: string,
+): Box3D[] {
+  const [nx, ny, nz] = counts;
+  const cell: [number, number, number] = [block.w / nx, block.h / ny, block.d / nz];
+  const size = cell.map((c) => Math.max(c * (1 - gap), c * 0.05)) as [number, number, number];
+  const origin: [number, number, number] = [
+    block.x - block.w / 2 + cell[0] / 2,
+    block.y - block.h / 2 + cell[1] / 2,
+    block.z - block.d / 2 + cell[2] / 2,
+  ];
+  const out: Box3D[] = [];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      for (let k = 0; k < nz; k++) {
+        out.push({
+          x: origin[0] + i * cell[0],
+          y: origin[1] + j * cell[1],
+          z: origin[2] + k * cell[2],
+          w: size[0],
+          h: size[1],
+          d: size[2],
+          color,
+          label,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -482,8 +580,10 @@ export interface ModelGraph3DHandle {
   connectors: Line3DLayer[];
   /** One entry per layer, whatever the slice count. */
   blocks: ModelBlock[];
-  /** Slices drawn for each block, parallel to {@link blocks}. */
+  /** Cubes drawn for each block, parallel to {@link blocks}. */
   slices: number[];
+  /** Voxel grid per block as `[nx, ny, nz]`, or null unless `slices: "voxels"`. */
+  voxelGrid: Array<[number, number, number]> | null;
   /** Remove the labels this builder pinned (the layers are yours to remove). */
   destroy(): void;
 }
@@ -539,12 +639,19 @@ export function addModelGraph3D(plot: Plot3D, opts: ModelGraph3DOptions): ModelG
 
   const sliceMode = opts.slices ?? "none";
   const maxSlices = opts.maxSlices ?? 12;
+  const maxVoxels = opts.maxVoxels ?? 20_000;
   const sliceGap = Math.min(0.9, Math.max(0, opts.sliceGap ?? 0.35));
-  const slices = blocks.map((b) => sliceCount(b.node, sliceMode, maxSlices));
+  const voxels = sliceMode === "voxels";
+  const grids = voxels ? blocks.map((b) => voxelCounts(b.node, maxSlices, maxVoxels)) : null;
+  const slices = grids
+    ? grids.map(([nx, ny, nz]) => nx * ny * nz)
+    : blocks.map((b) => sliceCount(b.node, sliceMode, maxSlices));
 
   const boxes = plot.addBoxes3D({
     boxes: blocks.flatMap((b, i) =>
-      sliceBoxes(b, slices[i]!, sliceGap, colors[b.category], describeNode(b.node)),
+      grids
+        ? voxelBoxes(b, grids[i]!, sliceGap, colors[b.category], describeNode(b.node))
+        : sliceBoxes(b, slices[i]!, sliceGap, colors[b.category], describeNode(b.node)),
     ),
     opacity: opts.opacity ?? 1,
     ...(opts.name ? { name: opts.name } : {}),
@@ -607,6 +714,7 @@ export function addModelGraph3D(plot: Plot3D, opts: ModelGraph3DOptions): ModelG
     connectors,
     blocks,
     slices,
+    voxelGrid: grids,
     destroy(): void {
       for (const d of disposers) d();
       disposers.length = 0;

@@ -63,6 +63,9 @@ plot.render();
   hiding a series re-fits the auto axes. API: `plot.toggleLayer(layer)`,
   `setLayerVisible`, `isLayerVisible`, `onVisibilityChange`.
 - `colorbar`: `true` (default) / `false` / `ColorbarOptions` — see Colorbar.
+- `equalAspect`: keep data-units-per-pixel equal on both axes so nothing shears
+  when the container's aspect changes. Toggle at runtime with
+  `plot.setEqualAspect(on)` / `plot.isEqualAspect()`.
 - `interactive`: wheel-zoom + drag (default true). `mode`: `"pan"` (default) or box-zoom.
 - `hover`: crosshair + tooltip (default true). `pick`: `"x" | "y" | "xy"` (use `"xy"` for scatter/maps).
 - `showToolbar`: home + pan/box/X/Y-zoom buttons (default true).
@@ -91,6 +94,8 @@ Every layer accepts `renderType?: "static" | "dynamic"`, `name?`, `yAxis?`.
 - `plot.addImage({ source, extent })`
 - `plot.addGraph({ nodes, edges, ... })` — force-directed graph (`forceLayout` exported).
 - `plot.addAnnotation(a)` where `a` is a `span | band | box | label | line | ray | fib`.
+  A `label` also takes `dx`/`dy` (screen px, applied after projection) and
+  `baseline`, so stacked lines keep their spacing at any zoom.
 - `plot.addHistogram(values, opts)` (uses `histogram` from stats).
 
 Streaming: `const l = plot.addLine({ x, y, renderType: "dynamic" }); l.setData(x2, y2); plot.render();`
@@ -220,11 +225,19 @@ Render it either way, from the same graph:
   with `new Plot3D(el, { aspectMode: "data", showAxes: false, projection: "orthographic" })`.
 
 Slices — draw a layer as its channels instead of one shape, in either dimension:
-`slices: "none" | "channels" | number` (default "none"), `maxSlices` (cap per
-layer, default 12), `sliceSpread` (2D card fan-out, default 0.3), `sliceGap` (3D
-gap per slice cell, default 0.35). Neither view shifts: in 2D the front card
-stays where the box was and keeps the labels, in 3D the stack fills exactly the
-space the solid cuboid occupied.
+`slices: "none" | "channels" | number` (default "none"), plus `"voxels"` in 3D,
+which subdivides all three axes into a real channels × height × width grid of
+cubes. `maxSlices` caps each axis (default 12); `maxVoxels` caps the product
+(default 20 000, and the axes shrink together when it is exceeded, so the
+proportions survive). `sliceSpread` sets the 2D card fan-out (default 0.3),
+`sliceGap` the 3D gap per cell (default 0.35). Neither view shifts: in 2D the
+front card stays where the box was and keeps the labels, in 3D the stack fills
+exactly the space the solid cuboid occupied.
+
+`addModelGraph` locks the plot's aspect (`equalAspect`, on by default) because
+box proportions, corner radii and arrowheads are all in data units — a free
+aspect shears every one of them when the container changes shape. Its labels are
+positioned with pixel offsets, so the text block stays tight at any zoom.
 
 Pure helpers: `modelLayout(graph, opts)` → `{ nodes, edges, extent, ranks }`,
 `modelBoxDims(nodes, opts)`, `layerCategory(type)`, `LAYER_COLORS`,

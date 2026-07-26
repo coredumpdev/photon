@@ -51,6 +51,24 @@ addModelGraph(plot,   { graph, slices: 4 });   // four for every layer
 
 <Demo src="model-graph-3d-sliced" :height="420" />
 
+### Voxels
+
+`slices: "voxels"` goes all the way: instead of splitting one axis it fills the
+block with a real **channels × height × width** grid of cubes.
+
+<Demo src="model-graph-3d-voxels" :height="420" />
+
+```ts
+addModelGraph3D(plot, { graph, slices: "voxels", maxSlices: 24, maxVoxels: 30_000 });
+```
+
+The count is a product of three dimensions, so it grows fast — a single
+`[3, 224, 224]` layer is 150 528 cubes. `maxSlices` caps each axis and
+`maxVoxels` (default 20 000) caps the product; when the grid exceeds it all
+three axes shrink together, so the proportions stay honest. Raise both
+deliberately for the literal grid — the layer is one instanced draw call, but the
+geometry is real.
+
 | Option | Meaning |
 | --- | --- |
 | `slices` | `"none"` (default) · `"channels"` · a fixed number |
