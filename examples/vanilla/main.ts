@@ -79,10 +79,16 @@ function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false,
  * screen before doing that work. On this page 40 of 52 panels are off-screen at
  * any scroll position, and regenerating all of them was most of the frame.
  */
-const dynUpdaters: Array<{ fn: (t: number) => void; plot?: { isOnScreen(): boolean } }> = [];
+const dynUpdaters: Array<{ fn: (t: number) => void; plots: Array<{ isOnScreen(): boolean }> }> = [];
 
-/** The plot a subsequently-pushed updater belongs to, set by each builder. */
-let currentPlot: { isOnScreen(): boolean } | undefined;
+/**
+ * Plots built by the builder currently running. An updater is paired with all of
+ * them, because a builder may own several panels and stream to them from one
+ * updater — the linked price/volume pair does exactly that, and pairing it with
+ * only the last-built plot froze the price panel whenever the volume panel
+ * happened to be scrolled past.
+ */
+let currentPlots: Array<{ isOnScreen(): boolean }> = [];
 let dynamicActive = false;
 let frame = 0;
 let fpsAvg = 0, lastNow = 0, fpsPaint = 0;
@@ -92,7 +98,8 @@ function loop(now: number): void {
   const t = frame / 60;
   if (dynamicActive) {
     for (const u of dynUpdaters) {
-      if (u.plot && !u.plot.isOnScreen()) continue;
+      // No paired plot means we cannot tell — always run it.
+      if (u.plots.length && !u.plots.some((p) => p.isOnScreen())) continue;
       u.fn(t);
     }
     if (lastNow > 0) {
@@ -135,13 +142,28 @@ const jitter = () => (Math.random() - 0.5);
 class TrackedPlot extends Plot {
   constructor(el: HTMLElement, opts?: ConstructorParameters<typeof Plot>[1]) {
     super(el, { offscreenCulling: true, ...opts });
-    currentPlot = this;
+    currentPlots.push(this);
   }
 }
 
-/** Register a streaming updater against whichever plot was built most recently. */
+/** The same for the 3D and polar panels — every kind must pair with its own updater. */
+class TrackedPlot3D extends Plot3D {
+  constructor(el: HTMLElement, opts?: ConstructorParameters<typeof Plot3D>[1]) {
+    super(el, { offscreenCulling: true, ...opts });
+    currentPlots.push(this);
+  }
+}
+
+class TrackedPolarPlot extends PolarPlot {
+  constructor(el: HTMLElement, opts?: ConstructorParameters<typeof PolarPlot>[1]) {
+    super(el, { offscreenCulling: true, ...opts });
+    currentPlots.push(this);
+  }
+}
+
+/** Register a streaming updater against every plot the current builder made. */
 function pushUpdater(fn: (t: number) => void): void {
-  dynUpdaters.push({ fn, plot: currentPlot });
+  dynUpdaters.push({ fn, plots: currentPlots });
 }
 
 // A throttled updater: only runs `fn` every `k` frames (for expensive rebuilds).
@@ -966,7 +988,7 @@ const CHARTS: Builder[] = [
 
   // --- Polar radar ---------------------------------------------------------
   (grid, dyn) => {
-    const pp = new PolarPlot(panel(grid, "Polar radar", "rotating sweep", dyn), { offscreenCulling: true, theme: "dark", angleUnit: "deg", maxRadius: 1 });
+    const pp = new TrackedPolarPlot(panel(grid, "Polar radar", "rotating sweep", dyn), { theme: "dark", angleUnit: "deg", maxRadius: 1 });
     const sweep = pp.addLine({ theta: [0, 0], r: [0, 1], color: "#22d3ee", width: 2 });
     const B = 14;
     const bt = Float64Array.from({ length: B }, () => rand() * 360);
@@ -980,7 +1002,7 @@ const CHARTS: Builder[] = [
 
   // --- Polar rose ----------------------------------------------------------
   (grid, dyn) => {
-    const pp = new PolarPlot(panel(grid, "Polar rose", "morphing curve", dyn), { offscreenCulling: true, theme: "dark", maxRadius: 1 });
+    const pp = new TrackedPolarPlot(panel(grid, "Polar rose", "morphing curve", dyn), { theme: "dark", maxRadius: 1 });
     const T = 240;
     const theta = Float64Array.from({ length: T }, (_, i) => (i / (T - 1)) * Math.PI * 2);
     const r = new Float64Array(T);
@@ -992,10 +1014,10 @@ const CHARTS: Builder[] = [
   // --- 3D surface ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D surface", "title · colorbar · light", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "z", z: "y" }, lightControls: true, title: "Sinc surface" });
+    const p3 = new TrackedPlot3D(panel(grid, "3D surface", "title · colorbar · light", dyn), { axisLabels: { x: "x", y: "z", z: "y" }, lightControls: true, title: "Sinc surface" });
     const cols = 64, rows = 64;
     const values = new Float64Array(cols * rows);
-    const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy) + 1e-6; values[r * cols + c] = (Math.sin(rr * 2 - ph) / rr) * 3; } };
+    const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy); values[r * cols + c] = (Math.sin(rr * 2 - ph) / (1 + rr)) * 3; } };
     fill(0);
     const surf = p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "viridis", name: "height", renderType: rt });
     if (dyn) pushUpdater((t) => { fill(t * 3); surf.setData(values); p3.refresh(); });
@@ -1004,7 +1026,7 @@ const CHARTS: Builder[] = [
   // --- 3D bars -------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D bars", "colormapped · lit", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "value", z: "z" }, title: "Bar field" });
+    const p3 = new TrackedPlot3D(panel(grid, "3D bars", "colormapped · lit", dyn), { axisLabels: { x: "x", y: "value", z: "z" }, title: "Bar field" });
     const gx = 8, gz = 8;
     const xa: number[] = [], za: number[] = [];
     for (let i = 0; i < gx; i++) for (let j = 0; j < gz; j++) { xa.push(i); za.push(j); }
@@ -1017,7 +1039,7 @@ const CHARTS: Builder[] = [
 
   // --- 3D lines ------------------------------------------------------------
   (grid, dyn) => {
-    const p3 = new Plot3D(panel(grid, "3D lines", "paths · legend", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" }, legend: true });
+    const p3 = new TrackedPlot3D(panel(grid, "3D lines", "paths · legend", dyn), { axisLabels: { x: "x", y: "y", z: "z" }, legend: true });
     const N = 400;
     const mk = (phase: number) => { const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N); for (let i = 0; i < N; i++) { const tt = (i / (N - 1)) * Math.PI * 2 * 4; x[i] = Math.cos(tt + phase); z[i] = Math.sin(tt + phase); y[i] = (i / (N - 1)) * 4 - 2; } return { x, y, z }; };
     const a = mk(0), b = mk(Math.PI);
@@ -1029,10 +1051,10 @@ const CHARTS: Builder[] = [
   // --- 3D wireframe --------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D wireframe", "lines · hover · reset", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "z", z: "y" }, title: "Wireframe" });
+    const p3 = new TrackedPlot3D(panel(grid, "3D wireframe", "lines · hover · reset", dyn), { axisLabels: { x: "x", y: "z", z: "y" }, title: "Wireframe" });
     const cols = 40, rows = 40;
     const values = new Float64Array(cols * rows);
-    const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy) + 1e-6; values[r * cols + c] = (Math.sin(rr * 1.5 - ph) / rr) * 3; } };
+    const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy); values[r * cols + c] = (Math.sin(rr * 1.5 - ph) / (1 + rr)) * 3; } };
     fill(0);
     const surf = p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "plasma", wireframe: true, name: "height", renderType: rt });
     if (dyn) pushUpdater((t) => { fill(t * 3); surf.setData(values); p3.refresh(); });
@@ -1041,7 +1063,7 @@ const CHARTS: Builder[] = [
   // --- 3D quiver -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D quiver", "vector field · colorbar", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" } });
+    const p3 = new TrackedPlot3D(panel(grid, "3D quiver", "vector field · colorbar", dyn), { axisLabels: { x: "x", y: "y", z: "z" } });
     const g = 6;
     const xa: number[] = [], ya: number[] = [], za: number[] = [];
     for (let i = 0; i < g; i++) for (let j = 0; j < g; j++) for (let k = 0; k < g; k++) { xa.push((i / (g - 1)) * 2 - 1); ya.push((j / (g - 1)) * 2 - 1); za.push((k / (g - 1)) * 2 - 1); }
@@ -1055,10 +1077,10 @@ const CHARTS: Builder[] = [
   // --- 3D contour ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D contour", "iso-height rings", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "z", z: "y" }, title: "Contour" });
+    const p3 = new TrackedPlot3D(panel(grid, "3D contour", "iso-height rings", dyn), { axisLabels: { x: "x", y: "z", z: "y" }, title: "Contour" });
     const cols = 50, rows = 50;
     const values = new Float64Array(cols * rows);
-    const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy) + 1e-6; values[r * cols + c] = (Math.sin(rr * 1.5 - ph) / rr) * 3; } };
+    const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy); values[r * cols + c] = (Math.sin(rr * 1.5 - ph) / (1 + rr)) * 3; } };
     fill(0);
     const ct = p3.addContour3D({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], levels: 14, colormap: "viridis", name: "height", renderType: rt });
     if (dyn) pushUpdater(every(3, (t) => { fill(t * 3); ct.setData(values); p3.refresh(); }));
@@ -1067,7 +1089,7 @@ const CHARTS: Builder[] = [
   // --- 3D isosurface -------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D isosurface", "marching cubes · metaballs", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" }, title: "Isosurface" });
+    const p3 = new TrackedPlot3D(panel(grid, "3D isosurface", "marching cubes · metaballs", dyn), { axisLabels: { x: "x", y: "y", z: "z" }, title: "Isosurface" });
     const n = dyn ? 28 : 40;
     const vol = new Float64Array(n * n * n);
     const fill = (ph: number) => {
@@ -1085,7 +1107,7 @@ const CHARTS: Builder[] = [
 
   // --- 3D scatter ----------------------------------------------------------
   (grid, dyn) => {
-    const p3 = new Plot3D(panel(grid, "3D scatter", "per-point size · labels", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" } });
+    const p3 = new TrackedPlot3D(panel(grid, "3D scatter", "per-point size · labels", dyn), { axisLabels: { x: "x", y: "y", z: "z" } });
     const N = 300;
     const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N), sizes = new Float64Array(N), vals = new Float64Array(N);
     const labels: string[] = [];
@@ -1097,7 +1119,7 @@ const CHARTS: Builder[] = [
   // --- 3D volume -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D volume", "raymarch · grid · auto-rotate", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" }, title: "Volume", autoRotate: true });
+    const p3 = new TrackedPlot3D(panel(grid, "3D volume", "raymarch · grid · auto-rotate", dyn), { axisLabels: { x: "x", y: "y", z: "z" }, title: "Volume", autoRotate: true });
     const n = 48;
     const vol = new Float64Array(n * n * n);
     const blobs = [[-0.4, 0, 0], [0.5, 0.3, -0.2], [0.1, -0.4, 0.4]];
@@ -1112,7 +1134,7 @@ const CHARTS: Builder[] = [
 
   // --- 3D point cloud ------------------------------------------------------
   (grid, dyn) => {
-    const p3 = new Plot3D(panel(grid, "3D point cloud", "axes · colored by height", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "height", z: "z" } });
+    const p3 = new TrackedPlot3D(panel(grid, "3D point cloud", "axes · colored by height", dyn), { axisLabels: { x: "x", y: "height", z: "z" } });
     const N = 6000;
     const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N);
     const build = (ph: number) => { for (let i = 0; i < N; i++) { const th = (i / N) * Math.PI * 20 + ph, rr = 1 + (i / N) * 2; x[i] = Math.cos(th) * rr; z[i] = Math.sin(th) * rr; y[i] = (i / N) * 4 - 2; } };
@@ -1831,7 +1853,7 @@ function buildML(grid: HTMLElement): void {
       { name: "fc", type: "Linear", shape: [1000], params: 513000 },
       { name: "softmax", type: "Softmax", shape: [1000] },
     ], "TinyVGG");
-    const p3 = new Plot3D(panel(grid, "Model graph · 3D", "tensor-shaped blocks · drag to orbit", false, "wide tall"), { offscreenCulling: true,
+    const p3 = new TrackedPlot3D(panel(grid, "Model graph · 3D", "tensor-shaped blocks · drag to orbit", false, "wide tall"), { offscreenCulling: true,
       background: [0.04, 0.06, 0.13, 1],
       // A long chain needs proportional scaling and a parallel camera; a diagram has no axes.
       aspectMode: "data",
@@ -1874,7 +1896,7 @@ function buildML(grid: HTMLElement): void {
   }
 
   {
-    const p3 = new Plot3D(panel(grid, "Model graph · 3D sliced", "slices: channels · feature planes", false, "wide tall"), { offscreenCulling: true,
+    const p3 = new TrackedPlot3D(panel(grid, "Model graph · 3D sliced", "slices: channels · feature planes", false, "wide tall"), { offscreenCulling: true,
       background: [0.04, 0.06, 0.13, 1],
       aspectMode: "data",
       projection: "orthographic",
@@ -1898,7 +1920,7 @@ function buildML(grid: HTMLElement): void {
       { name: "fc", type: "Linear", shape: [10], params: 2570 },
     ], "VoxelCNN");
 
-    const p3 = new Plot3D(panel(grid, "Model graph · 3D voxels", "slices: voxels · one cube per activation", false, "wide tall"), { offscreenCulling: true,
+    const p3 = new TrackedPlot3D(panel(grid, "Model graph · 3D voxels", "slices: voxels · one cube per activation", false, "wide tall"), { offscreenCulling: true,
       background: [0.04, 0.06, 0.13, 1],
       aspectMode: "data",
       projection: "orthographic",
@@ -1916,11 +1938,16 @@ const built = { static: false, dynamic: false, finance: false, ml: false };
 
 function buildStatic(): void {
   reseed();
-  for (const b of CHARTS) b(gridStatic, false);
+  for (const b of CHARTS) { currentPlots = []; b(gridStatic, false); }
   buildFields(gridStatic);
   buildDiagrams(gridStatic);
 }
-function buildDynamic(): void { reseed(); for (const b of CHARTS) b(gridDynamic, true); buildLinkedFinance(gridDynamic); }
+function buildDynamic(): void {
+  reseed();
+  for (const b of CHARTS) { currentPlots = []; b(gridDynamic, true); }
+  currentPlots = [];
+  buildLinkedFinance(gridDynamic);
+}
 
 type TabName = "static" | "dynamic" | "finance" | "ml";
 const gridOf: Record<TabName, HTMLElement> = { static: gridStatic, dynamic: gridDynamic, finance: gridFinance, ml: gridMl };

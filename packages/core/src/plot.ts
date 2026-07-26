@@ -372,10 +372,9 @@ export class Plot {
   private baseMargin: Layout["margin"];
   private dpr = 1;
   private resizeObserver: ResizeObserver;
-  /** Off-screen culling: skip frames nobody can see, then catch up on re-entry. */
+  /** Off-screen culling: skip frames nobody can see, then redraw on re-entry. */
   private visibilityObserver: IntersectionObserver | null = null;
   private onScreen = true;
-  private missedRender = false;
   private frameRequested = false;
   private sizeCheckQueued = false;
 
@@ -588,7 +587,12 @@ export class Plot {
         const showing = entries[entries.length - 1]!.isIntersecting;
         if (showing === this.onScreen) return;
         this.onScreen = showing;
-        if (showing && this.missedRender) this.render();
+        // Redraw on the way in whatever happened while away. Not just when a
+        // render was *missed*: an app that also skips its data generation (the
+        // pattern isOnScreen exists for) never calls render() while the chart is
+        // out of view, so `missedRender` stays false and the chart would come
+        // back showing a frame from before it left.
+        if (showing) this.render();
       }, { rootMargin: "150px" });
       this.visibilityObserver.observe(container);
     }
@@ -1652,12 +1656,8 @@ export class Plot {
   }
 
   render(): void {
-    // Nothing to show, so nothing to draw — note it and paint on the way back in.
-    if (!this.onScreen) {
-      this.missedRender = true;
-      return;
-    }
-    this.missedRender = false;
+    // Nothing to show, so nothing to draw; the observer redraws on the way back in.
+    if (!this.onScreen) return;
     // Catch any resize the observer missed or reported stale (see syncCanvasSize).
     if (this.syncCanvasSize() && this.equalAspect) this.autoscale();
     const layout = this.layout();
