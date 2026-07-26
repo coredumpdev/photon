@@ -361,6 +361,7 @@ export class Plot {
   private dpr = 1;
   private resizeObserver: ResizeObserver;
   private frameRequested = false;
+  private sizeCheckQueued = false;
 
   private mode: InteractionMode;
   private selectionDiv: HTMLDivElement;
@@ -1477,24 +1478,56 @@ export class Plot {
 
   // ---- Rendering ------------------------------------------------------------
 
-  private resize(): void {
+  /**
+   * Match the canvases' pixel buffers to the container. Returns whether anything
+   * changed.
+   *
+   * Called from `render()` as well as the ResizeObserver, because the observer
+   * cannot be trusted to have the final size: leaving fullscreen fires it while
+   * the old layout is still in effect and then never again, which would leave a
+   * tall pixel buffer squeezed into a short box — everything drawn at a fraction
+   * of its size. Reading `clientWidth` here is free; `layout()` reads it anyway.
+   */
+  private syncCanvasSize(): boolean {
     const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(this.container.clientWidth * dpr));
+    const h = Math.max(1, Math.round(this.container.clientHeight * dpr));
+    if (this.dpr === dpr && this.dataCanvas.width === w && this.dataCanvas.height === h) return false;
     this.dpr = dpr;
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
     for (const c of [this.gridCanvas, this.dataCanvas, this.axisCanvas]) {
-      c.width = Math.max(1, Math.round(w * dpr));
-      c.height = Math.max(1, Math.round(h * dpr));
+      c.width = w;
+      c.height = h;
     }
     this.gridCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.dataCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.axisCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
+  }
+
+  private resize(): void {
+    this.syncCanvasSize();
     // `applyAspect` only ever *expands* the looser axis, so without re-fitting
     // first it would compound its own previous output and the view would ratchet
     // outwards on every resize (fullscreen and back would shrink the data).
     // Panning or zooming clears the `auto` flags, so a user-set view is kept.
     if (this.equalAspect) this.autoscale();
     this.render();
+    // Some browsers deliver the observer callback for a fullscreen exit while the
+    // old layout is still in effect, and never fire again — which would strand a
+    // tall pixel buffer in a short box. Re-check once the layout has settled.
+    this.verifySizeNextFrame();
+  }
+
+  /** Re-sync on the next frame, in case the resize we just handled read a stale size. */
+  private verifySizeNextFrame(): void {
+    if (this.sizeCheckQueued) return;
+    this.sizeCheckQueued = true;
+    requestAnimationFrame(() => {
+      this.sizeCheckQueued = false;
+      if (!this.syncCanvasSize()) return;
+      if (this.equalAspect) this.autoscale();
+      this.render();
+    });
   }
 
   requestRender(): void {
@@ -1529,6 +1562,8 @@ export class Plot {
   }
 
   render(): void {
+    // Catch any resize the observer missed or reported stale (see syncCanvasSize).
+    if (this.syncCanvasSize() && this.equalAspect) this.autoscale();
     const layout = this.layout();
     const region = plotRegion(layout);
     if (this.equalAspect) this.applyAspect(region);

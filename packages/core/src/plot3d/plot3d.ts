@@ -633,11 +633,27 @@ export class Plot3D {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(seg), this.gl.STATIC_DRAW);
   }
 
+  /**
+   * Match the canvas pixel buffer to the container. Returns whether it changed.
+   *
+   * `render()` calls this too: leaving fullscreen fires the ResizeObserver while
+   * the old layout is still in effect and then never again, which would leave a
+   * stale buffer scaled into the new box — everything drawn at a fraction of its
+   * size.
+   */
+  private syncCanvasSize(): boolean {
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(this.container.clientWidth * dpr));
+    const h = Math.max(1, Math.round(this.container.clientHeight * dpr));
+    if (this.dpr === dpr && this.canvas.width === w && this.canvas.height === h) return false;
+    this.dpr = dpr;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    return true;
+  }
+
   private resize(): void {
-    this.dpr = window.devicePixelRatio || 1;
-    const w = this.container.clientWidth, h = this.container.clientHeight;
-    this.canvas.width = Math.max(1, Math.round(w * this.dpr));
-    this.canvas.height = Math.max(1, Math.round(h * this.dpr));
+    this.syncCanvasSize();
     this.render();
   }
 
@@ -699,6 +715,8 @@ export class Plot3D {
   }
 
   render(): void {
+    // Catch any resize the observer missed or reported stale.
+    this.syncCanvasSize();
     const gl = this.gl;
     const w = this.canvas.width, h = this.canvas.height;
     sizeShared(gl, w, h);

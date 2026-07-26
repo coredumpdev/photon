@@ -333,16 +333,30 @@ export class PolarPlot {
     this.container.removeChild(this.overlayCanvas);
   }
 
-  private resize(): void {
-    this.dpr = window.devicePixelRatio || 1;
-    const w = this.container.clientWidth, h = this.container.clientHeight;
+  /**
+   * Match the canvases' pixel buffers to the container. Returns whether they
+   * changed. `render()` calls this too, because leaving fullscreen fires the
+   * ResizeObserver with the old layout and then never again — a stale buffer
+   * scaled into the new box draws everything at a fraction of its size.
+   */
+  private syncCanvasSize(): boolean {
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(this.container.clientWidth * dpr));
+    const h = Math.max(1, Math.round(this.container.clientHeight * dpr));
+    if (this.dpr === dpr && this.dataCanvas.width === w && this.dataCanvas.height === h) return false;
+    this.dpr = dpr;
     for (const c of [this.gridCanvas, this.dataCanvas, this.overlayCanvas]) {
-      c.width = Math.max(1, Math.round(w * this.dpr));
-      c.height = Math.max(1, Math.round(h * this.dpr));
+      c.width = w;
+      c.height = h;
     }
-    this.gridCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.dataCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.gridCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.dataCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
+  }
+
+  private resize(): void {
+    this.syncCanvasSize();
     this.render();
   }
 
@@ -360,6 +374,8 @@ export class PolarPlot {
   }
 
   render(): void {
+    // Catch any resize the observer missed or reported stale.
+    this.syncCanvasSize();
     const sq = this.square();
     const w = this.container.clientWidth, h = this.container.clientHeight;
 
