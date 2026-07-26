@@ -40,7 +40,7 @@ from .charts import Axes, Axes3D, Plot, Plot3D, Polar, PolarAxes, _shortcut
 from .figure import Figure, figure, subplots
 from .models import from_keras, from_layers, from_onnx, from_sklearn, from_torch, to_source
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # -- One-liners: pv.line(x, y) == pv.Plot().line(x, y) ------------------------
 line = _shortcut(Plot, "line")

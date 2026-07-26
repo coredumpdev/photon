@@ -14,7 +14,13 @@ import {
   addHeikinAshi,
   addRenko,
   addVolumeProfile,
+  addBarbs,
   addBollinger,
+  addContourFilled,
+  addEventPlot,
+  addHist2d,
+  addPcolormesh,
+  addStreamplot,
   addDepth,
   addModelGraph,
   addModelGraph3D,
@@ -24,7 +30,13 @@ import {
   type HeikinAshiOptions,
   type RenkoOptions,
   type VolumeProfileOptions,
+  type BarbsOptions,
   type BollingerOptions,
+  type ContourFilledOptions,
+  type EventPlotOptions,
+  type Hist2dOptions,
+  type PcolormeshOptions,
+  type StreamplotOptions,
   type DepthOptions,
   type AreaOptions,
   type BarOptions,
@@ -663,6 +675,142 @@ export function Bollinger(props: BollingerProps): JSX.Element {
           p.removeLayer(upper);
           p.removeLayer(middle);
           p.removeLayer(lower);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
+export type ContourFilledProps = ContourFilledOptions;
+
+/** Filled contour bands (`contourf`); `lines` also strokes the boundaries. Static. */
+export function ContourFilled(props: ContourFilledProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.values, props.cols, props.rows, props.extent, props.levels, props.colormap,
+             props.domain, props.opacity, props.lines, props.lineColor, props.name, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const { bands, lines } = addContourFilled(p, props);
+        p.render();
+        onCleanup(() => {
+          p.removeLayer(bands);
+          if (lines) p.removeLayer(lines);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
+export type PcolormeshProps = PcolormeshOptions;
+
+/** A colour mesh over unevenly spaced cells (`pcolormesh`). Static. */
+export function Pcolormesh(props: PcolormeshProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.values, props.xEdges, props.yEdges, props.curvilinear,
+             props.colormap, props.domain, props.opacity, props.name, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const layer = addPcolormesh(p, props);
+        p.render();
+        onCleanup(() => p.removeLayer(layer));
+      },
+    ),
+  );
+  return null;
+}
+
+export type Hist2dProps = Hist2dOptions;
+
+/** Rectangular 2-D binning of a point cloud, drawn as a heatmap (`hist2d`). Static. */
+export function Hist2d(props: Hist2dProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.x, props.y, props.bins, props.range, props.colormap,
+             props.domain, props.smooth, props.name, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const { heatmap } = addHist2d(p, props);
+        p.render();
+        onCleanup(() => p.removeLayer(heatmap));
+      },
+    ),
+  );
+  return null;
+}
+
+export type EventPlotProps = EventPlotOptions;
+
+/** An event raster — one row of tick marks per array in `positions`. Static. */
+export function EventPlot(props: EventPlotProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.positions, props.offsets, props.lineLength, props.lineWidth,
+             props.orientation, props.color, props.name, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const layer = addEventPlot(p, props);
+        p.render();
+        onCleanup(() => p.removeLayer(layer));
+      },
+    ),
+  );
+  return null;
+}
+
+export type StreamplotProps = StreamplotOptions;
+
+/** Streamlines of a vector field (`streamplot`), optionally coloured by speed. Static. */
+export function Streamplot(props: StreamplotProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.u, props.v, props.cols, props.rows, props.extent, props.density,
+             props.step, props.maxSteps, props.color, props.width, props.colormap,
+             props.arrows, props.arrowSize, props.name, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const { lines, arrows } = addStreamplot(p, props);
+        p.render();
+        onCleanup(() => {
+          for (const l of lines) p.removeLayer(l);
+          if (arrows) p.removeLayer(arrows);
+        });
+      },
+    ),
+  );
+  return null;
+}
+
+export type BarbsProps = BarbsOptions;
+
+/** Wind barbs (`barbs`) — speed read off the ticks, not the length. Static. */
+export function Barbs(props: BarbsProps): JSX.Element {
+  const plot = usePlot();
+  createEffect(
+    on(
+      () => [plot(), props.x, props.y, props.u, props.v, props.increment, props.length,
+             props.color, props.width, props.name, props.yAxis, props.renderType],
+      () => {
+        const p = plot();
+        if (!p) return;
+        const { staff, pennants } = addBarbs(p, props);
+        p.render();
+        onCleanup(() => {
+          p.removeLayer(staff);
+          if (pennants) p.removeLayer(pennants);
         });
       },
     ),

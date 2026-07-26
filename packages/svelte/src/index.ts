@@ -40,11 +40,23 @@ import {
   type VolumeOptions,
   type SurfaceOptions,
   type YAxisOptions,
+  addBarbs,
+  addContourFilled,
+  addEventPlot,
   addHeikinAshi,
+  addHist2d,
+  addPcolormesh,
+  addStreamplot,
   addRenko,
   addVolumeProfile,
   addModelGraph,
   addModelGraph3D,
+  type BarbsOptions,
+  type ContourFilledOptions,
+  type EventPlotOptions,
+  type Hist2dOptions,
+  type PcolormeshOptions,
+  type StreamplotOptions,
   type HeikinAshiOptions,
   type RenkoOptions,
   type VolumeProfileOptions,
@@ -74,6 +86,12 @@ export type SeriesSpec =
   | ({ type: "patches" } & PatchesOptions)
   | ({ type: "image" } & ImageOptions)
   | ({ type: "graph" } & GraphInput)
+  | ({ type: "contourf" } & ContourFilledOptions)
+  | ({ type: "pcolormesh" } & PcolormeshOptions)
+  | ({ type: "hist2d" } & Hist2dOptions)
+  | ({ type: "eventplot" } & EventPlotOptions)
+  | ({ type: "streamplot" } & StreamplotOptions)
+  | ({ type: "barbs" } & BarbsOptions)
   | ({ type: "modelGraph" } & ModelGraphOptions);
 
 export interface YAxisSpec extends YAxisOptions {
@@ -87,34 +105,43 @@ export interface PlotConfig {
   annotations?: Annotation[];
 }
 
-function addSeries(p: CorePlot, s: SeriesSpec): Layer {
+function addSeries(p: CorePlot, s: SeriesSpec): Layer[] {
   switch (s.type) {
-    case "line": return p.addLine(s);
-    case "scatter": return p.addScatter(s);
-    case "bar": return p.addBar(s);
-    case "area": return p.addArea(s);
-    case "heatmap": return p.addHeatmap(s);
-    case "box": return p.addBox(s);
-    case "hexbin": return p.addHexbin(s);
-    case "contour": return p.addContour(s);
-    case "errorbar": return p.addErrorBar(s);
-    case "stem": return p.addStem(s);
-    case "quiver": return p.addQuiver(s);
-    case "candlestick": return p.addCandlestick(s);
-    case "ohlc": return p.addOhlc(s);
-    case "heikinAshi": return addHeikinAshi(p, s);
-    case "renko": return addRenko(p, s);
-    case "volumeProfile": return addVolumeProfile(p, s);
-    case "pie": return p.addPie(s);
-    case "patches": return p.addPatches(s);
-    case "image": return p.addImage(s);
-    case "graph": return p.addGraph(s);
-    // The builder also adds a connector layer + labels; the box layer is the handle.
-    case "modelGraph": return addModelGraph(p, s).nodes;
+    case "line": return [p.addLine(s)];
+    case "scatter": return [p.addScatter(s)];
+    case "bar": return [p.addBar(s)];
+    case "area": return [p.addArea(s)];
+    case "heatmap": return [p.addHeatmap(s)];
+    case "box": return [p.addBox(s)];
+    case "hexbin": return [p.addHexbin(s)];
+    case "contour": return [p.addContour(s)];
+    case "errorbar": return [p.addErrorBar(s)];
+    case "stem": return [p.addStem(s)];
+    case "quiver": return [p.addQuiver(s)];
+    case "candlestick": return [p.addCandlestick(s)];
+    case "ohlc": return [p.addOhlc(s)];
+    case "heikinAshi": return [addHeikinAshi(p, s)];
+    case "renko": return [addRenko(p, s)];
+    case "volumeProfile": return [addVolumeProfile(p, s)];
+    case "pie": return [p.addPie(s)];
+    case "patches": return [p.addPatches(s)];
+    case "image": return [p.addImage(s)];
+    case "graph": return [p.addGraph(s)];
+    case "contourf": { const h = addContourFilled(p, s); return h.lines ? [h.bands, h.lines] : [h.bands]; }
+    case "pcolormesh": return [addPcolormesh(p, s)];
+    case "hist2d": return [addHist2d(p, s).heatmap];
+    case "eventplot": return [addEventPlot(p, s)];
+    case "streamplot": { const h = addStreamplot(p, s); return h.arrows ? [...h.lines, h.arrows] : h.lines; }
+    case "barbs": { const h = addBarbs(p, s); return h.pennants ? [h.staff, h.pennants] : [h.staff]; }
+    // Labels are Canvas2D annotations, not layers, so they need no removal here.
+    case "modelGraph": { const h = addModelGraph(p, s); return [h.nodes, h.edges]; }
   }
 }
 
-function updateSeries(layer: Layer, s: SeriesSpec): void {
+function updateSeries(layers: Layer[], s: SeriesSpec): void {
+  // Only single-layer specs stream; the primary layer is always first.
+  const layer = layers[0];
+  if (!layer) return;
   switch (s.type) {
     case "line": (layer as LineLayer).setData(s.x, s.y); break;
     case "scatter": (layer as ScatterLayer).setData(s.x, s.y); break;
@@ -158,7 +185,7 @@ export function plot(node: HTMLElement, config: PlotConfig) {
     update(next: PlotConfig) {
       const specs = next.series ?? [];
       if (specs.length !== layers.length) {
-        for (const l of layers) p.removeLayer(l);
+        for (const group of layers) for (const l of group) p.removeLayer(l);
         layers = specs.map((s) => addSeries(p, s));
       } else {
         for (let i = 0; i < layers.length; i++) updateSeries(layers[i]!, specs[i]!);

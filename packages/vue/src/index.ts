@@ -13,12 +13,24 @@ import {
   type HeikinAshiOptions,
   type RenkoOptions,
   type VolumeProfileOptions,
+  type BarbsOptions,
   type BollingerOptions,
+  type ContourFilledOptions,
+  type EventPlotOptions,
+  type Hist2dOptions,
+  type PcolormeshOptions,
+  type StreamplotOptions,
   addHeikinAshi,
   addRenko,
   addVolumeProfile,
+  addBarbs,
   addBollinger,
+  addContourFilled,
   addDepth,
+  addEventPlot,
+  addHist2d,
+  addPcolormesh,
+  addStreamplot,
   addModelGraph,
   addModelGraph3D,
   type Boxes3DOptions,
@@ -686,6 +698,210 @@ export const Depth = defineComponent({
       const handle = addDepth(p, { bids: props.bids, asks: props.asks, bidColor: props.bidColor, askColor: props.askColor, yAxis: props.yAxis, renderType: props.renderType });
       layers = [handle.bid, handle.ask];
       layers.forEach((l) => markRaw(l));
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p) layers.forEach((l) => p.removeLayer(l));
+      layers = [];
+    });
+    return () => null;
+  },
+});
+
+/** Filled contour bands (`contourf`); `lines` also strokes the boundaries. */
+export const ContourFilled = defineComponent({
+  name: "PhotonContourFilled",
+  props: {
+    values: arr(),
+    cols: { type: Number, required: true as const },
+    rows: { type: Number, required: true as const },
+    extent: { type: Object as PropType<ContourFilledOptions["extent"]>, required: true as const },
+    levels: opt<ContourFilledOptions["levels"]>(),
+    colormap: opt<ContourFilledOptions["colormap"]>(),
+    domain: opt<ContourFilledOptions["domain"]>(),
+    opacity: opt<number>(),
+    lines: opt<boolean>(),
+    lineColor: opt<string>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<ContourFilled> must be used inside <Plot>");
+    let layers: Layer[] = [];
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      const handle = addContourFilled(p, { ...props } as ContourFilledOptions);
+      layers = handle.lines ? [handle.bands, handle.lines] : [handle.bands];
+      layers.forEach((l) => markRaw(l));
+      p.render();
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p) layers.forEach((l) => p.removeLayer(l));
+      layers = [];
+    });
+    return () => null;
+  },
+});
+
+/** A colour mesh over unevenly spaced cells (`pcolormesh`). */
+export const Pcolormesh = defineComponent({
+  name: "PhotonPcolormesh",
+  props: {
+    values: arr(),
+    xEdges: arr(),
+    yEdges: arr(),
+    curvilinear: opt<boolean>(),
+    colormap: opt<PcolormeshOptions["colormap"]>(),
+    domain: opt<PcolormeshOptions["domain"]>(),
+    opacity: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Pcolormesh> must be used inside <Plot>");
+    let layer: Layer | null = null;
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      layer = markRaw(addPcolormesh(p, { ...props } as PcolormeshOptions));
+      p.render();
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p && layer) p.removeLayer(layer);
+      layer = null;
+    });
+    return () => null;
+  },
+});
+
+/** Rectangular 2-D binning of a point cloud, drawn as a heatmap (`hist2d`). */
+export const Hist2d = defineComponent({
+  name: "PhotonHist2d",
+  props: {
+    x: arr(),
+    y: arr(),
+    bins: opt<Hist2dOptions["bins"]>(),
+    range: opt<Hist2dOptions["range"]>(),
+    colormap: opt<Hist2dOptions["colormap"]>(),
+    domain: opt<Hist2dOptions["domain"]>(),
+    smooth: opt<boolean>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Hist2d> must be used inside <Plot>");
+    let layer: Layer | null = null;
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      layer = markRaw(addHist2d(p, { ...props } as Hist2dOptions).heatmap);
+      p.render();
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p && layer) p.removeLayer(layer);
+      layer = null;
+    });
+    return () => null;
+  },
+});
+
+/** An event raster — one row of tick marks per array in `positions`. */
+export const EventPlot = defineComponent({
+  name: "PhotonEventPlot",
+  props: {
+    positions: { type: Array as unknown as PropType<EventPlotOptions["positions"]>, required: true as const },
+    offsets: opt<EventPlotOptions["offsets"]>(),
+    lineLength: opt<number>(),
+    lineWidth: opt<number>(),
+    orientation: opt<EventPlotOptions["orientation"]>(),
+    color: opt<EventPlotOptions["color"]>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<EventPlot> must be used inside <Plot>");
+    let layer: Layer | null = null;
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      layer = markRaw(addEventPlot(p, { ...props } as EventPlotOptions));
+      p.render();
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p && layer) p.removeLayer(layer);
+      layer = null;
+    });
+    return () => null;
+  },
+});
+
+/** Streamlines of a vector field (`streamplot`), optionally coloured by speed. */
+export const Streamplot = defineComponent({
+  name: "PhotonStreamplot",
+  props: {
+    u: arr(),
+    v: arr(),
+    cols: { type: Number, required: true as const },
+    rows: { type: Number, required: true as const },
+    extent: { type: Object as PropType<StreamplotOptions["extent"]>, required: true as const },
+    density: opt<number>(), step: opt<number>(), maxSteps: opt<number>(),
+    color: opt<string>(), width: opt<number>(),
+    colormap: opt<StreamplotOptions["colormap"]>(),
+    arrows: opt<boolean>(), arrowSize: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Streamplot> must be used inside <Plot>");
+    let layers: Layer[] = [];
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      const handle = addStreamplot(p, { ...props } as StreamplotOptions);
+      layers = handle.arrows ? [...handle.lines, handle.arrows] : [...handle.lines];
+      layers.forEach((l) => markRaw(l));
+      p.render();
+    });
+    onUnmounted(() => {
+      const p = plotRef.value;
+      if (p) layers.forEach((l) => p.removeLayer(l));
+      layers = [];
+    });
+    return () => null;
+  },
+});
+
+/** Wind barbs (`barbs`) — speed read off the ticks, not the length. */
+export const Barbs = defineComponent({
+  name: "PhotonBarbs",
+  props: {
+    x: arr(), y: arr(), u: arr(), v: arr(),
+    increment: opt<number>(), length: opt<number>(),
+    color: opt<string>(), width: opt<number>(),
+    name: opt<string>(),
+    yAxis: opt<string>(), renderType: opt<RenderType>(),
+  },
+  setup(props) {
+    const plotRef = inject(PlotKey);
+    if (!plotRef) throw new Error("<Barbs> must be used inside <Plot>");
+    let layers: Layer[] = [];
+    onMounted(() => {
+      const p = plotRef.value;
+      if (!p) return;
+      const handle = addBarbs(p, { ...props } as BarbsOptions);
+      layers = handle.pennants ? [handle.staff, handle.pennants] : [handle.staff];
+      layers.forEach((l) => markRaw(l));
+      p.render();
     });
     onUnmounted(() => {
       const p = plotRef.value;

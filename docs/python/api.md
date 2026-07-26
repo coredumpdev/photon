@@ -357,5 +357,5 @@ A straight chain from an ordered layer list — the manual escape hatch.
 ## Version
 
 ```python
-photonviz.__version__  # "0.5.0"
+photonviz.__version__  # "0.6.0"
 ```

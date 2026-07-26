@@ -26,7 +26,8 @@ export interface PlotProps {
  */
 export default class Plot extends Component<PlotProps> {
   private plot: CorePlot | null = null;
-  private layers: Layer[] = [];
+  /** One entry per series spec — a spec may own several layers. */
+  private layers: Layer[][] = [];
 
   template(props: PlotProps) {
     return <div class={props.class}></div>;

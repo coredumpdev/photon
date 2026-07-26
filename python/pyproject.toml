@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "photonviz"
-version = "0.5.0"
+version = "0.6.0"
 description = "GPU-accelerated (WebGL2) charts for Jupyter, JupyterLab and Google Colab"
 readme = "README.md"
 requires-python = ">=3.9"

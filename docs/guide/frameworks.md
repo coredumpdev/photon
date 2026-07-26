@@ -43,12 +43,18 @@ Passing new `x`/`y` arrays streams through `setData` under the hood.
 </script>
 ```
 
+Both shapes cover the same chart types, including the field builders:
+`<ContourFilled>`, `<Pcolormesh>`, `<Hist2d>`, `<EventPlot>`, `<Streamplot>` and
+`<Barbs>` in React/Vue/Solid, and `{ type: "contourf" | "pcolormesh" | "hist2d" |
+"eventplot" | "streamplot" | "barbs" }` in Svelte/Gea/Web Components.
+
 ## Escape hatch
 
 Every binding exposes the underlying core instance — `usePlot()` in React and
-Solid, `onReady` in Gea and Solid, `.plot` on the custom elements. Composed
-builders (`addBollinger`, `addModelGraph`, `addConfusionMatrix`, …) are used
-imperatively through it, and each binding re-exports them.
+Solid, `onReady` in Gea and Solid, `.plot` on the custom elements. The remaining
+composed builders (`addConfusionMatrix`, `addRocCurve`, `addPsd`, `addRegression`,
+`addTreemap`, …) are used imperatively through it, and each binding re-exports
+them along with `PlotGrid` for laying several plots out in one container.
 
 ## Python
 

@@ -8,6 +8,7 @@
  */
 import { colormap, type ColormapSpec } from "../color/colormap.js";
 import { toColorCss } from "../gl/context.js";
+import type { ContourLayer } from "../layers/contour.js";
 import type { LineLayer } from "../layers/line.js";
 import type { Patch, PatchesLayer } from "../layers/patches.js";
 import type { Plot } from "../plot.js";
@@ -145,11 +146,17 @@ export interface ContourFilledOptions extends ScalarField {
   yAxis?: string;
 }
 
+export interface ContourFilledHandle {
+  bands: PatchesLayer;
+  /** The stroked boundaries, present only when `lines` is set. */
+  lines?: ContourLayer;
+}
+
 /**
  * Filled contours (`contourf`). Bands are coloured by their midpoint through the
  * colormap, so the layer's colorbar reads as a proper value scale.
  */
-export function addContourFilled(plot: Plot, opts: ContourFilledOptions): PatchesLayer {
+export function addContourFilled(plot: Plot, opts: ContourFilledOptions): ContourFilledHandle {
   const bands = isobands(opts, opts.levels ?? 8);
   const boundaries = Array.isArray(opts.levels)
     ? [...opts.levels].sort((a, b) => a - b)
@@ -166,17 +173,17 @@ export function addContourFilled(plot: Plot, opts: ContourFilledOptions): Patche
     renderType: opts.renderType,
     yAxis: opts.yAxis,
   });
-  if (opts.lines) {
-    plot.addContour({
-      values: opts.values, cols: opts.cols, rows: opts.rows, extent: opts.extent,
-      levels: boundaries.slice(1, -1),
-      // Mid-slate reads on both themes; a dark default vanishes on a dark one.
-      color: opts.lineColor ?? "rgba(148,163,184,0.85)",
-      renderType: opts.renderType,
-      yAxis: opts.yAxis,
-    });
-  }
-  return layer;
+  const strokes = opts.lines
+    ? plot.addContour({
+        values: opts.values, cols: opts.cols, rows: opts.rows, extent: opts.extent,
+        levels: boundaries.slice(1, -1),
+        // Mid-slate reads on both themes; a dark default vanishes on a dark one.
+        color: opts.lineColor ?? "rgba(148,163,184,0.85)",
+        renderType: opts.renderType,
+        yAxis: opts.yAxis,
+      })
+    : undefined;
+  return { bands: layer, ...(strokes ? { lines: strokes } : {}) };
 }
 
 // --- Non-uniform colour mesh -------------------------------------------------

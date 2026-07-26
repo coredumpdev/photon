@@ -19,8 +19,14 @@ import {
   QuiverLayer,
   ScatterLayer,
   StemLayer,
+  addBarbs,
   addBollinger,
+  addContourFilled,
   addDepth,
+  addEventPlot,
+  addHist2d,
+  addPcolormesh,
+  addStreamplot,
   addHeikinAshi,
   addModelGraph,
   addModelGraph3D,
@@ -28,8 +34,14 @@ import {
   addVolumeProfile,
   type AreaOptions,
   type BarOptions,
+  type BarbsOptions,
   type BollingerHandle,
   type BollingerOptions,
+  type ContourFilledOptions,
+  type EventPlotOptions,
+  type Hist2dOptions,
+  type PcolormeshOptions,
+  type StreamplotOptions,
   type DepthHandle,
   type DepthOptions,
   type HeikinAshiOptions,
@@ -728,6 +740,119 @@ export function ModelGraph(props: ModelGraphProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plot, props.graph, props.direction, props.sizeBy, props.labels, props.colors, props.theme]);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Fields and rasters
+//
+// matplotlib's contourf / pcolormesh / hist2d / eventplot / streamplot / barbs.
+// All are static: the geometry is computed once, so a data change recreates them.
+// ---------------------------------------------------------------------------
+
+export type ContourFilledProps = ContourFilledOptions;
+
+/** Filled contour bands (`contourf`); `lines` also strokes the boundaries. */
+export function ContourFilled(props: ContourFilledProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    const { bands, lines } = addContourFilled(plot, props);
+    plot.render();
+    return () => {
+      plot.removeLayer(bands);
+      if (lines) plot.removeLayer(lines);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.values, props.cols, props.rows, props.extent, props.levels, props.colormap,
+      props.domain, props.opacity, props.lines, props.lineColor, props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type PcolormeshProps = PcolormeshOptions;
+
+/** A colour mesh over unevenly spaced cells (`pcolormesh`). */
+export function Pcolormesh(props: PcolormeshProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    const layer = addPcolormesh(plot, props);
+    plot.render();
+    return () => { plot.removeLayer(layer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.values, props.xEdges, props.yEdges, props.curvilinear, props.colormap,
+      props.domain, props.opacity, props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type Hist2dProps = Hist2dOptions;
+
+/** Rectangular 2-D binning of a point cloud, drawn as a heatmap (`hist2d`). */
+export function Hist2d(props: Hist2dProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    const { heatmap } = addHist2d(plot, props);
+    plot.render();
+    return () => { plot.removeLayer(heatmap); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.y, props.bins, props.range, props.colormap, props.domain,
+      props.smooth, props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type EventPlotProps = EventPlotOptions;
+
+/** An event raster — one row of tick marks per array in `positions`. */
+export function EventPlot(props: EventPlotProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    const layer = addEventPlot(plot, props);
+    plot.render();
+    return () => { plot.removeLayer(layer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.positions, props.offsets, props.lineLength, props.lineWidth,
+      props.orientation, props.color, props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type StreamplotProps = StreamplotOptions;
+
+/** Streamlines of a vector field (`streamplot`), optionally coloured by speed. */
+export function Streamplot(props: StreamplotProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    const { lines, arrows } = addStreamplot(plot, props);
+    plot.render();
+    return () => {
+      for (const l of lines) plot.removeLayer(l);
+      if (arrows) plot.removeLayer(arrows);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.u, props.v, props.cols, props.rows, props.extent, props.density, props.step,
+      props.maxSteps, props.color, props.width, props.colormap, props.arrows, props.arrowSize,
+      props.name, props.yAxis, props.renderType]);
+  return null;
+}
+
+export type BarbsProps = BarbsOptions;
+
+/** Wind barbs (`barbs`) — speed read off the ticks, not the length. */
+export function Barbs(props: BarbsProps) {
+  const plot = useContext(PlotContext);
+  useEffect(() => {
+    if (!plot) return;
+    const { staff, pennants } = addBarbs(plot, props);
+    plot.render();
+    return () => {
+      plot.removeLayer(staff);
+      if (pennants) plot.removeLayer(pennants);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot, props.x, props.y, props.u, props.v, props.increment, props.length,
+      props.color, props.width, props.name, props.yAxis, props.renderType]);
   return null;
 }
 

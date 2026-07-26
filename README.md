@@ -70,6 +70,12 @@ import numpy as np, photonviz as pv
 x = np.linspace(0, 40, 200_000)
 pv.line(x, np.sin(x), name="signal", plot={"theme": "dark", "legend": True})
 
+# matplotlib's figsize and subplots — figsize is (width, height) in inches at dpi.
+fig, axes = pv.subplots(2, 2, figsize=(12, 7), sharex=True, theme="dark")
+axes[0, 0].line(t, loss).title("Loss")
+axes[1, 1].histogram(residuals)
+fig
+
 # A PyTorch / Keras / scikit-learn / ONNX model, straight from the object:
 pv.model_graph_3d(model, example_input=torch.randn(1, 3, 224, 224), labels="full")
 ```
@@ -220,7 +226,12 @@ export default class Chart extends Component {
 | Box / Violin | `plot.addBox({ groups, violin? })` | Tukey quartiles + whiskers / Gaussian KDE |
 | Heatmap / Image | `plot.addHeatmap({ values, cols, rows, extent })` · `plot.addImage({ source, extent })` | Texture-backed; RGBA / URL |
 | Contour | `plot.addContour({ values, cols, rows, extent, levels })` | Marching squares |
-| Hexbin | `plot.addHexbin({ x, y, radius, colormap })` | Density aggregation |
+| Filled contours | `addContourFilled(plot, { values, cols, rows, extent, levels, lines? })` | matplotlib `contourf`; real isoband polygons, saddle-free |
+| Colour mesh | `addPcolormesh(plot, { values, xEdges, yEdges, curvilinear? })` | matplotlib `pcolormesh`; rectilinear or warped cells |
+| Hexbin / 2D histogram | `plot.addHexbin({ x, y, radius, colormap })` · `addHist2d(plot, { x, y, bins })` | Density aggregation; hex or rectangular |
+| Event raster | `addEventPlot(plot, { positions, offsets?, orientation? })` | matplotlib `eventplot`; one row per train |
+| Streamlines | `addStreamplot(plot, { u, v, cols, rows, extent, density?, colormap? })` | matplotlib `streamplot`; RK4 with even seeding |
+| Wind barbs | `addBarbs(plot, { x, y, u, v, increment? })` | matplotlib `barbs`; half / full / pennant ticks |
 | Pie / Donut | `plot.addPie({ values, innerRadius?, colormap? })` | Wedges (set `equalAspect`) |
 | Patches | `plot.addPatches({ patches, colormap? })` | Filled polygons (earcut), choropleth |
 | Graph | `plot.addGraph({ edges, nodes? })` | Node-link; auto force layout |
@@ -350,7 +361,8 @@ plot.setAxis("y", { addTicks: [{ value: 42, label: "threshold" }] }); // overlay
 - **Scales** — `linear`, `log` (decade ticks + minors, GPU log transform), `time` (calendar ticks; large epoch timestamps handled with per-layer reference offsets), `categorical` (factor bands), and `ordinal-time` (finance/session axis that collapses market gaps).
 - **Toolbar** — home + pan / box-zoom / X-only / Y-only zoom.
 - **Box zoom** maps the selection rectangle exactly onto the axes; **drag an axis strip** to pan just that axis; **hover** for crosshair + per-series tooltips.
-- **Linked panes** — `linkX([a, b, …])` syncs pan/zoom and the crosshair across plots (price + volume + RSI/MACD dashboards).
+- **Linked panes** — `linkX([a, b, …])` syncs pan/zoom and the crosshair across plots (price + volume + RSI/MACD dashboards); `linkY` does the same for the y view.
+- **Grids of plots** — `new PlotGrid(el, { rows, cols, gap, title, linkX })` then `addPlot` / `addPlot3D` / `addPolar`, with `rowSpan` / `colSpan` and `rowRatios` / `colRatios`. matplotlib's `subplots`, sharing the one WebGL context.
 
 ## Streaming
 
