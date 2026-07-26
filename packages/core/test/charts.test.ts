@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { checkAnnotation } from "../src/plot.js";
+import type { Annotation } from "../src/plot.js";
 import { treemapLayout } from "../src/charts/treemap.js";
 import { funnelLayout } from "../src/charts/funnel.js";
 import { sunburstLayout } from "../src/charts/sunburst.js";
@@ -55,5 +57,39 @@ describe("chart layouts", () => {
     expect(r.lines.length).toBe(3);
     expect(r.lines[0]!.x.length).toBe(3);
     for (const ln of r.lines) for (const y of ln.y) { expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThanOrEqual(1); }
+  });
+});
+
+describe("checkAnnotation", () => {
+  const ok: Annotation[] = [
+    { type: "span", dim: "y", value: 3 },
+    { type: "band", dim: "x", from: 1, to: 2 },
+    { type: "box", x: [0, 1], y: [0, 1] },
+    { type: "label", x: 1, y: 2, text: "hi" },
+    { type: "line", x0: 0, y0: 0, x1: 1, y1: 1 },
+    { type: "ray", x0: 0, y0: 0, x1: 1, y1: 1 },
+    { type: "fib", x0: 0, x1: 1, high: 9, low: 3 },
+  ];
+
+  it("passes every well-formed annotation", () => {
+    for (const a of ok) expect(() => checkAnnotation(a)).not.toThrow();
+  });
+
+  it("names the fields the type actually wants", () => {
+    // Each of these is a plausible misspelling that used to draw nothing at all.
+    const wrong = [
+      [{ type: "line", x1: 0, y1: 0, x2: 1, y2: 1 }, /x0, y0/],
+      [{ type: "fib", x0: 0, x1: 1, top: 9, bottom: 3 }, /high, low/],
+      [{ type: "band", dim: "x", start: 1, end: 2 }, /from, to/],
+      [{ type: "span", dim: "y" }, /value/],
+      [{ type: "box", x: 0, y: 1 }, /ranges/],
+    ] as const;
+    for (const [a, re] of wrong) {
+      expect(() => checkAnnotation(a as unknown as Annotation)).toThrow(re);
+    }
+  });
+
+  it("rejects a coordinate that is present but not a number", () => {
+    expect(() => checkAnnotation({ type: "line", x0: 0, y0: NaN, x1: 1, y1: 1 })).toThrow(/y0/);
   });
 });

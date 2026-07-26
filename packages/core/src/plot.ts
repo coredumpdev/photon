@@ -167,6 +167,36 @@ export type Annotation =
   | { type: "ray"; x0: number; y0: number; x1: number; y1: number; color?: string; width?: number; dash?: number[]; label?: string; yAxis?: string }
   | { type: "fib"; x0: number; x1: number; high: number; low: number; ratios?: number[]; color?: string; fill?: boolean; label?: string; yAxis?: string };
 
+/** Required numeric fields per annotation type, in the order they are documented. */
+const ANNOTATION_FIELDS: Record<Annotation["type"], string[]> = {
+  span: ["value"],
+  band: ["from", "to"],
+  box: [],
+  label: ["x", "y"],
+  line: ["x0", "y0", "x1", "y1"],
+  ray: ["x0", "y0", "x1", "y1"],
+  fib: ["x0", "x1", "high", "low"],
+};
+
+/**
+ * Reject an annotation that is missing a coordinate.
+ *
+ * Every field here has a plausible wrong spelling — `x1`/`y1`/`x2`/`y2` for a
+ * line, `start`/`end` for a band — and the draw path simply skips a shape whose
+ * numbers are undefined, so the mistake used to cost a blank chart and no clue.
+ */
+export function checkAnnotation(a: Annotation): void {
+  const rec = a as unknown as Record<string, unknown>;
+  const missing = (ANNOTATION_FIELDS[a.type] ?? []).filter((f) => !Number.isFinite(rec[f]));
+  if (missing.length > 0) {
+    const want = ANNOTATION_FIELDS[a.type]!.join(", ");
+    throw new Error(`addAnnotation("${a.type}"): missing numeric ${missing.join(", ")} — this type takes ${want}`);
+  }
+  if (a.type === "box" && (!Array.isArray(a.x) || !Array.isArray(a.y))) {
+    throw new Error('addAnnotation("box"): `x` and `y` are [min, max] ranges');
+  }
+}
+
 /** An interactive drawing tool: click-drag on the plot to place the shape. */
 export type DrawTool = "trendline" | "hline" | "ray" | "fib" | "rect";
 
@@ -1000,6 +1030,7 @@ export class Plot {
    * Returns a disposer that removes just this annotation.
    */
   addAnnotation(a: Annotation): () => void {
+    checkAnnotation(a);
     this.annotations.push(a);
     this.requestRender();
     return () => {

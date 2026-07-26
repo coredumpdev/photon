@@ -467,3 +467,19 @@ def test_matrix_shape_only_fires_on_rectangular_2d():
     assert matrix_shape([[1, 2], [3]]) == (0, 0)  # ragged: not a matrix
     assert matrix_shape("#ff0000") == (0, 0)
     assert matrix_shape(None) == (0, 0)
+
+
+def test_annotate_translates_the_python_keyword_from():
+    """`from` can't be a kwarg, so a band's start is spelled `from_` and renamed."""
+    a = pv.Plot().annotate("band", dim="x", from_=10, to=20).to_spec()["annotations"][0]
+    assert a["from"] == 10 and a["to"] == 20
+    assert "from_" not in a
+
+
+def test_annotate_and_boxes3d_document_their_fields():
+    """Both used to draw nothing when given a plausible wrong spelling."""
+    doc = pv.Axes.annotate.__doc__ or ""
+    for field in ("x0", "y0", "x1", "y1", "high", "low", "from_"):
+        assert field in doc, field
+    doc3d = pv.Axes3D.boxes3d.__doc__ or ""
+    assert '"w"' in doc3d and "width" in doc3d  # says which one, and which one it is not

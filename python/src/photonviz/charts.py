@@ -35,7 +35,25 @@ class Axes(ChartSpec):
         return self._sync()
 
     def annotate(self, type: str, **opts: Any) -> "Axes":
-        """Add a canvas annotation: ``span``, ``band``, ``box``, ``label``, ``line``, ``ray`` or ``fib``."""
+        """Add a canvas annotation. Each type takes its own fields:
+
+        =========  ==========================================================
+        ``span``   ``dim`` (``"x"``/``"y"``) and ``value``
+        ``band``   ``dim`` plus ``from_``/``to`` (``from`` is a Python keyword)
+        ``box``    ``x`` and ``y``, each a ``[min, max]`` pair
+        ``label``  ``x``, ``y``, ``text``
+        ``line``   ``x0``, ``y0``, ``x1``, ``y1``
+        ``ray``    ``x0``, ``y0``, ``x1``, ``y1`` — extended past the second point
+        ``fib``    ``x0``, ``x1``, ``high``, ``low``
+        =========  ==========================================================
+
+        Common extras: ``color``, ``width``, ``dash``, ``label``, ``yAxis``. A
+        missing coordinate raises rather than drawing nothing.
+        """
+        # `from` is a Python keyword, so a band's start has to be spelled `from_`
+        # here and translated on the way out.
+        if "from_" in opts:
+            opts["from"] = opts.pop("from_")
         self._annotations.append({"type": type, **opts})
         return self._sync()
 
@@ -407,7 +425,12 @@ class Axes3D(ChartSpec):
         return self.add("bar3d", x=x, z=z, y=y, **opts)
 
     def boxes3d(self, boxes: Sequence[Dict[str, Any]], **opts: Any) -> "Axes3D":
-        """Independently sized lit cuboids."""
+        """Independently sized lit cuboids.
+
+        Each box is ``{"x", "y", "z", "w", "h", "d"}`` — a center plus a full size
+        per axis, not ``width``/``height``/``depth`` — with optional ``color`` and
+        ``label``. A missing or misspelled size raises rather than drawing nothing.
+        """
         return self.add("boxes3d", boxes=list(boxes), **opts)
 
     def quiver3d(self, x: Any, y: Any, z: Any, u: Any, v: Any, w: Any, **opts: Any) -> "Axes3D":

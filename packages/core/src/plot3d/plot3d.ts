@@ -357,6 +357,16 @@ export class Plot3D {
 
   /** Independently sized lit cuboids (voxels, bounding boxes, model layer blocks). */
   addBoxes3D(opts: Boxes3DOptions): Boxes3DLayer {
+    // The size fields are `w`/`h`/`d`. `width`/`height`/`depth` reads so naturally
+    // that it was the first thing tried, and it produced an empty scene in silence.
+    for (let i = 0; i < opts.boxes.length; i++) {
+      const b = opts.boxes[i]!;
+      for (const k of ["x", "y", "z", "w", "h", "d"] as const) {
+        if (!Number.isFinite(b[k])) {
+          throw new Error(`addBoxes3D: box ${i} needs a numeric \`${k}\` (fields are x, y, z, w, h, d), got ${b[k]}`);
+        }
+      }
+    }
     const l = new Boxes3DLayer(this.gl, opts);
     l.setLight(this.lightDir(), this.ambient);
     this.layers.push(l);
