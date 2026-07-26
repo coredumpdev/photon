@@ -4,12 +4,10 @@ import { setTransformUniforms, TRANSFORM_GLSL, TRANSFORM_UNIFORMS } from "../gl/
 import type { AxisFrame } from "../gl/transform.js";
 import type { Color, Range, RenderType } from "../types.js";
 import { decimateIndices } from "./line-util.js";
-import { GpuDecimator } from "./gpu-decimate.js";
 import type { DrawState, Layer } from "./layer.js";
 import { pickNearest, type PickMode, type PickProjection, type Picked } from "./pick.js";
 
 /** Above this point count, decimation runs on the GPU (below, CPU is cheaper). */
-const GPU_DECIMATE_MIN = 200_000;
 
 /** How adjacent segments meet at a vertex. */
 export type LineJoin = "round" | "miter" | "bevel" | "butt";
@@ -287,7 +285,6 @@ export class LineLayer implements Layer {
   private dashPeriod: number;
   private distBuf: WebGLBuffer;
   private monotonic: boolean;
-  private gpuDec: GpuDecimator | null = null;
   private step?: "before" | "after" | "center";
   private usage: number;
   private xRef = 0;
@@ -378,23 +375,6 @@ export class LineLayer implements Layer {
       ...TRANSFORM_UNIFORMS, "uColor", "uResolution", "uWidth", "uMiter", "uMiterLimit",
     ]);
 
-    this.syncGpu(data, n);
-  }
-
-  // Keep the GPU decimation texture in sync for large series; disable it (fall
-  // back to CPU decimation) if the context can't support the path.
-  private syncGpu(data: Float32Array, n: number): void {
-    if (!this.decimateOn || n < GPU_DECIMATE_MIN) { this.disposeGpu(); return; }
-    if (!this.gpuDec) {
-      const dec = new GpuDecimator(this.gl);
-      if (!dec.supported) return;
-      this.gpuDec = dec;
-    }
-    if (!this.gpuDec.setPoints(data, n)) this.disposeGpu();
-  }
-
-  private disposeGpu(): void {
-    if (this.gpuDec) { this.gpuDec.dispose(); this.gpuDec = null; }
   }
 
   private configureVao(vao: WebGLVertexArrayObject, pointBuf: WebGLBuffer): void {
@@ -478,12 +458,20 @@ export class LineLayer implements Layer {
     } this.decKey = "";
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.posBuf);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.usage);
-    this.syncGpu(data, n);
   }
 
   /**
    * Rebuild the min/max-decimated buffer for the visible x-window if it changed.
    * Returns the segment count to draw from `decVao`, or null to draw everything.
+   *
+   * This runs on the CPU. A transform-feedback version used to do it on the GPU,
+   * and it was removed: on two unrelated real configurations it linked, ran,
+   * reported no GL error and produced a wrong envelope — non-finite x on
+   * NVIDIA/ANGLE, a collapsed envelope in Firefox — while looking perfect under a
+   * software rasteriser. A validity probe caught both, but a chart that is
+   * sometimes blank is not something to guard against; it is something to not
+   * ship. The CPU pass costs ~1.3ms for a million points and only re-runs when
+   * the visible window moves.
    */
   private decimate(x: AxisFrame, cols: number): number | null {
     if (!this.decimateOn || !this.monotonic || this.count < 4 * cols) return null;
@@ -497,17 +485,6 @@ export class LineLayer implements Layer {
 
     const key = `${i0}:${i1}:${target}`;
     if (key === this.decKey) return this.decSegments;
-
-    // GPU path: reduce the envelope with transform feedback, no main-thread work.
-    if (this.gpuDec) {
-      const outCount = this.gpuDec.run(i0, i1, cols, this.decBuf, this.xs, this.xRef);
-      if (outCount != null) {
-        this.decKey = key;
-        this.decSegments = outCount - 1;
-        return this.decSegments;
-      }
-      this.disposeGpu(); // GPU path failed once — stop trying, use CPU below.
-    }
 
     this.decKey = key;
     const indices = decimateIndices(this.ys, i0, i1, cols);
@@ -570,7 +547,6 @@ export class LineLayer implements Layer {
 
   dispose(): void {
     const gl = this.gl;
-    this.disposeGpu();
     gl.deleteVertexArray(this.fullVao);
     gl.deleteVertexArray(this.decVao);
     gl.deleteVertexArray(this.joinFullVao);

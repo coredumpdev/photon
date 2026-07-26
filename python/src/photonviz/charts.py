@@ -311,9 +311,19 @@ class Axes(ChartSpec):
         """Loss/metric curves from ``[{"y": [...], "name": "train"}, …]``, EMA-smoothed with a best-epoch marker."""
         return self.add("trainingCurves", series=[_training_series(s) for s in series], **opts)
 
-    def decision_boundary(self, x: Any, y: Any, labels: Any, grid: Any, **opts: Any) -> "Axes":
-        """A classifier's decision regions under the sample points."""
-        return self.add("decisionBoundary", x=x, y=y, labels=labels, grid=grid, **opts)
+    def decision_boundary(
+        self, values: Any, cols: int, rows: int, extent: Dict[str, Any],
+        points: Optional[Dict[str, Any]] = None, **opts: Any,
+    ) -> "Axes":
+        """
+        A classifier's decision regions, from its prediction over a grid.
+
+        ``values`` is the predicted class (or probability) at each grid node,
+        row-major with row 0 at the bottom. Pass ``points={"x": ..., "y": ...,
+        "labels": ...}`` to draw the training samples over the field.
+        """
+        return self.add("decisionBoundary", values=values, cols=cols, rows=rows,
+                        extent=extent, points=points, **opts)
 
     def partial_dependence(self, x: Any, pd: Any, **opts: Any) -> "Axes":
         """Partial-dependence curve; pass ``ice=`` for the per-sample fan."""
