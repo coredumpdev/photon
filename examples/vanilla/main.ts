@@ -71,7 +71,18 @@ function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false,
 // Global animation loop. Dynamic-tab updaters run (and FPS badges repaint) only
 // while the Dynamic tab is active — built panels on hidden tabs stay idle.
 // ============================================================================
-const dynUpdaters: Array<(t: number) => void> = [];
+/**
+ * Streaming updaters, each paired with the plot it feeds.
+ *
+ * Photon skips drawing a chart that is scrolled out of view, but it cannot skip
+ * the data generation behind it — so the loop asks each plot whether it is on
+ * screen before doing that work. On this page 40 of 52 panels are off-screen at
+ * any scroll position, and regenerating all of them was most of the frame.
+ */
+const dynUpdaters: Array<{ fn: (t: number) => void; plot?: { isOnScreen(): boolean } }> = [];
+
+/** The plot a subsequently-pushed updater belongs to, set by each builder. */
+let currentPlot: { isOnScreen(): boolean } | undefined;
 let dynamicActive = false;
 let frame = 0;
 let fpsAvg = 0, lastNow = 0, fpsPaint = 0;
@@ -80,7 +91,10 @@ function loop(now: number): void {
   frame++;
   const t = frame / 60;
   if (dynamicActive) {
-    for (const u of dynUpdaters) u(t);
+    for (const u of dynUpdaters) {
+      if (u.plot && !u.plot.isOnScreen()) continue;
+      u.fn(t);
+    }
     if (lastNow > 0) {
       const dt = now - lastNow;
       if (dt > 0) { const inst = 1000 / dt; fpsAvg = fpsAvg > 0 ? fpsAvg * 0.9 + inst * 0.1 : inst; }
@@ -108,6 +122,28 @@ function gaussian(m: number, sd: number): number {
 }
 const jitter = () => (Math.random() - 0.5);
 
+/**
+ * A Plot that opts into off-screen culling and records itself as the current
+ * one, so `pushUpdater` can pair an updater with its chart without every builder
+ * having to say so.
+ *
+ * This page holds 153 charts, which is exactly the shape `offscreenCulling` is
+ * for: with it off, Firefox spends its whole frame blitting charts that are
+ * scrolled past (15fps against 58). It is off by default in the library, since
+ * most pages hold a handful of charts and would rather every render() paint.
+ */
+class TrackedPlot extends Plot {
+  constructor(el: HTMLElement, opts?: ConstructorParameters<typeof Plot>[1]) {
+    super(el, { offscreenCulling: true, ...opts });
+    currentPlot = this;
+  }
+}
+
+/** Register a streaming updater against whichever plot was built most recently. */
+function pushUpdater(fn: (t: number) => void): void {
+  dynUpdaters.push({ fn, plot: currentPlot });
+}
+
 // A throttled updater: only runs `fn` every `k` frames (for expensive rebuilds).
 function every(k: number, fn: (t: number) => void): (t: number) => void {
   return (t) => { if (frame % k === 0) fn(t); };
@@ -125,7 +161,7 @@ const CHARTS: Builder[] = [
   // --- Line ----------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Line", dyn ? "live · scrolling" : "sine sum", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Line", dyn ? "live · scrolling" : "sine sum", dyn), { theme: "dark" });
     const N = 600;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const y = Float64Array.from({ length: N }, (_, i) => Math.sin(i * 0.08) * 1.6 + Math.sin(i * 0.021) * 0.7);
@@ -133,7 +169,7 @@ const CHARTS: Builder[] = [
     p.setView({ x: [0, N - 1], y: [-2.6, 2.6] });
     if (dyn) {
       let ph = N;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         y.copyWithin(0, 1); ph += 1;
         y[N - 1] = Math.sin(ph * 0.08) * 1.6 + Math.sin(ph * 0.021) * 0.7 + jitter() * 0.25;
         line.setData(x, y); p.render();
@@ -144,7 +180,7 @@ const CHARTS: Builder[] = [
   // --- Multi-signal --------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Signals", "3 channels", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Signals", "3 channels", dyn), { theme: "dark" });
     const N = 500;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const ys = [new Float64Array(N), new Float64Array(N), new Float64Array(N)];
@@ -154,7 +190,7 @@ const CHARTS: Builder[] = [
     p.setView({ x: [0, N - 1], y: [-3.5, 3.5] });
     if (dyn) {
       let ph = N;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         ph += 1;
         ys.forEach((y, i) => {
           y.copyWithin(0, 1);
@@ -169,14 +205,14 @@ const CHARTS: Builder[] = [
   // --- Scatter -------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Scatter", dyn ? "drifting cloud" : "gaussian cloud", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Scatter", dyn ? "drifting cloud" : "gaussian cloud", dyn), { theme: "dark" });
     const M = 700;
     const x = new Float64Array(M), y = new Float64Array(M);
     for (let i = 0; i < M; i++) { x[i] = gaussian(0, 1); y[i] = gaussian(0, 1); }
     const sc = p.addScatter({ x, y, size: 5, color: "#818cf8", renderType: rt });
     p.setView({ x: [-4, 4], y: [-4, 4] });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         for (let i = 0; i < M; i++) {
           x[i] += jitter() * 0.08 - x[i]! * 0.01;
           y[i] += jitter() * 0.08 - y[i]! * 0.01;
@@ -190,7 +226,7 @@ const CHARTS: Builder[] = [
   // Per-point `sizes` and `colors` turn a scatter into a bubble chart; `dash`
   // marks the reference lines as guides rather than data.
   (grid, dyn) => {
-    const p = new Plot(panel(grid, "Bubble", "per-point size + color · dashed guides", dyn), {
+    const p = new TrackedPlot(panel(grid, "Bubble", "per-point size + color · dashed guides", dyn), {
       theme: "dark", legend: true, pick: "xy",
     });
     const M = 90;
@@ -214,7 +250,7 @@ const CHARTS: Builder[] = [
   // --- Scatter markers (6 glyph shapes) ------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Scatter markers", "6 glyph shapes", dyn), { theme: "dark", showToolbar: false });
+    const p = new TrackedPlot(panel(grid, "Scatter markers", "6 glyph shapes", dyn), { theme: "dark", showToolbar: false });
     const shapes = ["circle", "square", "triangle", "diamond", "cross", "plus"] as const;
     const colors = ["#38bdf8", "#f472b6", "#a3e635", "#fbbf24", "#a78bfa", "#34d399"];
     const M = 12;
@@ -225,7 +261,7 @@ const CHARTS: Builder[] = [
     });
     p.setView({ x: [-1, M], y: [-1, shapes.length] });
     if (dyn) {
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         layers.forEach((lyr, r) => {
           const base = shapes.length - 1 - r;
           const y = Float64Array.from({ length: M }, (_, i) => base + Math.sin(t * 2 + i * 0.6 + r) * 0.25);
@@ -239,14 +275,14 @@ const CHARTS: Builder[] = [
   // --- Scatter · colorBy ---------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Scatter · colorBy", "value → viridis", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Scatter · colorBy", "value → viridis", dyn), { theme: "dark" });
     const M = 1200;
     const x = new Float64Array(M), y = new Float64Array(M), v = new Float64Array(M);
     for (let i = 0; i < M; i++) { x[i] = gaussian(0, 1.4); y[i] = gaussian(0, 1.4); v[i] = Math.hypot(x[i]!, y[i]!); }
     const sc = p.addScatter({ x, y, size: 6, colorBy: { values: v, colormap: "viridis" }, renderType: rt });
     p.setView({ x: [-5, 5], y: [-5, 5] });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         for (let i = 0; i < M; i++) { x[i] += jitter() * 0.06 - x[i]! * 0.008; y[i] += jitter() * 0.06 - y[i]! * 0.008; }
         sc.setData(x, y); p.render();
       });
@@ -256,14 +292,14 @@ const CHARTS: Builder[] = [
   // --- Bars ----------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Bars", dyn ? "fluctuating" : "categorical", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Bars", dyn ? "fluctuating" : "categorical", dyn), { theme: "dark" });
     const K = 9;
     const cats = Float64Array.from({ length: K }, (_, i) => i);
     const y = Float64Array.from({ length: K }, () => 40 + rand() * 30);
     const bar = p.addBar({ x: cats, y, width: 0.7, color: "#22d3ee", renderType: rt });
     p.setView({ x: [-0.6, K - 0.4], y: [0, 100] });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         for (let i = 0; i < K; i++) y[i] = Math.max(2, Math.min(98, y[i]! + jitter() * 8));
         bar.setData(cats, y); p.render();
       });
@@ -273,7 +309,7 @@ const CHARTS: Builder[] = [
   // --- Grouped bars --------------------------------------------------------
   (grid, dyn) => {
     const cats = ["Q1", "Q2", "Q3", "Q4"];
-    const p = new Plot(panel(grid, "Grouped bars", "categorical · 3 series", dyn), {
+    const p = new TrackedPlot(panel(grid, "Grouped bars", "categorical · 3 series", dyn), {
       theme: "dark", legend: { position: "top-left" },
       scales: { x: { type: "categorical", factors: cats }, y: { domain: [0, 100] } }, showToolbar: false,
     });
@@ -283,7 +319,7 @@ const CHARTS: Builder[] = [
     const colors = ["#38bdf8", "#f472b6", "#a3e635"], names = ["north", "south", "west"];
     const layers = p.addGroupedBars({ x: idx, series: ys.map((y, i) => ({ y, color: colors[i], name: names[i] })) });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         ys.forEach((y, s) => {
           for (let i = 0; i < y.length; i++) y[i] = Math.max(4, Math.min(96, y[i]! + jitter() * 7));
           layers[s]!.setData(idx, y);
@@ -296,7 +332,7 @@ const CHARTS: Builder[] = [
   // --- Stacked bars --------------------------------------------------------
   (grid, dyn) => {
     const cats = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-    const p = new Plot(panel(grid, "Stacked bars", "categorical · cumulative", dyn), {
+    const p = new TrackedPlot(panel(grid, "Stacked bars", "categorical · cumulative", dyn), {
       theme: "dark", legend: { position: "top-left" },
       scales: { x: { type: "categorical", factors: cats } }, showToolbar: false,
     });
@@ -306,7 +342,7 @@ const CHARTS: Builder[] = [
     const colors = ["#22d3ee", "#818cf8", "#fbbf24"], names = ["email", "social", "direct"];
     const layers = p.addStackedBars({ x: idx, width: 0.6, series: raw.map((y, i) => ({ y, color: colors[i], name: names[i] })) });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         const n = idx.length;
         const cum = new Float64Array(n);
         raw.forEach((y, s) => {
@@ -323,14 +359,14 @@ const CHARTS: Builder[] = [
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
     const cats = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"];
-    const p = new Plot(panel(grid, "Horizontal bars", "hbar · categorical y", dyn), {
+    const p = new TrackedPlot(panel(grid, "Horizontal bars", "hbar · categorical y", dyn), {
       theme: "dark", scales: { y: { type: "categorical", factors: cats }, x: { domain: [0, 100] } }, showToolbar: false,
     });
     const idx = Float64Array.from(cats, (_, i) => i);
     const vals = Float64Array.from(cats, (_, i) => 30 + i * 12 + rand() * 10);
     const bar = p.addBar({ x: idx, y: vals, width: 0.6, orientation: "h", color: "#34d399", name: "score", renderType: rt });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         for (let i = 0; i < vals.length; i++) vals[i] = Math.max(6, Math.min(98, vals[i]! + jitter() * 6));
         bar.setData(idx, vals); p.render();
       });
@@ -340,7 +376,7 @@ const CHARTS: Builder[] = [
   // --- Area ----------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Area", dyn ? "streaming" : "filled", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Area", dyn ? "streaming" : "filled", dyn), { theme: "dark" });
     const N = 400;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const y = Float64Array.from({ length: N }, (_, i) => 2 + Math.sin(i * 0.06) + Math.sin(i * 0.017) * 0.7);
@@ -348,7 +384,7 @@ const CHARTS: Builder[] = [
     p.setView({ x: [0, N - 1], y: [0, 4] });
     if (dyn) {
       let ph = N;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         y.copyWithin(0, 1); ph += 1;
         y[N - 1] = 2 + Math.sin(ph * 0.06) + Math.sin(ph * 0.017) * 0.7 + Math.random() * 0.2;
         area.setData(x, y); p.render();
@@ -358,7 +394,7 @@ const CHARTS: Builder[] = [
 
   // --- Stacked area --------------------------------------------------------
   (grid, dyn) => {
-    const p = new Plot(panel(grid, "Stacked area", "cumulative bands", dyn), { theme: "dark", showToolbar: false });
+    const p = new TrackedPlot(panel(grid, "Stacked area", "cumulative bands", dyn), { theme: "dark", showToolbar: false });
     const N = 120;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const s = (a: number, b: number, c: number) => Float64Array.from({ length: N }, (_, i) => a + Math.sin(i * b + c) * a * 0.4 + a * 0.3);
@@ -368,7 +404,7 @@ const CHARTS: Builder[] = [
     p.setView({ x: [0, N - 1], y: [0, 14] });
     if (dyn) {
       const amp = [3, 2.5, 2], fr = [0.05, 0.06, 0.04];
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         const cum = new Float64Array(N);
         for (let sIdx = 0; sIdx < raw.length; sIdx++) {
           const base = Float64Array.from(cum), top = new Float64Array(N), a = amp[sIdx]!, b = fr[sIdx]!;
@@ -386,14 +422,14 @@ const CHARTS: Builder[] = [
   // --- Step line -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Step line", "staircase · step:after", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Step line", "staircase · step:after", dyn), { theme: "dark" });
     const N = 24;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const y = Float64Array.from({ length: N }, () => Math.round(rand() * 3));
     const line = p.addLine({ x, y, color: "#fbbf24", width: 2.5, step: "after", join: "miter", renderType: rt });
     p.setView({ x: [0, N - 1], y: [-0.5, 3.5] });
     if (dyn) {
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         y.copyWithin(0, 1);
         y[N - 1] = Math.round(Math.random() * 3);
         line.setData(x, y); p.render();
@@ -404,7 +440,7 @@ const CHARTS: Builder[] = [
   // --- Line joins ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Line joins", "miter · bevel · round", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Line joins", "miter · bevel · round", dyn), { theme: "dark" });
     const xs = Float64Array.from({ length: 13 }, (_, i) => i);
     const styles = ["miter", "bevel", "round"] as const;
     const colors = ["#f472b6", "#60a5fa", "#34d399"];
@@ -413,7 +449,7 @@ const CHARTS: Builder[] = [
       return p.addLine({ x: xs, y, color: colors[k], width: 8, join, name: join, renderType: rt });
     });
     if (dyn) {
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         styles.forEach((_, k) => {
           const amp = 0.6 + 0.4 * Math.sin(t * 2 + k);
           const y = Float64Array.from(xs, (_, i) => (i % 2 === 0 ? 0 : amp) + k * 2.2);
@@ -427,7 +463,7 @@ const CHARTS: Builder[] = [
   // --- Histogram -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Histogram", "gaussian · 30 bins", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Histogram", "gaussian · 30 bins", dyn), { theme: "dark" });
     const bins = 30, lo = -4, hi = 4, bw = (hi - lo) / bins;
     const centers = Float64Array.from({ length: bins }, (_, i) => lo + (i + 0.5) * bw);
     const counts = new Float64Array(bins);
@@ -436,7 +472,7 @@ const CHARTS: Builder[] = [
     const bar = p.addBar({ x: centers, y: counts, width: bw * 0.98, color: "#34d399", renderType: rt });
     if (dyn) {
       // Cheap streaming: nudge each bin toward a re-sampled Gaussian envelope.
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         for (let i = 0; i < bins; i++) {
           const target = 5000 * bw * Math.exp(-centers[i]! * centers[i]! / 2) / Math.sqrt(2 * Math.PI);
           counts[i] = Math.max(0, counts[i]! + (target - counts[i]!) * 0.05 + jitter() * target * 0.12);
@@ -449,7 +485,7 @@ const CHARTS: Builder[] = [
   // --- Box plot ------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Box plot", "Tukey · outliers", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Box plot", "Tukey · outliers", dyn), { theme: "dark" });
     const colors = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6"];
     const mkGroups = (phase: number) => [0, 1, 2, 3].map((g) => ({
       position: g,
@@ -458,13 +494,13 @@ const CHARTS: Builder[] = [
     }));
     const box = p.addBox({ groups: mkGroups(0), width: 0.6, renderType: rt });
     p.setView({ x: [-0.6, 3.6], y: [-4, 8] });
-    if (dyn) dynUpdaters.push(every(4, (t) => { box.setData(mkGroups(t)); p.render(); }));
+    if (dyn) pushUpdater(every(4, (t) => { box.setData(mkGroups(t)); p.render(); }));
   },
 
   // --- Heatmap -------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Heatmap", "texture · viridis", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Heatmap", "texture · viridis", dyn), { theme: "dark" });
     const cols = 60, rows = 40;
     const values = new Float64Array(cols * rows);
     const fill = (ph: number) => {
@@ -475,13 +511,13 @@ const CHARTS: Builder[] = [
     };
     fill(0);
     const hm = p.addHeatmap({ values, cols, rows, extent: { x: [0, 6], y: [0, 6] }, colormap: "viridis", renderType: rt });
-    if (dyn) dynUpdaters.push((t) => { fill(t); hm.setData(values); p.render(); });
+    if (dyn) pushUpdater((t) => { fill(t); hm.setData(values); p.render(); });
   },
 
   // --- Contour -------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Contour", "marching squares", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Contour", "marching squares", dyn), { theme: "dark" });
     const cols = 80, rows = 60;
     const values = new Float64Array(cols * rows);
     const fill = (ph: number) => {
@@ -492,12 +528,12 @@ const CHARTS: Builder[] = [
     };
     fill(0);
     const ct = p.addContour({ values, cols, rows, extent: { x: [-3, 3], y: [-3, 3] }, levels: 12, colormap: "viridis", renderType: rt });
-    if (dyn) dynUpdaters.push(every(2, (t) => { fill(t); ct.setData(values); p.render(); }));
+    if (dyn) pushUpdater(every(2, (t) => { fill(t); ct.setData(values); p.render(); }));
   },
 
   // --- Spectrogram ---------------------------------------------------------
   (grid, dyn) => {
-    const p = new Plot(panel(grid, "Spectrogram", dyn ? "waterfall · scroll" : "chirp · STFT", dyn), {
+    const p = new TrackedPlot(panel(grid, "Spectrogram", dyn ? "waterfall · scroll" : "chirp · STFT", dyn), {
       theme: "dark", axes: { x: { title: "time" }, y: { title: "freq" } },
     });
     const N = 16384, sr = 8000;
@@ -510,7 +546,7 @@ const CHARTS: Builder[] = [
       const grid2 = new Float64Array(cols * rows);
       // seed from a moving spectral peak
       let ph = 0;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         ph += 0.05;
         // shift left
         for (let r = 0; r < rows; r++) grid2.copyWithin(r * cols, r * cols + 1, (r + 1) * cols);
@@ -524,13 +560,13 @@ const CHARTS: Builder[] = [
   // --- Hexbin --------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Hexbin", "25k points · density", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Hexbin", "25k points · density", dyn), { theme: "dark" });
     const M = 25_000;
     const x = new Float64Array(M), y = new Float64Array(M);
     for (let i = 0; i < M; i++) { const blob = i % 2 === 0 ? -1.4 : 1.4; x[i] = gaussian(blob, 1); y[i] = gaussian(blob * 0.6, 1.1); }
     const hx = p.addHexbin({ x, y, radius: 0.22, colormap: "plasma", renderType: rt });
     p.setView({ x: [-5, 5], y: [-5, 5] });
-    if (dyn) dynUpdaters.push(every(2, () => {
+    if (dyn) pushUpdater(every(2, () => {
       for (let i = 0; i < M; i++) { x[i] += jitter() * 0.05 - x[i]! * 0.004; y[i] += jitter() * 0.05 - y[i]! * 0.004; }
       hx.setData(x, y); p.render();
     }));
@@ -539,7 +575,7 @@ const CHARTS: Builder[] = [
   // --- Error bars ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Error bars", "whiskers + caps", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Error bars", "whiskers + caps", dyn), { theme: "dark" });
     const N = 12;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const y = Float64Array.from({ length: N }, (_, i) => Math.sin(i / 2) * 3 + 5);
@@ -548,7 +584,7 @@ const CHARTS: Builder[] = [
     const eb = p.addErrorBar({ x, y, yerr, color: "#60a5fa", capSize: 7, renderType: rt });
     p.setView({ x: [-1, N], y: [0, 10] });
     if (dyn) {
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         for (let i = 0; i < N; i++) { y[i] = Math.sin(i / 2 + t) * 3 + 5; yerr[i] = 0.4 + (0.5 + 0.4 * Math.sin(t + i)) * 0.9; }
         line.setData(x, y); eb.setData({ x, y, yerr }); p.render();
       });
@@ -558,7 +594,7 @@ const CHARTS: Builder[] = [
   // --- Error band ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Error band", "confidence ribbon", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Error band", "confidence ribbon", dyn), { theme: "dark" });
     const N = 120;
     const x = Float64Array.from({ length: N }, (_, i) => i / 10);
     const y = Float64Array.from(x, (t) => Math.sin(t));
@@ -567,7 +603,7 @@ const CHARTS: Builder[] = [
     const line = p.addLine({ x, y, color: "#a78bfa", width: 2, renderType: rt });
     p.setView({ x: [0, 12], y: [-1.5, 1.5] });
     if (dyn) {
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         for (let i = 0; i < N; i++) { y[i] = Math.sin(x[i]! + t); err[i] = 0.12 + 0.12 * Math.abs(Math.cos(x[i]! + t)); }
         eb.setData({ x, y, yerr: err }); line.setData(x, y); p.render();
       });
@@ -577,14 +613,14 @@ const CHARTS: Builder[] = [
   // --- Stem ----------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Stem plot", "discrete signal", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Stem plot", "discrete signal", dyn), { theme: "dark" });
     const N = 30;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const y = Float64Array.from({ length: N }, (_, i) => Math.exp(-i / 12) * Math.cos(i / 2));
     const stem = p.addStem({ x, y, color: "#34d399", markerSize: 6, renderType: rt });
     p.setView({ x: [-1, N], y: [-1, 1.1] });
     if (dyn) {
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         for (let i = 0; i < N; i++) y[i] = Math.exp(-i / 12) * Math.cos(i / 2 + t * 2);
         stem.setData(x, y); p.render();
       });
@@ -594,7 +630,7 @@ const CHARTS: Builder[] = [
   // --- Quiver --------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Quiver", "vector field", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "Quiver", "vector field", dyn), { theme: "dark" });
     const G = 16;
     const xs: number[] = [], ys: number[] = [];
     for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) { xs.push((i / (G - 1)) * 4 - 2); ys.push((j / (G - 1)) * 4 - 2); }
@@ -603,13 +639,13 @@ const CHARTS: Builder[] = [
     fill(0);
     const q = p.addQuiver({ x: xs, y: ys, u: us, v: vs, colorBy: { colormap: "viridis" }, renderType: rt });
     p.setView({ x: [-2.4, 2.4], y: [-2.4, 2.4] });
-    if (dyn) dynUpdaters.push((t) => { fill(t); q.setData(xs, ys, us, vs); p.render(); });
+    if (dyn) pushUpdater((t) => { fill(t); q.setData(xs, ys, us, vs); p.render(); });
   },
 
   // --- Candlestick ---------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Candlestick", dyn ? "OHLC · streaming" : "OHLC · daily", dyn), {
+    const p = new TrackedPlot(panel(grid, "Candlestick", dyn ? "OHLC · streaming" : "OHLC · daily", dyn), {
       theme: "dark", scales: { x: { type: "time" } },
     });
     const N = 40, start = Date.UTC(2024, 0, 1), step = 86_400_000;
@@ -626,7 +662,7 @@ const CHARTS: Builder[] = [
     if (dyn) {
       let lastX = x[N - 1]!, lastClose = c[N - 1]!, curOpen = lastClose, curClose = lastClose, hi = lastClose, lo = lastClose;
       let sinceClose = 0;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         // Perturb the forming candle every frame.
         curClose += gaussian(0, 0.35);
         hi = Math.max(hi, curClose); lo = Math.min(lo, curClose);
@@ -645,7 +681,7 @@ const CHARTS: Builder[] = [
   // --- OHLC bars -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "OHLC", dyn ? "bars · streaming" : "bars · daily", dyn), {
+    const p = new TrackedPlot(panel(grid, "OHLC", dyn ? "bars · streaming" : "bars · daily", dyn), {
       theme: "dark", scales: { x: { type: "time" } },
     });
     const N = 40, start = Date.UTC(2024, 0, 1), step = 86_400_000;
@@ -661,7 +697,7 @@ const CHARTS: Builder[] = [
     const ol = p.addOhlc({ x, open: o, high: h, low: l, close: c, renderType: rt });
     if (dyn) {
       let lastX = x[N - 1]!, curOpen = c[N - 1]!, curClose = curOpen, hi = curOpen, lo = curOpen, sinceClose = 0;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         curClose += gaussian(0, 0.35); hi = Math.max(hi, curClose); lo = Math.min(lo, curClose);
         ol.updateLast({ x: lastX, open: curOpen, high: hi, low: lo, close: curClose });
         p.render();
@@ -689,14 +725,14 @@ const CHARTS: Builder[] = [
       l[i] = Math.min(open, close) - Math.abs(gaussian(0, 1));
       price = close;
     }
-    const p = new Plot(panel(grid, "Ordinal-time axis", "sessions · weekend gaps collapse", dyn), {
+    const p = new TrackedPlot(panel(grid, "Ordinal-time axis", "sessions · weekend gaps collapse", dyn), {
       theme: "dark", scales: { x: { type: "ordinal-time", times } },
     });
     const cs = p.addCandlestick({ x: idx, open: o, high: h, low: l, close: c, renderType: rt });
     if (dyn) {
       // Roll the forming bar in place (fixed window keeps indices/times valid).
       let curOpen = c[N - 1]!, curClose = curOpen, hi = curOpen, lo = curOpen, sinceClose = 0;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         curClose += gaussian(0, 0.3); hi = Math.max(hi, curClose); lo = Math.min(lo, curClose);
         cs.updateLast({ x: N - 1, open: curOpen, high: hi, low: lo, close: curClose });
         p.render();
@@ -715,14 +751,14 @@ const CHARTS: Builder[] = [
   // --- Pie -----------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Pie", "market share", dyn), {
+    const p = new TrackedPlot(panel(grid, "Pie", "market share", dyn), {
       theme: "dark", equalAspect: true, showToolbar: false, hover: false,
       axes: { x: { ticks: [], showAxisLine: false }, y: { ticks: [], showAxisLine: false } },
     });
     const vals = [35, 25, 20, 12, 8];
     const pie = p.addPie({ values: vals, colormap: "viridis", renderType: rt });
     p.setView({ x: [-1.25, 1.25], y: [-1.25, 1.25] });
-    if (dyn) dynUpdaters.push(every(3, () => {
+    if (dyn) pushUpdater(every(3, () => {
       for (let i = 0; i < vals.length; i++) vals[i] = Math.max(3, vals[i]! + jitter() * 3);
       pie.setData(vals); p.render();
     }));
@@ -731,14 +767,14 @@ const CHARTS: Builder[] = [
   // --- Donut ---------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Donut", "categories", dyn), {
+    const p = new TrackedPlot(panel(grid, "Donut", "categories", dyn), {
       theme: "dark", equalAspect: true, showToolbar: false, hover: false,
       axes: { x: { ticks: [], showAxisLine: false }, y: { ticks: [], showAxisLine: false } },
     });
     const vals = [8, 6, 5, 4, 3, 2];
     const pie = p.addPie({ values: vals, innerRadius: 0.55, renderType: rt });
     p.setView({ x: [-1.25, 1.25], y: [-1.25, 1.25] });
-    if (dyn) dynUpdaters.push(every(3, () => {
+    if (dyn) pushUpdater(every(3, () => {
       for (let i = 0; i < vals.length; i++) vals[i] = Math.max(1.5, vals[i]! + jitter() * 2);
       pie.setData(vals); p.render();
     }));
@@ -747,7 +783,7 @@ const CHARTS: Builder[] = [
   // --- Patches (choropleth) ------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Patches", "polygons · choropleth", dyn), { theme: "dark", showToolbar: false });
+    const p = new TrackedPlot(panel(grid, "Patches", "polygons · choropleth", dyn), { theme: "dark", showToolbar: false });
     const cols = 6, rows = 4;
     const cells: Array<{ x: number[]; y: number[]; base: number }> = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
@@ -757,13 +793,13 @@ const CHARTS: Builder[] = [
     const mk = (ph: number) => cells.map((cell, i) => ({ x: cell.x, y: cell.y, value: cell.base + Math.sin(ph + i * 0.4) * 0.6 }));
     const patch = p.addPatches({ patches: mk(0), colormap: "plasma", renderType: rt });
     p.setView({ x: [-0.3, cols + 0.3], y: [-0.3, rows + 0.3] });
-    if (dyn) dynUpdaters.push(every(2, (t) => { patch.setData(mk(t)); p.render(); }));
+    if (dyn) pushUpdater(every(2, (t) => { patch.setData(mk(t)); p.render(); }));
   },
 
   // --- Annotations ---------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Annotations", "span · band · box · label", dyn), { theme: "dark", showToolbar: false });
+    const p = new TrackedPlot(panel(grid, "Annotations", "span · band · box · label", dyn), { theme: "dark", showToolbar: false });
     const N = 100;
     const x = Float64Array.from({ length: N }, (_, i) => i);
     const y = Float64Array.from({ length: N }, (_, i) => Math.sin(i * 0.15) * 3 + 5);
@@ -774,7 +810,7 @@ const CHARTS: Builder[] = [
     p.addAnnotation({ type: "span", dim: "x", value: 50, color: "#f472b6", dash: [5, 4] });
     p.addAnnotation({ type: "box", x: [20, 35], y: [2, 4], border: "#a78bfa" });
     p.addAnnotation({ type: "label", x: 52, y: 9, text: "event", color: "#f472b6" });
-    if (dyn) dynUpdaters.push((t) => {
+    if (dyn) pushUpdater((t) => {
       for (let i = 0; i < N; i++) y[i] = Math.sin(i * 0.15 + t) * 3 + 5;
       line.setData(x, y); p.render();
     });
@@ -783,7 +819,7 @@ const CHARTS: Builder[] = [
   // --- Image ---------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Image", "RGBA glyph · textured quad", dyn), { theme: "dark", showToolbar: false });
+    const p = new TrackedPlot(panel(grid, "Image", "RGBA glyph · textured quad", dyn), { theme: "dark", showToolbar: false });
     const iw = 96, ih = 96;
     const id = new ImageData(iw, ih);
     const paint = (cx: number, cy: number) => {
@@ -799,7 +835,7 @@ const CHARTS: Builder[] = [
     paint(iw / 2, ih / 2);
     const img = p.addImage({ source: id, extent: { x: [0, 10], y: [0, 10] }, renderType: rt });
     p.setView({ x: [-0.5, 10.5], y: [-0.5, 10.5] });
-    if (dyn) dynUpdaters.push((t) => {
+    if (dyn) pushUpdater((t) => {
       paint(iw / 2 + Math.cos(t * 1.5) * iw * 0.3, ih / 2 + Math.sin(t * 1.5) * ih * 0.3);
       img.setData(id); p.render();
     });
@@ -808,7 +844,7 @@ const CHARTS: Builder[] = [
   // --- Graph ---------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Graph", "force layout · nodes + edges", dyn), { theme: "dark", showToolbar: false, equalAspect: true });
+    const p = new TrackedPlot(panel(grid, "Graph", "force layout · nodes + edges", dyn), { theme: "dark", showToolbar: false, equalAspect: true });
     const edges: [number, number][] = [
       [0, 1], [0, 2], [0, 3], [1, 2], [3, 4], [4, 5], [5, 3],
       [2, 6], [6, 7], [7, 2], [8, 9], [9, 0], [6, 8], [1, 4],
@@ -821,7 +857,7 @@ const CHARTS: Builder[] = [
     p.setView({ x: [-1.5, 1.5], y: [-1.5, 1.5] });
     if (dyn) {
       const x = new Float64Array(nNodes), y = new Float64Array(nNodes);
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         for (let i = 0; i < nNodes; i++) { x[i] = bx[i]! + Math.sin(t * 2 + i) * 0.12; y[i] = by[i]! + Math.cos(t * 2 + i) * 0.12; }
         g.setData({ x, y, edges }); p.render();
       });
@@ -831,7 +867,7 @@ const CHARTS: Builder[] = [
   // --- Log axis ------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Log axis", "exp decay · log y", dyn), {
+    const p = new TrackedPlot(panel(grid, "Log axis", "exp decay · log y", dyn), {
       theme: "dark", scales: { y: { type: "log" } }, axes: { x: { title: "t" }, y: { title: "amplitude" } },
     });
     const N = 200;
@@ -839,7 +875,7 @@ const CHARTS: Builder[] = [
     const taus = [1.2, 2.5, 5], colors = ["#f472b6", "#60a5fa", "#34d399"];
     const ys = taus.map((tau) => Float64Array.from(x, (t) => Math.exp(-t / tau) + 1e-3));
     const lines = ys.map((y, k) => p.addLine({ x, y, color: colors[k], width: 1.5, name: `τ=${taus[k]}`, renderType: rt }));
-    if (dyn) dynUpdaters.push((t) => {
+    if (dyn) pushUpdater((t) => {
       taus.forEach((tau, k) => { const y = ys[k]!; for (let i = 0; i < N; i++) y[i] = Math.exp(-x[i]! / tau) * (1 + 0.3 * Math.sin(t * 2 + i * 0.1)) + 1e-3; lines[k]!.setData(x, y); });
       p.render();
     });
@@ -848,14 +884,14 @@ const CHARTS: Builder[] = [
   // --- Time axis -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Time axis", "1 day · date ticks", dyn), { theme: "dark", scales: { x: { type: "time" } } });
+    const p = new TrackedPlot(panel(grid, "Time axis", "1 day · date ticks", dyn), { theme: "dark", scales: { x: { type: "time" } } });
     const start = Date.UTC(2024, 0, 1), N = 24 * 60;
     const x = new Float64Array(N), y = new Float64Array(N);
     for (let i = 0; i < N; i++) { x[i] = start + i * 60_000; const h = i / 60; y[i] = 20 + 6 * Math.sin((h - 9) / 24 * 2 * Math.PI) + gaussian(0, 0.4); }
     const line = p.addLine({ x, y, color: "#22d3ee", width: 1.5, renderType: rt });
     if (dyn) {
       let ph = N;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         y.copyWithin(0, 1); x.copyWithin(0, 1); ph++;
         x[N - 1] = start + ph * 60_000; const h = ph / 60;
         y[N - 1] = 20 + 6 * Math.sin((h - 9) / 24 * 2 * Math.PI) + gaussian(0, 0.4);
@@ -867,7 +903,7 @@ const CHARTS: Builder[] = [
   // --- Dual Y --------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "Dual Y", "two scales", dyn), { theme: "dark", axes: { y: { title: "amp" } } });
+    const p = new TrackedPlot(panel(grid, "Dual Y", "two scales", dyn), { theme: "dark", axes: { y: { title: "amp" } } });
     p.addYAxis("t", { side: "right", color: "#f472b6", title: "temp" });
     const N = 400;
     const x = Float64Array.from({ length: N }, (_, i) => i);
@@ -878,7 +914,7 @@ const CHARTS: Builder[] = [
     p.setView({ x: [0, N - 1], y: [-2, 2], yAxes: { t: [15, 35] } });
     if (dyn) {
       let ph = N;
-      dynUpdaters.push(() => {
+      pushUpdater(() => {
         a.copyWithin(0, 1); b.copyWithin(0, 1); ph += 1;
         a[N - 1] = Math.sin(ph * 0.05) * 1.5 + jitter() * 0.15;
         b[N - 1] = 25 + Math.sin(ph * 0.02) * 6 + jitter() * 0.6;
@@ -890,7 +926,7 @@ const CHARTS: Builder[] = [
   // --- 1M points (decimation) ----------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p = new Plot(panel(grid, "1M points", dyn ? "GPU decimation · panning" : "GPU min/max decimation", dyn), { theme: "dark" });
+    const p = new TrackedPlot(panel(grid, "1M points", dyn ? "GPU decimation · panning" : "GPU min/max decimation", dyn), { theme: "dark" });
     const N = 1_000_000;
     const x = new Float64Array(N), y = new Float64Array(N);
     for (let i = 0; i < N; i++) { x[i] = i; y[i] = Math.sin(i / 5000) + 0.15 * Math.sin(i / 30) + gaussian(0, 0.05); }
@@ -899,7 +935,7 @@ const CHARTS: Builder[] = [
       // Cheap "streaming": glide a 50k-wide window across the million points.
       const win = 50_000;
       p.setView({ x: [0, win], y: [-1.5, 1.5] });
-      dynUpdaters.push((t) => {
+      pushUpdater((t) => {
         const c = (Math.sin(t * 0.3) * 0.5 + 0.5) * (N - win);
         p.setView({ x: [c, c + win] }); p.render();
       });
@@ -910,7 +946,7 @@ const CHARTS: Builder[] = [
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-    const p = new Plot(panel(grid, "Styled + categorical", "bg · title · legend · rotated ticks", dyn), {
+    const p = new TrackedPlot(panel(grid, "Styled + categorical", "bg · title · legend · rotated ticks", dyn), {
       theme: "dark", background: "#0b1220", border: "#060a14",
       title: { text: "Quarterly revenue", align: "left" }, legend: { position: "top-left" },
       scales: { x: { type: "categorical", factors: months }, y: { domain: [0, 110] } },
@@ -922,7 +958,7 @@ const CHARTS: Builder[] = [
     const target = Float64Array.from(months, () => 70 + rand() * 12);
     const bar = p.addBar({ x: idx, y: revenue, width: 0.6, color: "#38bdf8", name: "revenue", renderType: rt });
     const line = p.addLine({ x: idx, y: target, color: "#f59e0b", width: 2.5, name: "target", renderType: rt });
-    if (dyn) dynUpdaters.push(() => {
+    if (dyn) pushUpdater(() => {
       for (let i = 0; i < months.length; i++) { revenue[i] = Math.max(5, Math.min(105, revenue[i]! + jitter() * 6)); target[i] = Math.max(40, Math.min(100, target[i]! + jitter() * 3)); }
       bar.setData(idx, revenue); line.setData(idx, target); p.render();
     });
@@ -930,7 +966,7 @@ const CHARTS: Builder[] = [
 
   // --- Polar radar ---------------------------------------------------------
   (grid, dyn) => {
-    const pp = new PolarPlot(panel(grid, "Polar radar", "rotating sweep", dyn), { theme: "dark", angleUnit: "deg", maxRadius: 1 });
+    const pp = new PolarPlot(panel(grid, "Polar radar", "rotating sweep", dyn), { offscreenCulling: true, theme: "dark", angleUnit: "deg", maxRadius: 1 });
     const sweep = pp.addLine({ theta: [0, 0], r: [0, 1], color: "#22d3ee", width: 2 });
     const B = 14;
     const bt = Float64Array.from({ length: B }, () => rand() * 360);
@@ -938,37 +974,37 @@ const CHARTS: Builder[] = [
     pp.addScatter({ theta: bt, r: br, color: "#f472b6", size: 6, labels: Array.from({ length: B }, (_, i) => `Contact ${i + 1}`) });
     if (dyn) {
       let ang = 0;
-      dynUpdaters.push(() => { ang = (ang + 2.5) % 360; sweep.setData([ang, ang], [0, 1]); });
+      pushUpdater(() => { ang = (ang + 2.5) % 360; sweep.setData([ang, ang], [0, 1]); });
     }
   },
 
   // --- Polar rose ----------------------------------------------------------
   (grid, dyn) => {
-    const pp = new PolarPlot(panel(grid, "Polar rose", "morphing curve", dyn), { theme: "dark", maxRadius: 1 });
+    const pp = new PolarPlot(panel(grid, "Polar rose", "morphing curve", dyn), { offscreenCulling: true, theme: "dark", maxRadius: 1 });
     const T = 240;
     const theta = Float64Array.from({ length: T }, (_, i) => (i / (T - 1)) * Math.PI * 2);
     const r = new Float64Array(T);
     for (let i = 0; i < T; i++) r[i] = Math.abs(Math.cos(3 * theta[i]!));
     const rose = pp.addLine({ theta, r, color: "#a78bfa", width: 2, closed: true });
-    if (dyn) dynUpdaters.push((t) => { const k = 3 + 2 * Math.sin(t * 0.3); for (let i = 0; i < T; i++) r[i] = Math.abs(Math.cos(k * theta[i]!)); rose.setData(theta, r); });
+    if (dyn) pushUpdater((t) => { const k = 3 + 2 * Math.sin(t * 0.3); for (let i = 0; i < T; i++) r[i] = Math.abs(Math.cos(k * theta[i]!)); rose.setData(theta, r); });
   },
 
   // --- 3D surface ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D surface", "title · colorbar · light", dyn), { axisLabels: { x: "x", y: "z", z: "y" }, lightControls: true, title: "Sinc surface" });
+    const p3 = new Plot3D(panel(grid, "3D surface", "title · colorbar · light", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "z", z: "y" }, lightControls: true, title: "Sinc surface" });
     const cols = 64, rows = 64;
     const values = new Float64Array(cols * rows);
     const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy) + 1e-6; values[r * cols + c] = (Math.sin(rr * 2 - ph) / rr) * 3; } };
     fill(0);
     const surf = p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "viridis", name: "height", renderType: rt });
-    if (dyn) dynUpdaters.push((t) => { fill(t * 3); surf.setData(values); p3.refresh(); });
+    if (dyn) pushUpdater((t) => { fill(t * 3); surf.setData(values); p3.refresh(); });
   },
 
   // --- 3D bars -------------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D bars", "colormapped · lit", dyn), { axisLabels: { x: "x", y: "value", z: "z" }, title: "Bar field" });
+    const p3 = new Plot3D(panel(grid, "3D bars", "colormapped · lit", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "value", z: "z" }, title: "Bar field" });
     const gx = 8, gz = 8;
     const xa: number[] = [], za: number[] = [];
     for (let i = 0; i < gx; i++) for (let j = 0; j < gz; j++) { xa.push(i); za.push(j); }
@@ -976,36 +1012,36 @@ const CHARTS: Builder[] = [
     const fill = (ph: number) => { for (let k = 0; k < xa.length; k++) ya[k] = 1.5 + Math.sin(xa[k]! * 0.6 + ph) * Math.cos(za[k]! * 0.6) * 1.5; };
     fill(0);
     const bar = p3.addBar3D({ x: xa, z: za, y: ya, colorBy: { colormap: "plasma" }, name: "value", renderType: rt });
-    if (dyn) dynUpdaters.push((t) => { fill(t * 2); bar.setData(xa, za, ya); p3.refresh(); });
+    if (dyn) pushUpdater((t) => { fill(t * 2); bar.setData(xa, za, ya); p3.refresh(); });
   },
 
   // --- 3D lines ------------------------------------------------------------
   (grid, dyn) => {
-    const p3 = new Plot3D(panel(grid, "3D lines", "paths · legend", dyn), { axisLabels: { x: "x", y: "y", z: "z" }, legend: true });
+    const p3 = new Plot3D(panel(grid, "3D lines", "paths · legend", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" }, legend: true });
     const N = 400;
     const mk = (phase: number) => { const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N); for (let i = 0; i < N; i++) { const tt = (i / (N - 1)) * Math.PI * 2 * 4; x[i] = Math.cos(tt + phase); z[i] = Math.sin(tt + phase); y[i] = (i / (N - 1)) * 4 - 2; } return { x, y, z }; };
     const a = mk(0), b = mk(Math.PI);
     const la = p3.addLine3D({ ...a, color: "#38bdf8", name: "α" });
     const lb = p3.addLine3D({ ...b, color: "#f472b6", name: "β" });
-    if (dyn) dynUpdaters.push((t) => { const na = mk(t * 2), nb = mk(Math.PI + t * 2); la.setData(na.x, na.y, na.z); lb.setData(nb.x, nb.y, nb.z); p3.refresh(); });
+    if (dyn) pushUpdater((t) => { const na = mk(t * 2), nb = mk(Math.PI + t * 2); la.setData(na.x, na.y, na.z); lb.setData(nb.x, nb.y, nb.z); p3.refresh(); });
   },
 
   // --- 3D wireframe --------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D wireframe", "lines · hover · reset", dyn), { axisLabels: { x: "x", y: "z", z: "y" }, title: "Wireframe" });
+    const p3 = new Plot3D(panel(grid, "3D wireframe", "lines · hover · reset", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "z", z: "y" }, title: "Wireframe" });
     const cols = 40, rows = 40;
     const values = new Float64Array(cols * rows);
     const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy) + 1e-6; values[r * cols + c] = (Math.sin(rr * 1.5 - ph) / rr) * 3; } };
     fill(0);
     const surf = p3.addSurface({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], colormap: "plasma", wireframe: true, name: "height", renderType: rt });
-    if (dyn) dynUpdaters.push((t) => { fill(t * 3); surf.setData(values); p3.refresh(); });
+    if (dyn) pushUpdater((t) => { fill(t * 3); surf.setData(values); p3.refresh(); });
   },
 
   // --- 3D quiver -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D quiver", "vector field · colorbar", dyn), { axisLabels: { x: "x", y: "y", z: "z" } });
+    const p3 = new Plot3D(panel(grid, "3D quiver", "vector field · colorbar", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" } });
     const g = 6;
     const xa: number[] = [], ya: number[] = [], za: number[] = [];
     for (let i = 0; i < g; i++) for (let j = 0; j < g; j++) for (let k = 0; k < g; k++) { xa.push((i / (g - 1)) * 2 - 1); ya.push((j / (g - 1)) * 2 - 1); za.push((k / (g - 1)) * 2 - 1); }
@@ -1013,25 +1049,25 @@ const CHARTS: Builder[] = [
     const fill = (ph: number) => { const ca = Math.cos(ph), sa = Math.sin(ph); for (let k = 0; k < xa.length; k++) { u[k] = -ya[k]! * ca; v[k] = xa[k]! * ca; w[k] = za[k]! * 0.3 * sa; } };
     fill(0);
     const q = p3.addQuiver3D({ x: xa, y: ya, z: za, u, v, w, scale: 0.4, colorBy: { colormap: "viridis" }, name: "speed", renderType: rt });
-    if (dyn) dynUpdaters.push((t) => { fill(t * 2); q.setData(xa, ya, za, u, v, w); p3.refresh(); });
+    if (dyn) pushUpdater((t) => { fill(t * 2); q.setData(xa, ya, za, u, v, w); p3.refresh(); });
   },
 
   // --- 3D contour ----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D contour", "iso-height rings", dyn), { axisLabels: { x: "x", y: "z", z: "y" }, title: "Contour" });
+    const p3 = new Plot3D(panel(grid, "3D contour", "iso-height rings", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "z", z: "y" }, title: "Contour" });
     const cols = 50, rows = 50;
     const values = new Float64Array(cols * rows);
     const fill = (ph: number) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const xx = (c / cols) * 8 - 4, yy = (r / rows) * 8 - 4, rr = Math.hypot(xx, yy) + 1e-6; values[r * cols + c] = (Math.sin(rr * 1.5 - ph) / rr) * 3; } };
     fill(0);
     const ct = p3.addContour3D({ values, cols, rows, extentX: [-4, 4], extentZ: [-4, 4], levels: 14, colormap: "viridis", name: "height", renderType: rt });
-    if (dyn) dynUpdaters.push(every(3, (t) => { fill(t * 3); ct.setData(values); p3.refresh(); }));
+    if (dyn) pushUpdater(every(3, (t) => { fill(t * 3); ct.setData(values); p3.refresh(); }));
   },
 
   // --- 3D isosurface -------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D isosurface", "marching cubes · metaballs", dyn), { axisLabels: { x: "x", y: "y", z: "z" }, title: "Isosurface" });
+    const p3 = new Plot3D(panel(grid, "3D isosurface", "marching cubes · metaballs", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" }, title: "Isosurface" });
     const n = dyn ? 28 : 40;
     const vol = new Float64Array(n * n * n);
     const fill = (ph: number) => {
@@ -1044,24 +1080,24 @@ const CHARTS: Builder[] = [
     };
     fill(0);
     const iso = p3.addIsosurface({ values: vol, dims: [n, n, n], isoLevel: 0.5, extent: { x: [-1, 1], y: [-1, 1], z: [-1, 1] }, color: "#38bdf8", name: "blob", renderType: rt });
-    if (dyn) dynUpdaters.push(every(5, (t) => { fill(t); iso.setData(vol, [n, n, n], 0.5, { x: [-1, 1], y: [-1, 1], z: [-1, 1] }); p3.refresh(); }));
+    if (dyn) pushUpdater(every(5, (t) => { fill(t); iso.setData(vol, [n, n, n], 0.5, { x: [-1, 1], y: [-1, 1], z: [-1, 1] }); p3.refresh(); }));
   },
 
   // --- 3D scatter ----------------------------------------------------------
   (grid, dyn) => {
-    const p3 = new Plot3D(panel(grid, "3D scatter", "per-point size · labels", dyn), { axisLabels: { x: "x", y: "y", z: "z" } });
+    const p3 = new Plot3D(panel(grid, "3D scatter", "per-point size · labels", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" } });
     const N = 300;
     const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N), sizes = new Float64Array(N), vals = new Float64Array(N);
     const labels: string[] = [];
     for (let i = 0; i < N; i++) { x[i] = gaussian(0, 1); y[i] = gaussian(0, 1); z[i] = gaussian(0, 1); const r = Math.hypot(x[i]!, y[i]!, z[i]!); sizes[i] = 3 + r * 6; vals[i] = r; labels.push(`p${i} · r=${r.toFixed(2)}`); }
     const sc = p3.addPointCloud({ x, y, z, sizes, labels, colorBy: { values: vals, colormap: "plasma" }, name: "r" });
-    if (dyn) dynUpdaters.push(() => { for (let i = 0; i < N; i++) { x[i] += jitter() * 0.04 - x[i]! * 0.006; y[i] += jitter() * 0.04 - y[i]! * 0.006; z[i] += jitter() * 0.04 - z[i]! * 0.006; } sc.setData(x, y, z); p3.refresh(); });
+    if (dyn) pushUpdater(() => { for (let i = 0; i < N; i++) { x[i] += jitter() * 0.04 - x[i]! * 0.006; y[i] += jitter() * 0.04 - y[i]! * 0.006; z[i] += jitter() * 0.04 - z[i]! * 0.006; } sc.setData(x, y, z); p3.refresh(); });
   },
 
   // --- 3D volume -----------------------------------------------------------
   (grid, dyn) => {
     const rt = dyn ? "dynamic" : "static";
-    const p3 = new Plot3D(panel(grid, "3D volume", "raymarch · grid · auto-rotate", dyn), { axisLabels: { x: "x", y: "y", z: "z" }, title: "Volume", autoRotate: true });
+    const p3 = new Plot3D(panel(grid, "3D volume", "raymarch · grid · auto-rotate", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "y", z: "z" }, title: "Volume", autoRotate: true });
     const n = 48;
     const vol = new Float64Array(n * n * n);
     const blobs = [[-0.4, 0, 0], [0.5, 0.3, -0.2], [0.1, -0.4, 0.4]];
@@ -1076,13 +1112,13 @@ const CHARTS: Builder[] = [
 
   // --- 3D point cloud ------------------------------------------------------
   (grid, dyn) => {
-    const p3 = new Plot3D(panel(grid, "3D point cloud", "axes · colored by height", dyn), { axisLabels: { x: "x", y: "height", z: "z" } });
+    const p3 = new Plot3D(panel(grid, "3D point cloud", "axes · colored by height", dyn), { offscreenCulling: true, axisLabels: { x: "x", y: "height", z: "z" } });
     const N = 6000;
     const x = new Float64Array(N), y = new Float64Array(N), z = new Float64Array(N);
     const build = (ph: number) => { for (let i = 0; i < N; i++) { const th = (i / N) * Math.PI * 20 + ph, rr = 1 + (i / N) * 2; x[i] = Math.cos(th) * rr; z[i] = Math.sin(th) * rr; y[i] = (i / N) * 4 - 2; } };
     build(0);
     const sc = p3.addPointCloud({ x, y, z, size: 4, colorBy: { values: y, colormap: "plasma" } });
-    if (dyn) dynUpdaters.push((t) => { build(t); sc.setData(x, y, z); p3.refresh(); });
+    if (dyn) pushUpdater((t) => { build(t); sc.setData(x, y, z); p3.refresh(); });
   },
 ];
 
@@ -1120,16 +1156,16 @@ function buildLinkedFinance(grid: HTMLElement): void {
   const priceChart = panel(grid, "Linked finance · price", "candlesticks · ordinal-time", true);
   const volChart = panel(grid, "Linked finance · volume", "linkX-ed pane", true);
 
-  const priceP = new Plot(priceChart, { theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false });
+  const priceP = new TrackedPlot(priceChart, { theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false });
   const cs = priceP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c, renderType: "dynamic" });
 
-  const volP = new Plot(volChart, { theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 80] } }, showToolbar: false });
+  const volP = new TrackedPlot(volChart, { theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 80] } }, showToolbar: false });
   const volBar = volP.addBar({ x: idx, y: vol, width: 0.7, color: "#38bdf8", renderType: "dynamic" });
 
   linkX([priceP, volP]);
 
   let curOpen = c[N - 1]!, curClose = curOpen, hi = curOpen, lo = curOpen, curVol = vol[N - 1]!, sinceClose = 0;
-  dynUpdaters.push(() => {
+  pushUpdater(() => {
     curClose += gaussian(0, 0.3); hi = Math.max(hi, curClose); lo = Math.min(lo, curClose);
     curVol = Math.max(5, curVol + jitter() * 3);
     cs.updateLast({ x: N - 1, open: curOpen, high: hi, low: lo, close: curClose });
@@ -1172,19 +1208,19 @@ function buildFinance(grid: HTMLElement): void {
   };
 
   // Heikin-Ashi — smoothed candles on the gap-collapsing session axis.
-  const ha = new Plot(panel(grid, "Heikin-Ashi", "smoothed candles"), {
+  const ha = new TrackedPlot(panel(grid, "Heikin-Ashi", "smoothed candles"), {
     theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: true, drawingTools: true,
   });
   addHeikinAshi(ha, { x: idx, open: o, high: h, low: l, close: c });
   ha.render();
 
   // Renko — fixed-size bricks (time discarded).
-  const rk = new Plot(panel(grid, "Renko", "brickSize 2 · wickless"), { theme: "dark", showToolbar: false });
+  const rk = new TrackedPlot(panel(grid, "Renko", "brickSize 2 · wickless"), { theme: "dark", showToolbar: false });
   addRenko(rk, { close: c, brickSize: 2 });
   rk.render();
 
   // Bollinger Bands over the candles.
-  const bb = new Plot(panel(grid, "Bollinger Bands", "20 · 2σ"), {
+  const bb = new TrackedPlot(panel(grid, "Bollinger Bands", "20 · 2σ"), {
     theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: true, drawingTools: true,
   });
   bb.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
@@ -1192,7 +1228,7 @@ function buildFinance(grid: HTMLElement): void {
   bb.render();
 
   // Volume profile — volume by price (horizontal), POC highlighted.
-  const vp = new Plot(panel(grid, "Volume profile", "volume by price · POC"), { theme: "dark", showToolbar: false });
+  const vp = new TrackedPlot(panel(grid, "Volume profile", "volume by price · POC"), { theme: "dark", showToolbar: false });
   addVolumeProfile(vp, { price: c, volume: vol, bins: 24, color: "#3b82f6", pocColor: "#f59e0b" });
   vp.render();
 
@@ -1200,18 +1236,18 @@ function buildFinance(grid: HTMLElement): void {
   const mid = c[N - 1]!;
   const bids: [number, number][] = [], asks: [number, number][] = [];
   for (let i = 1; i <= 20; i++) { bids.push([mid - i * 0.5, 5 + rand() * 20]); asks.push([mid + i * 0.5, 5 + rand() * 20]); }
-  const dp = new Plot(panel(grid, "Depth chart", "cumulative order book"), { theme: "dark", showToolbar: false });
+  const dp = new TrackedPlot(panel(grid, "Depth chart", "cumulative order book"), { theme: "dark", showToolbar: false });
   addDepth(dp, { bids, asks });
   dp.render();
 
   // Linked dashboard: price + RSI(14) + MACD, all synced on the ordinal-time axis.
-  const priceP = new Plot(panel(grid, "Linked · price", "candles · drag to pan"), {
+  const priceP = new TrackedPlot(panel(grid, "Linked · price", "candles · drag to pan"), {
     theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
   });
   priceP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
   priceP.render();
 
-  const rsiP = new Plot(panel(grid, "Linked · RSI(14)", "70 / 30 guides"), {
+  const rsiP = new TrackedPlot(panel(grid, "Linked · RSI(14)", "70 / 30 guides"), {
     theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 100] } }, showToolbar: false,
   });
   const r = trim(rsi(c, 14));
@@ -1221,7 +1257,7 @@ function buildFinance(grid: HTMLElement): void {
   rsiP.render();
 
   const m = macd(c, 12, 26, 9);
-  const macdP = new Plot(panel(grid, "Linked · MACD", "12/26/9"), {
+  const macdP = new TrackedPlot(panel(grid, "Linked · MACD", "12/26/9"), {
     theme: "dark", scales: { x: { type: "ordinal-time", times } }, showToolbar: false,
   });
   const hist = trim(m.histogram);
@@ -1238,7 +1274,7 @@ function buildFinance(grid: HTMLElement): void {
 
   // Ichimoku — cloud (spanA/spanB fill) + Tenkan/Kijun.
   const ich = ichimoku(h, l, 9, 26, 52);
-  const ichP = new Plot(panel(grid, "Ichimoku", "cloud · tenkan/kijun"), ordOpts());
+  const ichP = new TrackedPlot(panel(grid, "Ichimoku", "cloud · tenkan/kijun"), ordOpts());
   const cloudStart = Math.max(firstFinite(ich.spanA), firstFinite(ich.spanB));
   if (cloudStart >= 0) ichP.addArea({ x: idx.subarray(cloudStart), y: ich.spanA.subarray(cloudStart), base: ich.spanB.subarray(cloudStart), color: "rgba(52,211,153,0.13)" });
   ichP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
@@ -1249,21 +1285,21 @@ function buildFinance(grid: HTMLElement): void {
 
   // Keltner channels — EMA20 ± 2·ATR.
   const kc = keltner(h, l, c, 20, 2, 10);
-  const kcP = new Plot(panel(grid, "Keltner channels", "EMA20 ± 2·ATR"), ordOpts());
+  const kcP = new TrackedPlot(panel(grid, "Keltner channels", "EMA20 ± 2·ATR"), ordOpts());
   kcP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
   for (const [ser, w] of [[kc.upper, 1], [kc.middle, 1.5], [kc.lower, 1]] as const) { const t = trim(ser); kcP.addLine({ x: t.x, y: t.y, color: "#a78bfa", width: w }); }
   kcP.render();
 
   // SuperTrend — ATR trend-follow line.
   const st = superTrend(h, l, c, 10, 3);
-  const stP = new Plot(panel(grid, "SuperTrend", "ATR trend flip"), ordOpts());
+  const stP = new TrackedPlot(panel(grid, "SuperTrend", "ATR trend flip"), ordOpts());
   stP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
   const stt = trim(st.trend);
   stP.addLine({ x: stt.x, y: stt.y, color: "#22d3ee", width: 2, name: "SuperTrend" });
   stP.render();
 
   // Drawing tools — a trendline + Fibonacci retracement (data-space, pans/zooms).
-  const drP = new Plot(panel(grid, "Drawing tools", "pick a tool ↑ then drag · trendline / Fib / rect"), ordOpts());
+  const drP = new TrackedPlot(panel(grid, "Drawing tools", "pick a tool ↑ then drag · trendline / Fib / rect"), ordOpts());
   drP.addCandlestick({ x: idx, open: o, high: h, low: l, close: c });
   drP.addAnnotation({ type: "line", x0: 5, y0: l[5]!, x1: N - 6, y1: h[N - 6]!, color: "#f59e0b", width: 1.5, dash: [6, 4] });
   let fHi = -Infinity, fLo = Infinity;
@@ -1273,7 +1309,7 @@ function buildFinance(grid: HTMLElement): void {
 
   // Stochastic sub-pane — %K / %D with 20/80 guides.
   const stoch = stochastic(h, l, c, 14, 3);
-  const soP = new Plot(panel(grid, "Stochastic", "%K · %D · 20/80"), { theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 100] } }, showToolbar: false });
+  const soP = new TrackedPlot(panel(grid, "Stochastic", "%K · %D · 20/80"), { theme: "dark", scales: { x: { type: "ordinal-time", times }, y: { domain: [0, 100] } }, showToolbar: false });
   const kk = trim(stoch.k), dd = trim(stoch.d);
   soP.addLine({ x: kk.x, y: kk.y, color: "#60a5fa", width: 1.5, name: "%K" });
   soP.addLine({ x: dd.x, y: dd.y, color: "#f59e0b", width: 1.5, name: "%D" });
@@ -1283,7 +1319,7 @@ function buildFinance(grid: HTMLElement): void {
 
   // ADX sub-pane — +DI / −DI / ADX.
   const adxV = adx(h, l, c, 14);
-  const adP = new Plot(panel(grid, "ADX", "+DI · −DI · ADX(14)"), ordOpts());
+  const adP = new TrackedPlot(panel(grid, "ADX", "+DI · −DI · ADX(14)"), ordOpts());
   const pdi = trim(adxV.plusDI), mdi = trim(adxV.minusDI), adl = trim(adxV.adx);
   adP.addLine({ x: pdi.x, y: pdi.y, color: "#34d399", width: 1, name: "+DI" });
   adP.addLine({ x: mdi.x, y: mdi.y, color: "#f472b6", width: 1, name: "−DI" });
@@ -1305,7 +1341,7 @@ function buildLiveCandles(grid: HTMLElement): void {
     lo[i] = op; lc[i] = cl; lh[i] = Math.max(op, cl) + Math.abs(gaussian(0, 30)); ll[i] = Math.min(op, cl) - Math.abs(gaussian(0, 30));
     base = cl;
   }
-  const p = new Plot(panel(grid, "Live · BTCUSDT 1m", "Binance WS · updateLast/appendCandle"), { theme: "dark", showToolbar: false });
+  const p = new TrackedPlot(panel(grid, "Live · BTCUSDT 1m", "Binance WS · updateLast/appendCandle"), { theme: "dark", showToolbar: false });
   const cs = p.addCandlestick({ x: lx, open: lo, high: lh, low: ll, close: lc, renderType: "dynamic" });
   p.render();
 
@@ -1356,7 +1392,7 @@ function buildFields(grid: HTMLElement): void {
     }
   }
 
-  const cf = new Plot(panel(grid, "Filled contours", "contourf · 12 bands"), { theme: "dark" });
+  const cf = new TrackedPlot(panel(grid, "Filled contours", "contourf · 12 bands"), { theme: "dark" });
   addContourFilled(cf, {
     values: wave, cols: N, rows: N, extent: { x: [-1, 1], y: [-1, 1] },
     levels: 12, colormap: "viridis", lines: true, name: "amplitude",
@@ -1371,14 +1407,14 @@ function buildFields(grid: HTMLElement): void {
   for (let i = 0; i < 16; i++) ye[i] = Math.pow(200, i / 15);
   const cells = new Float64Array(20 * 15);
   for (let i = 0; i < cells.length; i++) cells[i] = Math.abs(Math.sin(i * 0.3)) * 4;
-  const pm = new Plot(panel(grid, "Colour mesh", "pcolormesh · uneven cells"), { theme: "dark" });
+  const pm = new TrackedPlot(panel(grid, "Colour mesh", "pcolormesh · uneven cells"), { theme: "dark" });
   addPcolormesh(pm, { values: cells, xEdges: xe, yEdges: ye, colormap: "viridis", name: "power" });
   pm.render();
 
   const hx = new Float64Array(30000);
   const hy = new Float64Array(30000);
   for (let i = 0; i < hx.length; i++) { hx[i] = gaussian(0, 1); hy[i] = gaussian(0, 1.6); }
-  const h2 = new Plot(panel(grid, "2D histogram", "hist2d · 48x32 bins"), { theme: "dark" });
+  const h2 = new TrackedPlot(panel(grid, "2D histogram", "hist2d · 48x32 bins"), { theme: "dark" });
   addHist2d(h2, { x: hx, y: hy, bins: [48, 32], colormap: "magma" });
   h2.render();
 
@@ -1388,7 +1424,7 @@ function buildFields(grid: HTMLElement): void {
     for (let i = 0; i < n; i++) t[i] = rand() * 10 + Math.sin(k) * 0.4;
     return t.sort();
   });
-  const ev = new Plot(panel(grid, "Event raster", "eventplot · 7 spike trains"), { theme: "dark" });
+  const ev = new TrackedPlot(panel(grid, "Event raster", "eventplot · 7 spike trains"), { theme: "dark" });
   addEventPlot(ev, { positions: trains, color: "#a78bfa", lineLength: 0.75 });
   ev.render();
 
@@ -1405,7 +1441,7 @@ function buildFields(grid: HTMLElement): void {
       sv[r * M + c] = y / d1 - y / d2;
     }
   }
-  const sp = new Plot(panel(grid, "Streamlines", "streamplot · dipole"), { theme: "dark", equalAspect: true });
+  const sp = new TrackedPlot(panel(grid, "Streamlines", "streamplot · dipole"), { theme: "dark", equalAspect: true });
   addStreamplot(sp, { u: su, v: sv, cols: M, rows: M, extent: { x: [-2, 2], y: [-2, 2] }, colormap: "plasma", density: 1.1 });
   sp.render();
 
@@ -1419,7 +1455,7 @@ function buildFields(grid: HTMLElement): void {
       bxs.push(c); bys.push(r); bu.push(speed * Math.cos(ang)); bv.push(speed * Math.sin(ang));
     }
   }
-  const bp = new Plot(panel(grid, "Wind barbs", "barbs · 2–65 kt"), { theme: "dark" });
+  const bp = new TrackedPlot(panel(grid, "Wind barbs", "barbs · 2–65 kt"), { theme: "dark" });
   addBarbs(bp, { x: bxs, y: bys, u: bu, v: bv });
   bp.render();
 
@@ -1432,19 +1468,19 @@ function buildFields(grid: HTMLElement): void {
     scz[i] = Math.sin(scx[i]!) * Math.cos(scy[i]!) * Math.exp(-(scx[i]! ** 2 + scy[i]! ** 2) / 12);
   }
 
-  const tp = new Plot(panel(grid, "Triangulation", "triplot · Delaunay"), { theme: "dark" });
+  const tp = new TrackedPlot(panel(grid, "Triangulation", "triplot · Delaunay"), { theme: "dark" });
   addTriplot(tp, { x: scx, y: scy, showPoints: true });
   tp.render();
 
-  const tc = new Plot(panel(grid, "Flat shading", "tripcolor · scattered"), { theme: "dark" });
+  const tc = new TrackedPlot(panel(grid, "Flat shading", "tripcolor · scattered"), { theme: "dark" });
   addTripcolor(tc, { x: scx, y: scy, z: scz, edges: true, name: "amplitude" });
   tc.render();
 
-  const tl = new Plot(panel(grid, "Iso-lines", "tricontour · 10 levels"), { theme: "dark" });
+  const tl = new TrackedPlot(panel(grid, "Iso-lines", "tricontour · 10 levels"), { theme: "dark" });
   addTricontour(tl, { x: scx, y: scy, z: scz, levels: 10 });
   tl.render();
 
-  const tf = new Plot(panel(grid, "Filled bands", "tricontourf · 12 bands"), { theme: "dark" });
+  const tf = new TrackedPlot(panel(grid, "Filled bands", "tricontourf · 12 bands"), { theme: "dark" });
   addTricontourf(tf, { x: scx, y: scy, z: scz, levels: 12, lines: true, name: "amplitude" });
   tf.render();
 
@@ -1471,13 +1507,13 @@ function buildFields(grid: HTMLElement): void {
 function buildDiagrams(grid: HTMLElement): void {
   // Treemap
   const tmItems = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"].map((label) => ({ label, value: 10 + rand() * 90 }));
-  const tm = new Plot(panel(grid, "Treemap", "squarified"), { theme: "dark", showToolbar: false });
+  const tm = new TrackedPlot(panel(grid, "Treemap", "squarified"), { theme: "dark", showToolbar: false });
   addTreemap(tm, { items: tmItems });
   tm.render();
 
   // Funnel
   const fnItems = [["Visits", 1000], ["Signups", 620], ["Trials", 380], ["Paid", 190], ["Renewed", 90]] as const;
-  const fn = new Plot(panel(grid, "Funnel", "conversion"), { theme: "dark", showToolbar: false });
+  const fn = new TrackedPlot(panel(grid, "Funnel", "conversion"), { theme: "dark", showToolbar: false });
   addFunnel(fn, { items: fnItems.map(([label, value]) => ({ label, value })) });
   fn.render();
 
@@ -1489,12 +1525,12 @@ function buildDiagrams(grid: HTMLElement): void {
       { name: "C", value: 30 },
     ],
   };
-  const sb = new Plot(panel(grid, "Sunburst", "hierarchy"), { theme: "dark", showToolbar: false, equalAspect: true });
+  const sb = new TrackedPlot(panel(grid, "Sunburst", "hierarchy"), { theme: "dark", showToolbar: false, equalAspect: true });
   addSunburst(sb, { root: sbRoot });
   sb.render();
 
   // Gauge
-  const gg = new Plot(panel(grid, "Gauge", "value 72 / 100"), { theme: "dark", showToolbar: false, equalAspect: true });
+  const gg = new TrackedPlot(panel(grid, "Gauge", "value 72 / 100"), { theme: "dark", showToolbar: false, equalAspect: true });
   addGauge(gg, { value: 72, min: 0, max: 100, thresholds: [{ value: 55, color: "#f59e0b" }, { value: 80, color: "#ef4444" }] });
   gg.render();
 
@@ -1504,13 +1540,13 @@ function buildDiagrams(grid: HTMLElement): void {
     { source: 0, target: 3, value: 30 }, { source: 1, target: 3, value: 20 }, { source: 2, target: 3, value: 15 },
     { source: 3, target: 4, value: 25 }, { source: 3, target: 5, value: 28 }, { source: 3, target: 6, value: 12 },
   ];
-  const sk = new Plot(panel(grid, "Sankey", "energy flow"), { theme: "dark", showToolbar: false });
+  const sk = new TrackedPlot(panel(grid, "Sankey", "energy flow"), { theme: "dark", showToolbar: false });
   addSankey(sk, { nodes: skNodes, links: skLinks });
   sk.render();
 
   // Chord
   const chMatrix = [[0, 8, 3, 5], [8, 0, 6, 2], [3, 6, 0, 7], [5, 2, 7, 0]];
-  const ch = new Plot(panel(grid, "Chord", "flow matrix"), { theme: "dark", showToolbar: false, equalAspect: true });
+  const ch = new TrackedPlot(panel(grid, "Chord", "flow matrix"), { theme: "dark", showToolbar: false, equalAspect: true });
   addChord(ch, { matrix: chMatrix, labels: ["North", "South", "East", "West"] });
   ch.render();
 
@@ -1518,7 +1554,7 @@ function buildDiagrams(grid: HTMLElement): void {
   const pcDims = ["mpg", "cyl", "hp", "weight", "accel"];
   const pcRows: number[][] = [];
   for (let i = 0; i < 40; i++) pcRows.push(pcDims.map(() => rand()));
-  const pc = new Plot(panel(grid, "Parallel coordinates", "40 rows · 5 dims"), { theme: "dark", showToolbar: false });
+  const pc = new TrackedPlot(panel(grid, "Parallel coordinates", "40 rows · 5 dims"), { theme: "dark", showToolbar: false });
   addParallelCoordinates(pc, { dimensions: pcDims, rows: pcRows });
   pc.render();
 }
@@ -1540,7 +1576,7 @@ function buildML(grid: HTMLElement): void {
       train[e] = 2.4 * Math.exp(-e / 24) + 0.16 + Math.abs(gaussian(0, 0.05));
       val[e] = 2.4 * Math.exp(-e / 21) + 0.28 + Math.max(0, (e - 55) * 0.004) + Math.abs(gaussian(0, 0.09));
     }
-    const p = new Plot(panel(grid, "Training curves", "EMA smoothing"), { ...base, legend: true });
+    const p = new TrackedPlot(panel(grid, "Training curves", "EMA smoothing"), { ...base, legend: true });
     addTrainingCurves(p, {
       series: [{ name: "train loss", y: train, color: "#60a5fa" }, { name: "val loss", y: val, color: "#f472b6" }],
       smoothing: 0.6, showRaw: true, best: "min",
@@ -1557,7 +1593,7 @@ function buildML(grid: HTMLElement): void {
       yTrue[i] = t;
       yPred[i] = rand() < 0.82 ? t : Math.floor(rand() * C);
     }
-    const p = new Plot(panel(grid, "Confusion matrix", "5 classes"), base);
+    const p = new TrackedPlot(panel(grid, "Confusion matrix", "5 classes"), base);
     addConfusionMatrix(p, { yTrue, yPred, classes: C, colormap: "viridis" });
     p.render();
   }
@@ -1573,21 +1609,21 @@ function buildML(grid: HTMLElement): void {
 
   // 3 — ROC curve
   {
-    const p = new Plot(panel(grid, "ROC curve", "AUC in legend"), { ...base, legend: true });
+    const p = new TrackedPlot(panel(grid, "ROC curve", "AUC in legend"), { ...base, legend: true });
     addRocCurve(p, { scores, labels, fill: true, color: "#38bdf8" });
     p.render();
   }
 
   // 4 — Precision–recall curve
   {
-    const p = new Plot(panel(grid, "Precision–recall", "AP in legend"), { ...base, legend: true });
+    const p = new TrackedPlot(panel(grid, "Precision–recall", "AP in legend"), { ...base, legend: true });
     addPrCurve(p, { scores, labels, fill: true });
     p.render();
   }
 
   // 5 — Calibration / reliability diagram
   {
-    const p = new Plot(panel(grid, "Calibration", "reliability + ECE"), { ...base, legend: true });
+    const p = new TrackedPlot(panel(grid, "Calibration", "reliability + ECE"), { ...base, legend: true });
     addCalibration(p, { scores, labels, bins: 10 });
     p.render();
   }
@@ -1606,7 +1642,7 @@ function buildML(grid: HTMLElement): void {
     const proj = pca(data, N, D, 2);
     const xs = new Float64Array(N), ys = new Float64Array(N);
     for (let i = 0; i < N; i++) { xs[i] = proj.scores[i * 2]!; ys[i] = proj.scores[i * 2 + 1]!; }
-    const p = new Plot(panel(grid, "Embedding (PCA)", "color by class"), { ...base, legend: true, pick: "xy" });
+    const p = new TrackedPlot(panel(grid, "Embedding (PCA)", "color by class"), { ...base, legend: true, pick: "xy" });
     addEmbedding(p, { x: xs, y: ys, labels: cls, classNames: ["cats", "dogs", "birds"], size: 5 });
     p.render();
   }
@@ -1627,7 +1663,7 @@ function buildML(grid: HTMLElement): void {
       const inside = x * x + y * y < 1.6;
       pl[i] = (rand() < 0.9 ? inside : !inside) ? 1 : 0;
     }
-    const p = new Plot(panel(grid, "Decision boundary", "field + points"), { ...base, pick: "xy" });
+    const p = new TrackedPlot(panel(grid, "Decision boundary", "field + points"), { ...base, pick: "xy" });
     addDecisionBoundary(p, {
       values, cols: nx, rows: ny, extent: { x: [lo, hi], y: [lo, hi] }, colormap: "coolwarm", domain: [0, 1],
       points: { x: px, y: py, labels: pl, classNames: ["outside", "inside"], palette: ["#0b1020", "#e5e7eb"], size: 5 },
@@ -1639,7 +1675,7 @@ function buildML(grid: HTMLElement): void {
   {
     const names = ["bmi", "s5", "bp", "age", "s3", "sex", "s1", "s6", "s4"];
     const values = names.map(() => rand() * rand());
-    const p = new Plot(panel(grid, "Feature importance", "sorted"), base);
+    const p = new TrackedPlot(panel(grid, "Feature importance", "sorted"), base);
     addFeatureImportance(p, { names, values, color: "#34d399", top: 9 });
     p.render();
   }
@@ -1659,7 +1695,7 @@ function buildML(grid: HTMLElement): void {
       }
       shap.push(sv); fval.push(fv);
     }
-    const p = new Plot(panel(grid, "SHAP beeswarm", "impact by feature value"), base);
+    const p = new TrackedPlot(panel(grid, "SHAP beeswarm", "impact by feature value"), base);
     addShapBeeswarm(p, { values: shap, featureValues: fval, names, size: 4 });
     p.render();
   }
@@ -1674,7 +1710,7 @@ function buildML(grid: HTMLElement): void {
       const scale = 0.7 + rand() * 0.6, off = gaussian(0, 0.04);
       ice.push(Array.from(pd, (v) => Math.min(1, Math.max(0, 0.2 + (v - 0.2) * scale + off + gaussian(0, 0.015)))));
     }
-    const p = new Plot(panel(grid, "Partial dependence", "PDP + ICE"), { ...base, legend: true });
+    const p = new TrackedPlot(panel(grid, "Partial dependence", "PDP + ICE"), { ...base, legend: true });
     addPartialDependence(p, { x, pd, ice });
     p.render();
   }
@@ -1694,7 +1730,7 @@ function buildML(grid: HTMLElement): void {
       for (let k = 0; k < T; k++) row[k]! /= z || 1;
       w.push(row);
     }
-    const p = new Plot(panel(grid, "Attention map", "causal · query × key"), base);
+    const p = new TrackedPlot(panel(grid, "Attention map", "causal · query × key"), base);
     addAttentionMap(p, { weights: w, colormap: "viridis" });
     p.render();
   }
@@ -1706,7 +1742,7 @@ function buildML(grid: HTMLElement): void {
       const mean = 1.1 * Math.exp(-e / 3), sd = 0.45 * Math.exp(-e / 6) + 0.14;
       return { label: `epoch ${e}`, values: Float64Array.from({ length: 320 }, () => gaussian(mean, sd)) };
     });
-    const p = new Plot(panel(grid, "Ridgeline", "weights over epochs"), base);
+    const p = new TrackedPlot(panel(grid, "Ridgeline", "weights over epochs"), base);
     addRidgeline(p, { groups, overlap: 1.6, range: [-1.5, 2.5] });
     p.render();
   }
@@ -1725,7 +1761,7 @@ function buildML(grid: HTMLElement): void {
       { name: "add", op: "call_function", target: "<built-in function add>", args: ["bn2", "x"], shape: [64, 56, 56] },
       { name: "out", op: "call_module", target: "relu", moduleType: "ReLU", args: ["add"], shape: [64, 56, 56] },
     ], { name: "BasicBlock" });
-    const p = new Plot(panel(grid, "Model graph · 2D", "torch.fx residual block · hover a layer", false, "wide"), {
+    const p = new TrackedPlot(panel(grid, "Model graph · 2D", "torch.fx residual block · hover a layer", false, "wide"), {
       ...base, hover: false, background: "#0b1220",
     });
     addModelGraph(p, {
@@ -1766,7 +1802,7 @@ function buildML(grid: HTMLElement): void {
         { name: "model", type: "GradientBoostingClassifier", params: 12800 },
       ],
     });
-    const p = new Plot(panel(grid, "Model graph · sklearn", "Pipeline + ColumnTransformer"), {
+    const p = new TrackedPlot(panel(grid, "Model graph · sklearn", "Pipeline + ColumnTransformer"), {
       ...base, hover: false, background: "#0b1220",
     });
     addModelGraph(p, {
@@ -1795,7 +1831,7 @@ function buildML(grid: HTMLElement): void {
       { name: "fc", type: "Linear", shape: [1000], params: 513000 },
       { name: "softmax", type: "Softmax", shape: [1000] },
     ], "TinyVGG");
-    const p3 = new Plot3D(panel(grid, "Model graph · 3D", "tensor-shaped blocks · drag to orbit", false, "wide tall"), {
+    const p3 = new Plot3D(panel(grid, "Model graph · 3D", "tensor-shaped blocks · drag to orbit", false, "wide tall"), { offscreenCulling: true,
       background: [0.04, 0.06, 0.13, 1],
       // A long chain needs proportional scaling and a parallel camera; a diagram has no axes.
       aspectMode: "data",
@@ -1822,7 +1858,7 @@ function buildML(grid: HTMLElement): void {
   ], "SlicedCNN");
 
   {
-    const p = new Plot(panel(grid, "Model graph · 2D sliced", "slices: channels · card stacks", false, "wide"), {
+    const p = new TrackedPlot(panel(grid, "Model graph · 2D sliced", "slices: channels · card stacks", false, "wide"), {
       ...base, hover: false, background: "#0b1220",
     });
     addModelGraph(p, {
@@ -1838,7 +1874,7 @@ function buildML(grid: HTMLElement): void {
   }
 
   {
-    const p3 = new Plot3D(panel(grid, "Model graph · 3D sliced", "slices: channels · feature planes", false, "wide tall"), {
+    const p3 = new Plot3D(panel(grid, "Model graph · 3D sliced", "slices: channels · feature planes", false, "wide tall"), { offscreenCulling: true,
       background: [0.04, 0.06, 0.13, 1],
       aspectMode: "data",
       projection: "orthographic",
@@ -1862,7 +1898,7 @@ function buildML(grid: HTMLElement): void {
       { name: "fc", type: "Linear", shape: [10], params: 2570 },
     ], "VoxelCNN");
 
-    const p3 = new Plot3D(panel(grid, "Model graph · 3D voxels", "slices: voxels · one cube per activation", false, "wide tall"), {
+    const p3 = new Plot3D(panel(grid, "Model graph · 3D voxels", "slices: voxels · one cube per activation", false, "wide tall"), { offscreenCulling: true,
       background: [0.04, 0.06, 0.13, 1],
       aspectMode: "data",
       projection: "orthographic",

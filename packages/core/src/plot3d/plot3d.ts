@@ -49,6 +49,18 @@ export interface Plot3DOptions {
   /** Draw the bounding box, tick marks and axis labels. Default true. */
   showAxes?: boolean;
   /**
+   * Skip drawing while the chart is scrolled out of view, and draw once as it
+   * comes back. Default **false** — a chart draws whenever it is asked to.
+   *
+   * Turn it on for a page that holds many charts. A frame costs the same whether
+   * or not anyone can see it, and most charts on a long page are off-screen at
+   * any moment. The saving is largest in Firefox, where reading the shared WebGL
+   * canvas back into a chart's own canvas costs ~1ms per chart per frame: on a
+   * 52-chart page that is 15fps against 58. Photon can only skip its own
+   * drawing, so ask {@link Plot.isOnScreen} before regenerating the data too.
+   */
+  offscreenCulling?: boolean;
+  /**
    * Camera projection. `"perspective"` (default) is the natural choice for
    * surfaces and point clouds; `"orthographic"` removes the perspective divide,
    * so a long scene keeps a constant scale end-to-end — the right pick for
@@ -115,6 +127,11 @@ export class Plot3D {
   private distance: number;
   private axisLabels: { x?: string; y?: string; z?: string };
   private resizeObserver: ResizeObserver;
+  /** Off-screen culling: skip frames nobody can see, then catch up on re-entry. */
+  private visibilityObserver: IntersectionObserver | null = null;
+  private onScreen = true;
+  private missedRender = false;
+
   private frameRequested = false;
 
   private lineProgram: WebGLProgram;
@@ -274,6 +291,17 @@ export class Plot3D {
     this.resizeObserver.observe(container);
     this.attachControls();
     this.resize();
+    // Starts true so the first frame always paints; the margin means a chart is
+    // already drawn by the time it scrolls into view. See PlotOptions.offscreenCulling.
+    if (options.offscreenCulling === true && typeof IntersectionObserver !== "undefined") {
+      this.visibilityObserver = new IntersectionObserver((entries) => {
+        const showing = entries[entries.length - 1]!.isIntersecting;
+        if (showing === this.onScreen) return;
+        this.onScreen = showing;
+        if (showing && this.missedRender) this.render();
+      }, { rootMargin: "150px" });
+      this.visibilityObserver.observe(container);
+    }
     if (options.autoRotate) this.setAutoRotate(options.autoRotate);
   }
 
@@ -514,7 +542,11 @@ export class Plot3D {
 
   /** Copy the current 3D frame (already composited on one canvas) into a fresh canvas. */
   private compositeCanvas(background?: string): HTMLCanvasElement {
+    // Export is explicit, so it draws even when culling would have skipped it.
+    const wasOnScreen = this.onScreen;
+    this.onScreen = true;
     this.render();
+    this.onScreen = wasOnScreen;
     const w = this.canvas.width, h = this.canvas.height;
     const out = document.createElement("canvas");
     out.width = w; out.height = h;
@@ -544,8 +576,19 @@ export class Plot3D {
     return copyCanvasToClipboard(this.compositeCanvas(opts.background));
   }
 
+  /**
+   * Whether this chart is currently on screen (plus a small margin), as
+   * `offscreenCulling` judges it. Photon already skips its own drawing while a
+   * chart is out of view; a streaming app should check this before regenerating
+   * data and calling `setData`, which uploads to the GPU regardless.
+   */
+  isOnScreen(): boolean {
+    return this.onScreen;
+  }
+
   destroy(): void {
     this.resizeObserver.disconnect();
+    this.visibilityObserver?.disconnect();
     this.autoRotateSpeed = 0; // stop the orbit loop
     for (const l of this.layers) l.dispose();
     this.gl.deleteProgram(this.lineProgram);
@@ -715,6 +758,12 @@ export class Plot3D {
   }
 
   render(): void {
+    // Nothing to show, so nothing to draw — note it and paint on the way back in.
+    if (!this.onScreen) {
+      this.missedRender = true;
+      return;
+    }
+    this.missedRender = false;
     // Catch any resize the observer missed or reported stale.
     this.syncCanvasSize();
     const gl = this.gl;

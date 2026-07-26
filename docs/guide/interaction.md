@@ -72,3 +72,42 @@ const blob = await plot.toBlob();
 
 Plots render as `role="img"` with an auto-summarised `aria-label`. Override it
 with `ariaLabel`, `setAriaLabel()`, or read the summary via `describe()`.
+
+
+## Off-screen charts
+
+`offscreenCulling: true` makes a chart stop drawing while it is scrolled out of
+view, and paint once as it comes back. It is **off** by default, so a `render()`
+always paints; turn it on for a page that holds many charts. Export
+(`toDataURL`, `downloadImage`, …) always draws, culled or not.
+
+```ts
+const plot = new Plot(el, { offscreenCulling: true });
+```
+
+Photon can only skip its *own* work. Generating the data is yours, and on a
+streaming page that is usually the larger half — so ask before you do it:
+
+```ts
+function tick() {
+  for (const { plot, series } of charts) {
+    if (!plot.isOnScreen()) continue;   // nobody is looking; don't even build the frame
+    series.setData(x, nextY());
+    plot.render();
+  }
+  requestAnimationFrame(tick);
+}
+```
+
+This matters most in Firefox, where reading the shared WebGL canvas back into a
+chart's own canvas costs about 1ms per chart per frame — over 100x what Chromium
+charges. Measured on the 52-panel gallery, with both halves in place:
+
+| | culling off | culling on |
+| --- | --- | --- |
+| Firefox | 15.1 fps | **58.6** |
+| Firefox, `devicePixelRatio` 2 | 7.5 | **30.2** |
+| Chromium | 59.9 | 59.9 (frame JS 6.4ms → 1.4ms) |
+
+A page with a handful of charts does not need any of this, which is why it is off
+by default.

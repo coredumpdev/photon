@@ -57,6 +57,7 @@ ticks, and labels on a crisp Canvas2D overlay — so you get both **scale** and
 - 🧩 **Framework-agnostic** — a zero-dependency core with idiomatic **React, Vue, Svelte, Solid & Gea** wrappers, plus framework-free **Web Components** (`@photonviz/wc`).
 - 🧊 **Rich 3D** — surface (+ wireframe), scatter, line, bars, quiver, contour, marching-cubes isosurface, and GPU **volume raymarching** — with legend, colorbar, hover tooltip, grid planes & auto-rotate.- 🌊 **Streaming-ready** — **every** layer exposes `setData()`; candlesticks add `updateLast`/`appendCandle`; opt into `renderType: "dynamic"` for a `GL_DYNAMIC_DRAW` hint.
 - 🖼️ **Many charts, one context** — a single shared WebGL2 context backs every chart, so a page can hold dozens without exhausting the browser's context limit.
+- 👁️ **Off-screen charts can cost nothing** — opt a chart into `offscreenCulling` and it stops drawing while scrolled out of view, painting once on its way back. Built for pages that hold many charts: with it on, a 52-chart streaming page goes from 15fps to 58 in Firefox. Ask `plot.isOnScreen()` before regenerating the data, too.
 
 ## Python · Jupyter, JupyterLab & Colab
 

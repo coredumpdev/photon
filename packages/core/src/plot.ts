@@ -204,6 +204,18 @@ export interface PlotOptions {
   drawingTools?: boolean;
   /** Accessible label for the chart (sets `role="img"` + `aria-label`). Auto-summarized if omitted. */
   ariaLabel?: string;
+  /**
+   * Skip drawing while the chart is scrolled out of view, and draw once as it
+   * comes back. Default **false** — a chart draws whenever it is asked to.
+   *
+   * Turn it on for a page that holds many charts. A frame costs the same whether
+   * or not anyone can see it, and most charts on a long page are off-screen at
+   * any moment. The saving is largest in Firefox, where reading the shared WebGL
+   * canvas back into a chart's own canvas costs ~1ms per chart per frame: on a
+   * 52-chart page that is 15fps against 58. Photon can only skip its own
+   * drawing, so ask {@link Plot.isOnScreen} before regenerating the data too.
+   */
+  offscreenCulling?: boolean;
   /** Initial interaction mode. Default `"pan"`. */
   mode?: InteractionMode;
   /** Enable hover crosshair + tooltip. Default true. */
@@ -360,6 +372,10 @@ export class Plot {
   private baseMargin: Layout["margin"];
   private dpr = 1;
   private resizeObserver: ResizeObserver;
+  /** Off-screen culling: skip frames nobody can see, then catch up on re-entry. */
+  private visibilityObserver: IntersectionObserver | null = null;
+  private onScreen = true;
+  private missedRender = false;
   private frameRequested = false;
   private sizeCheckQueued = false;
 
@@ -564,6 +580,18 @@ export class Plot {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
+
+    // Starts true so the first frame always paints, whatever the observer says
+    // later; a margin means a chart is already drawn by the time it scrolls in.
+    if (options.offscreenCulling === true && typeof IntersectionObserver !== "undefined") {
+      this.visibilityObserver = new IntersectionObserver((entries) => {
+        const showing = entries[entries.length - 1]!.isIntersecting;
+        if (showing === this.onScreen) return;
+        this.onScreen = showing;
+        if (showing && this.missedRender) this.render();
+      }, { rootMargin: "150px" });
+      this.visibilityObserver.observe(container);
+    }
 
     if (options.interactive !== false) this.attachInteraction();
     if (options.showToolbar !== false) {
@@ -1330,6 +1358,19 @@ export class Plot {
     this.requestRender();
   }
 
+  /**
+   * Whether this chart is currently on screen (plus a small margin), as
+   * {@link PlotOptions.offscreenCulling} judges it.
+   *
+   * Photon already skips its own drawing while a chart is out of view, but it
+   * cannot skip the work that *produces* the data — a streaming app should check
+   * this before regenerating a series and calling `setData`, which uploads to the
+   * GPU whether or not anyone is looking. Always true when culling is off.
+   */
+  isOnScreen(): boolean {
+    return this.onScreen;
+  }
+
   /** Whether {@link setEqualAspect} is currently on. */
   isEqualAspect(): boolean {
     return this.equalAspect;
@@ -1434,7 +1475,11 @@ export class Plot {
    * theme's page color; pass `"transparent"` to keep alpha).
    */
   private compositeCanvas(background?: string): HTMLCanvasElement {
+    // Export is explicit, so it draws even when culling would have skipped it.
+    const wasOnScreen = this.onScreen;
+    this.onScreen = true;
     this.render(); // ensure the blitted data canvas holds this plot's latest frame
+    this.onScreen = wasOnScreen;
     const w = this.dataCanvas.width, h = this.dataCanvas.height;
     const out = document.createElement("canvas");
     out.width = w; out.height = h;
@@ -1500,6 +1545,7 @@ export class Plot {
 
   destroy(): void {
     this.resizeObserver.disconnect();
+    this.visibilityObserver?.disconnect();
     this.toolbarHandle?.destroy();
     this.hideDrawMenu();
     this.selectionDiv.remove();
@@ -1606,6 +1652,12 @@ export class Plot {
   }
 
   render(): void {
+    // Nothing to show, so nothing to draw — note it and paint on the way back in.
+    if (!this.onScreen) {
+      this.missedRender = true;
+      return;
+    }
+    this.missedRender = false;
     // Catch any resize the observer missed or reported stale (see syncCanvasSize).
     if (this.syncCanvasSize() && this.equalAspect) this.autoscale();
     const layout = this.layout();
