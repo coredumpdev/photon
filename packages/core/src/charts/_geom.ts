@@ -37,6 +37,37 @@ export function clipScalar(
 }
 
 /**
+ * The same clip, writing into caller-owned scratch instead of allocating.
+ *
+ * `isobands` runs this a few times per grid cell, so the arrays the allocating
+ * form returns dominate its cost at any real field size. Returns the vertex
+ * count written; the scratch must hold at least `n + 2` entries, since one
+ * half-plane can add at most one vertex.
+ */
+export function clipScalarInto(
+  px: ArrayLike<number>, py: ArrayLike<number>, pv: ArrayLike<number>, n: number,
+  t: number, keepAbove: boolean,
+  outX: Float64Array, outY: Float64Array, outV: Float64Array,
+): number {
+  let m = 0;
+  for (let i = 0; i < n; i++) {
+    const j = i + 1 === n ? 0 : i + 1;
+    const vi = pv[i]!, vj = pv[j]!;
+    const ini = keepAbove ? vi >= t : vi <= t;
+    const inj = keepAbove ? vj >= t : vj <= t;
+    if (ini) { outX[m] = px[i]!; outY[m] = py[i]!; outV[m] = vi; m++; }
+    if (ini !== inj) {
+      const f = (t - vi) / (vj - vi || 1e-12);
+      outX[m] = px[i]! + (px[j]! - px[i]!) * f;
+      outY[m] = py[i]! + (py[j]! - py[i]!) * f;
+      outV[m] = t;
+      m++;
+    }
+  }
+  return m;
+}
+
+/**
  * A thin quad along a segment — the stroke primitive for builders that draw many
  * short, unconnected lines (barbs, mesh edges, iso-segments) in one patches layer.
  */

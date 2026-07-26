@@ -50,9 +50,13 @@ describe("forceLayout", () => {
     for (let i = 1; i < n; i++) edges.push([i, Math.floor(i / 2)]); // a tree
     return edges;
   };
-  const e100 = graph(100), e300 = graph(300);
+  const e100 = graph(100), e300 = graph(300), e1000 = graph(1000), e3000 = graph(3000);
   bench("100 nodes · 300 iters", () => { forceLayout(100, e100, { iterations: 300 }); });
   bench("300 nodes · 300 iters", () => { forceLayout(300, e300, { iterations: 300 }); });
+  bench("1000 nodes · 300 iters", () => { forceLayout(1000, e1000, { iterations: 300 }); });
+  bench("3000 nodes · 300 iters", () => { forceLayout(3000, e3000, { iterations: 300 }); });
+  // theta: 0 forces the exact all-pairs sum — the cost before Barnes-Hut.
+  bench("1000 nodes · exact (theta 0)", () => { forceLayout(1000, e1000, { iterations: 300, theta: 0 }); });
 });
 
 // ---- Signal / stats ----------------------------------------------------------

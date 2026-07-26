@@ -13,7 +13,7 @@ import type { LineLayer } from "../layers/line.js";
 import type { Patch, PatchesLayer } from "../layers/patches.js";
 import type { Plot } from "../plot.js";
 import type { Range, RenderType } from "../types.js";
-import { clipScalar, segmentQuad } from "./_geom.js";
+import { clipScalarInto, segmentQuad } from "./_geom.js";
 
 /** A grid of scalar values sampled at the nodes of a regular lattice. */
 export interface ScalarField {
@@ -54,53 +54,117 @@ function autoLevels(values: ArrayLike<number>, count: number): number[] {
  * which is what removes the saddle ambiguity plain marching squares has — a
  * triangle's linear interpolant cannot produce two disjoint regions.
  *
- * Cost is O(cells x 4) with only the one or two bands a triangle actually
- * straddles clipped, but it is still CPU work per cell: downsample fields much
- * beyond ~200x200 before calling this.
+ * A cell only needs that subdivision when it actually straddles a level, which
+ * most cells do not — the interior of a band is the bulk of any field. Runs of
+ * uniform cells along a row merge into one rectangle, so a smooth field emits a
+ * few wide bars per band instead of a polygon per cell. That is where the
+ * polygon count — and the triangulation and upload behind it — mostly goes.
  */
 export function isobands(field: ScalarField, levels: number[] | number = 8): IsobandPolygon[] {
   const { values, cols, rows } = field;
   const [x0, x1] = field.extent.x;
   const [y0, y1] = field.extent.y;
   const bounds = Array.isArray(levels) ? [...levels].sort((a, b) => a - b) : autoLevels(values, levels);
-  if (bounds.length < 2 || cols < 2 || rows < 2) return [];
+  const nb = bounds.length - 1;
+  if (nb < 1 || cols < 2 || rows < 2) return [];
 
   const gx = (c: number): number => x0 + (c / (cols - 1)) * (x1 - x0);
   const gy = (r: number): number => y0 + (r / (rows - 1)) * (y1 - y0);
   const at = (c: number, r: number): number => values[r * cols + c]!;
 
-  const out: IsobandPolygon[] = [];
-  const emit = (tx: number[], ty: number[], tv: number[], lo: number, hi: number): void => {
-    const a = clipScalar(tx, ty, tv, lo, true);
-    if (a.x.length < 3) return;
-    const b = clipScalar(a.x, a.y, a.v, hi, false);
-    if (b.x.length < 3) return;
-    out.push({ lo, hi, x: Float64Array.from(b.x), y: Float64Array.from(b.y) });
+  /** Band a value falls in, clamped to the ends; -1 when the value is not finite. */
+  const bandOf = (v: number): number => {
+    if (!isFinite(v)) return -1;
+    let lo = 0, hi = nb - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (v > bounds[mid + 1]!) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
   };
 
+  const out: IsobandPolygon[] = [];
+  // Scratch for the clipper: a triangle cut by two half-planes yields at most
+  // five vertices, so eight is ample and the hot loop allocates nothing but the
+  // polygons it actually keeps.
+  const tx = new Float64Array(8), ty = new Float64Array(8), tv = new Float64Array(8);
+  const ax = new Float64Array(8), ay = new Float64Array(8), av = new Float64Array(8);
+  const bx = new Float64Array(8), by = new Float64Array(8), bv = new Float64Array(8);
+
+  const emit = (lo: number, hi: number): void => {
+    const na = clipScalarInto(tx, ty, tv, 3, lo, true, ax, ay, av);
+    if (na < 3) return;
+    const nbv = clipScalarInto(ax, ay, av, na, hi, false, bx, by, bv);
+    if (nbv < 3) return;
+    out.push({ lo, hi, x: bx.slice(0, nbv), y: by.slice(0, nbv) });
+  };
+
+  // Row of band indices, reused down the grid: each row's lower edge is the next
+  // row's upper edge, so every value is classified once rather than four times.
+  const bandRow = new Int32Array(cols);
+  const nextRow = new Int32Array(cols);
+  for (let c = 0; c < cols; c++) bandRow[c] = bandOf(at(c, 0));
+
   for (let r = 0; r < rows - 1; r++) {
+    for (let c = 0; c < cols; c++) nextRow[c] = bandOf(at(c, r + 1));
+    const ya = gy(r), yb = gy(r + 1);
+
+    // Open run of uniform cells in this row: band, and the column it started at.
+    let runBand = -1;
+    let runStart = 0;
+    const flushRun = (endCol: number): void => {
+      if (runBand < 0) return;
+      out.push({
+        lo: bounds[runBand]!, hi: bounds[runBand + 1]!,
+        x: Float64Array.from([gx(runStart), gx(endCol), gx(endCol), gx(runStart)]),
+        y: Float64Array.from([ya, ya, yb, yb]),
+      });
+      runBand = -1;
+    };
+
     for (let c = 0; c < cols - 1; c++) {
+      const b0 = bandRow[c]!, b1 = bandRow[c + 1]!, b2 = nextRow[c + 1]!, b3 = nextRow[c]!;
+      if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) { flushRun(c); continue; }
+      const xa = gx(c), xb = gx(c + 1);
+
+      // Whole cell inside one band: extend the current run rather than emitting.
+      if (b0 === b1 && b1 === b2 && b2 === b3) {
+        if (runBand === b0) continue;
+        flushRun(c);
+        runBand = b0;
+        runStart = c;
+        continue;
+      }
+      flushRun(c);
+
       const v0 = at(c, r), v1 = at(c + 1, r), v2 = at(c + 1, r + 1), v3 = at(c, r + 1);
-      if (!(isFinite(v0) && isFinite(v1) && isFinite(v2) && isFinite(v3))) continue;
-      const xa = gx(c), xb = gx(c + 1), ya = gy(r), yb = gy(r + 1);
       const xc = (xa + xb) / 2, yc = (ya + yb) / 2, vc = (v0 + v1 + v2 + v3) / 4;
-      const corners: Array<[number, number, number]> = [[xa, ya, v0], [xb, ya, v1], [xb, yb, v2], [xa, yb, v3]];
+      const cx = [xa, xb, xb, xa], cy = [ya, ya, yb, yb], cv = [v0, v1, v2, v3];
+      const lowest = Math.min(b0, b1, b2, b3);
+      const highest = Math.max(b0, b1, b2, b3);
 
       for (let k = 0; k < 4; k++) {
-        const p = corners[k]!, q = corners[(k + 1) % 4]!;
-        const tv = [p[2], q[2], vc];
-        const tmin = Math.min(tv[0]!, tv[1]!, tv[2]!);
-        const tmax = Math.max(tv[0]!, tv[1]!, tv[2]!);
-        const tx = [p[0], q[0], xc];
-        const ty = [p[1], q[1], yc];
-        for (let b = 0; b < bounds.length - 1; b++) {
+        const j = (k + 1) & 3;
+        tx[0] = cx[k]!; tx[1] = cx[j]!; tx[2] = xc;
+        ty[0] = cy[k]!; ty[1] = cy[j]!; ty[2] = yc;
+        tv[0] = cv[k]!; tv[1] = cv[j]!; tv[2] = vc;
+        const tmin = Math.min(tv[0], tv[1], tv[2]);
+        const tmax = Math.max(tv[0], tv[1], tv[2]);
+        for (let b = lowest; b <= highest; b++) {
           const lo = bounds[b]!, hi = bounds[b + 1]!;
-          // Skip bands this triangle cannot reach; most triangles touch one.
           if (tmax < lo || tmin > hi) continue;
-          emit(tx, ty, tv, lo, hi);
+          // Wholly inside the band — the clip would return it unchanged.
+          if (tmin >= lo && tmax <= hi) {
+            out.push({ lo, hi, x: tx.slice(0, 3), y: ty.slice(0, 3) });
+            continue;
+          }
+          emit(lo, hi);
         }
       }
     }
+    flushRun(cols - 1);
+    bandRow.set(nextRow);
   }
   return out;
 }
