@@ -45,7 +45,7 @@ import {
   type RegressionOptions,
   type EcdfOptions,
   type CorrMatrixOptions,
-  type PsdOptions,  type BollingerOptions,
+  type PsdOptions,  type WaterfallOptions,  type BollingerOptions,
   type ContourFilledOptions,
   type EventPlotOptions,
   type Hist2dOptions,
@@ -87,6 +87,7 @@ import {
   addEcdf,
   addCorrMatrix,
   addPsd,
+  addWaterfall,
   collectLayers,
   addBollinger,
   addContourFilled,
@@ -1103,6 +1104,13 @@ export const CorrMatrix = builderComponent<CorrMatrixOptions>("CorrMatrix", addC
 
 /** Welch power spectral density. */
 export const Psd = builderComponent<PsdOptions>("Psd", addPsd);
+
+/**
+ * Scrolling waterfall: frequency across, time down, newest row on top. Pass
+ * `history` for a pre-computed one; to stream, call `addWaterfall` on the core
+ * plot and keep its handle to `push` columns.
+ */
+export const Waterfall = builderComponent<WaterfallOptions>("Waterfall", addWaterfall);
 
 /** A model architecture as a flat layered DAG (PyTorch / ONNX / Keras / sklearn). */
 export const ModelGraph = defineComponent({

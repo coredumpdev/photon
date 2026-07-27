@@ -47,6 +47,39 @@ addPsd(plot, { signal, sampleRate: 500, segment: 1024, window: "hann" });
 Pure: `welch`, `windowFunction(name, n)` (`hann`, `hamming`, `blackman`,
 `bartlett`, `rectangular`), `fft`, `spectrogram`.
 
+## Waterfall
+
+`addWaterfall` is the streaming half of a spectrogram: frequency across, time
+**down**. Each pushed column becomes the newest row at the top, the history
+slides down a row, and the y axis reads as a clock.
+
+<Demo src="waterfall" :height="380" />
+
+```ts
+const wf = addWaterfall(plot, {
+  extent: [0, 160_000],        // the band one row spans
+  cols: 512, rows: 400,        // cells across × rows of history
+  rowSeconds: 0.08,            // seconds one row covers → 32s on screen
+  domain: [-68, -6],           // fix it, or the colours breathe every push
+  colormap: "plasma", name: "power (dB)",
+  timeFormat: "hh:mm:ss",      // or "mm:ss.mmm", or (s) => your own label
+  timeTitle: "time",
+});
+
+wf.push(psdInDb);              // one column per step; longer columns are block-maxed
+wf.setTimeAxis({ format: "mm:ss.mmm" });   // relabel live
+plot.render();
+```
+
+A column longer than `cols` is reduced by **block maximum**, so a peak two bins
+wide survives fitting a 200k-bin spectrum into a few hundred cells. Give the plot
+`margin: { left: 72 }` — clock labels are wider than plain numbers and the margin
+is not measured from them. `history` opens on a pre-computed grid (row 0 at the
+bottom) instead of an empty one.
+
+Pure: `waterfallTimeTicks(now, span, opts)`, `formatDuration(seconds, style)`,
+`niceTimeStep(span, count)`, `blockMax(values, cols)`.
+
 ## Smoothing & correlation in time
 
 - `savitzkyGolay(values, window, order)` — least-squares polynomial smoothing that

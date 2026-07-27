@@ -100,6 +100,8 @@ import {
   type EcdfOptions,
   type CorrMatrixOptions,
   type PsdOptions,
+  addWaterfall,
+  type WaterfallOptions,
   type Layer,
   type BollingerHandle,
   type BollingerOptions,
@@ -1185,6 +1187,17 @@ export type PsdProps = PsdOptions;
 /** Welch power spectral density. */
 export function Psd(props: PsdProps) {
   return useBuilder(addPsd, props);
+}
+
+export type WaterfallProps = WaterfallOptions;
+
+/**
+ * Scrolling waterfall: frequency across, time down, newest row on top. Pass
+ * `history` for a pre-computed one; to stream, call `addWaterfall` on the core
+ * plot and keep its handle to `push` columns.
+ */
+export function Waterfall(props: WaterfallProps) {
+  return useBuilder(addWaterfall, props);
 }
 
 // ---------------------------------------------------------------------------

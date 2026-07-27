@@ -47,6 +47,7 @@ import {
   addEcdf,
   addCorrMatrix,
   addPsd,
+  addWaterfall,
   collectLayers,
   addBollinger,
   addContourFilled,
@@ -96,6 +97,7 @@ import {
   type EcdfOptions,
   type CorrMatrixOptions,
   type PsdOptions,
+  type WaterfallOptions,
   type BollingerOptions,
   type ContourFilledOptions,
   type EventPlotOptions,
@@ -1067,6 +1069,15 @@ export type PsdProps = PsdOptions;
 
 /** Welch power spectral density. */
 export const Psd = builderComponent<PsdOptions>(addPsd);
+
+export type WaterfallProps = WaterfallOptions;
+
+/**
+ * Scrolling waterfall: frequency across, time down, newest row on top. Pass
+ * `history` for a pre-computed one; to stream, call `addWaterfall` on the core
+ * plot and keep its handle to `push` columns.
+ */
+export const Waterfall = builderComponent<WaterfallOptions>(addWaterfall);
 
 export type DepthProps = DepthOptions;
 

@@ -54,6 +54,7 @@ import type {
   EcdfOptions,
   CorrMatrixOptions,
   PsdOptions,
+  WaterfallOptions,
   ContourFilledOptions,
   EventPlotOptions,
   Hist2dOptions,
@@ -114,6 +115,7 @@ import {
   addEcdf,
   addCorrMatrix,
   addPsd,
+  addWaterfall,
   collectLayers,
   addBarbs, addContourFilled, addEventPlot, addHeikinAshi, addHist2d,
   addModelGraph, addModelGraph3D, addPcolormesh, addRenko, addStreamplot, addVolumeProfile,
@@ -187,6 +189,7 @@ export type SeriesSpec =
   | ({ type: "ecdf" } & EcdfOptions)
   | ({ type: "corrMatrix" } & CorrMatrixOptions)
   | ({ type: "psd" } & PsdOptions)
+  | ({ type: "waterfall" } & WaterfallOptions)
   | ({ type: "modelGraph" } & ModelGraphOptions);
 
 export interface YAxisSpec extends YAxisOptions {
@@ -253,6 +256,7 @@ export function addSeries(p: CorePlot, s: SeriesSpec): Layer[] {
     case "ecdf": return collectLayers(addEcdf(p, s));
     case "corrMatrix": return collectLayers(addCorrMatrix(p, s));
     case "psd": return collectLayers(addPsd(p, s));
+    case "waterfall": return collectLayers(addWaterfall(p, s));
     // Labels are Canvas2D annotations, not layers, so they need no removal here.
     case "modelGraph": { const h = addModelGraph(p, s); return [h.nodes, h.edges]; }
   }

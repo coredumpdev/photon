@@ -9,8 +9,10 @@ import {
   addModelGraph, addModelGraph3D, modelGraphFromTorchFx, modelGraphFromSklearn, sequentialModel,
   addContourFilled, addPcolormesh, addStreamplot, addBarbs, addHist2d, addEventPlot, PlotGrid,
   addTriplot, addTripcolor, addTricontour, addTricontourf,
+  welch, addWaterfall,
   paletteColor,
 } from "@photonviz/core";
+import type { TimeFormat } from "@photonviz/core";
 
 // ============================================================================
 // Tabs — three grids, one shown at a time. Charts are built LAZILY the first
@@ -21,8 +23,9 @@ const gridStatic = document.getElementById("grid-static")!;
 const gridDynamic = document.getElementById("grid-dynamic")!;
 const gridFinance = document.getElementById("grid-finance")!;
 const gridMl = document.getElementById("grid-ml")!;
+const gridSignal = document.getElementById("grid-signal")!;
 
-// FPS badges — only Dynamic-tab panels register one (top-left of the chart).
+// FPS badges — only live-tab panels register one (top-left of the chart).
 const fpsBadges: HTMLElement[] = [];
 
 /** Build a panel (title bar + chart div) inside `grid`. `showFps` adds an FPS badge. */
@@ -68,9 +71,12 @@ function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false,
 }
 
 // ============================================================================
-// Global animation loop. Dynamic-tab updaters run (and FPS badges repaint) only
-// while the Dynamic tab is active — built panels on hidden tabs stay idle.
+// Global animation loop. A live tab's updaters run (and FPS badges repaint) only
+// while that tab is active — built panels on hidden tabs stay idle.
 // ============================================================================
+/** Tabs that stream: their updaters run while they are the active tab. */
+type LiveTab = "dynamic" | "signal";
+
 /**
  * Streaming updaters, each paired with the plot it feeds.
  *
@@ -78,8 +84,15 @@ function panel(grid: HTMLElement, title: string, subtitle = "", showFps = false,
  * the data generation behind it — so the loop asks each plot whether it is on
  * screen before doing that work. On this page 40 of 52 panels are off-screen at
  * any scroll position, and regenerating all of them was most of the frame.
+ *
+ * Grouped by owning tab, so switching to Signal does not also keep the Dynamic
+ * tab's 50 panels streaming behind it.
  */
-const dynUpdaters: Array<{ fn: (t: number) => void; plots: Array<{ isOnScreen(): boolean }> }> = [];
+type Updater = { fn: (t: number) => void; plots: Array<{ isOnScreen(): boolean }> };
+const liveUpdaters: Record<LiveTab, Updater[]> = { dynamic: [], signal: [] };
+
+/** The list `pushUpdater` appends to — each live tab's builder claims it first. */
+let updaterSink: Updater[] = liveUpdaters.dynamic;
 
 /**
  * Plots built by the builder currently running. An updater is paired with all of
@@ -89,15 +102,15 @@ const dynUpdaters: Array<{ fn: (t: number) => void; plots: Array<{ isOnScreen():
  * happened to be scrolled past.
  */
 let currentPlots: Array<{ isOnScreen(): boolean }> = [];
-let dynamicActive = false;
+let liveTab: LiveTab | null = null;
 let frame = 0;
 let fpsAvg = 0, lastNow = 0, fpsPaint = 0;
 
 function loop(now: number): void {
   frame++;
   const t = frame / 60;
-  if (dynamicActive) {
-    for (const u of dynUpdaters) {
+  if (liveTab) {
+    for (const u of liveUpdaters[liveTab]) {
       // No paired plot means we cannot tell — always run it.
       if (u.plots.length && !u.plots.some((p) => p.isOnScreen())) continue;
       u.fn(t);
@@ -163,7 +176,7 @@ class TrackedPolarPlot extends PolarPlot {
 
 /** Register a streaming updater against every plot the current builder made. */
 function pushUpdater(fn: (t: number) => void): void {
-  dynUpdaters.push({ fn, plots: currentPlots });
+  updaterSink.push({ fn, plots: currentPlots });
 }
 
 // A throttled updater: only runs `fn` every `k` frames (for expensive rebuilds).
@@ -1934,7 +1947,176 @@ function buildML(grid: HTMLElement): void {
   }
 }
 
-const built = { static: false, dynamic: false, finance: false, ml: false };
+// ============================ SIGNAL PANELS =================================
+/**
+ * A 409.6 kHz receiver in two panels, both fed by ONE live signal: steady tones
+ * at 40 and 96 kHz plus a third that climbs 20 → 150 kHz, all buried in noise.
+ *
+ * Resolution: a 524 288-sample frame (1.28 s) gives 262 144 one-sided bins at
+ * 0.78 Hz — the FFT is radix-2, so bins always land on a power of two and 204 800
+ * is not one. The spectrum therefore draws exactly the first **204 800 bins**,
+ * i.e. the band 0 → 160 kHz; the rest of the Nyquist span is off-screen.
+ *
+ * The waterfall is core's `addWaterfall`: it takes the same column, block-maxes it
+ * to 512 cells (so a peak two bins wide still shows), keeps 400 rows → 204 800
+ * cells there too, puts the newest row on top and slides the history down. It owns
+ * the clock, so the y ticks read hh:mm:ss and ride down with their row.
+ *
+ * Both panels are `wide` (grid-column: 1 / -1) — full page width — and share the
+ * frequency axis, so a peak in the top panel sits directly above its streak in
+ * the bottom one. The start/stop boxes set that shared span.
+ *
+ * Cost: the 2^19 FFT behind the spectrum is ~30ms, far more than drawing the
+ * 204 800-point line, so the whole chain refreshes every 4th frame (~15 Hz) and
+ * the frames in between stay free.
+ */
+function buildSignal(grid: HTMLElement): void {
+  updaterSink = liveUpdaters.signal;
+  currentPlots = [];
+
+  const SR = 409_600;        // sample rate (Hz) — Nyquist 204.8 kHz
+  const SEG = 1 << 19;       // 524 288-sample frame → 262 144 bins, 0.78 Hz apart
+  const PTS = 204_800;       // bins actually plotted → 0 … 160 kHz
+  const HOP = 8192;          // samples advanced per frame (~1.2× real time at 60fps)
+  const EVERY = 4;           // frames between refreshes — see the FFT cost above
+  const WCOLS = 512;         // waterfall columns (block maxima over PTS bins)
+  const ROWS = 400;          // waterfall rows → 512 × 400 = 204 800 cells
+  // Measured floor/peak for this signal — fixed, so neither the colours nor the
+  // axes breathe with every frame's autoscale. The waterfall sits higher because
+  // a block maximum over 400 bins is well above a single noise bin.
+  const DB_LO = -100, DB_HI = 5;
+  const WF_LO = -68, WF_HI = -6;
+  const TAU = Math.PI * 2;
+
+  // The climbing tone crosses 20 → 150 kHz in 120s, then restarts at the bottom —
+  // it never sweeps back down, so the streak reads as one slow direction. Slow
+  // also keeps it sharp: over the 1.28 s frame it smears barely 1.4 kHz.
+  const F0 = 20_000, F1 = 150_000, SWEEP = 120;
+  // Phase is integrated per sample rather than evaluated as sin(2π·f(t)·t): with
+  // a moving f, the latter's real frequency is f + f'·t, which drifts off.
+  let pA = 0, pB = 0, pS = 0, sweepT = 0;
+  const sample = (): number => {
+    pA += (TAU * 40_000) / SR;
+    pB += (TAU * 96_000) / SR;
+    pS += (TAU * (F0 + (F1 - F0) * (sweepT / SWEEP))) / SR;
+    sweepT += 1 / SR;
+    if (sweepT >= SWEEP) sweepT = 0;
+    return 0.9 * Math.sin(pA) + 0.5 * Math.sin(pB) + 0.8 * Math.sin(pS) + 0.3 * jitter();
+  };
+  const buf = new Float64Array(SEG);
+  for (let i = 0; i < SEG; i++) buf[i] = sample();
+
+  const ADV = HOP * EVERY;          // samples between refreshes → seconds per row
+  /** Slide the buffer forward to the next refresh point. */
+  const advance = (): void => {
+    buf.copyWithin(0, ADV);
+    for (let k = SEG - ADV; k < SEG; k++) buf[k] = sample();
+  };
+
+  // Frequency labels in kHz, adaptive: 40000 → "40", 40200 → "40.2".
+  const kHz = (v: number): string => (v === 0 ? "0" : `${parseFloat((v / 1000).toPrecision(6))}`);
+
+  // --- Spectrum — 204 800-point Welch PSD in dB ------------------------------
+  const chart = panel(grid, "Spectrum", "204 800 points · 0.78 Hz bins", true, "wide");
+  const ps = new TrackedPlot(chart, {
+    theme: "dark",
+    axes: { x: { title: "frequency (kHz)", format: kHz }, y: { title: "power (dB)" } },
+  });
+  const freqs = new Float64Array(PTS);
+  for (let b = 0; b < PTS; b++) freqs[b] = (b * SR) / SEG;
+  const fPlot = freqs[PTS - 1]!;
+  const db = new Float64Array(PTS);
+  db.fill(DB_LO);
+  // Trace averaging, as an analyser's "video average" does it: a single 2^19
+  // periodogram has ~6 dB of per-bin variance, which at 204 800 points against
+  // 1500 px paints the noise floor as one solid block. An EMA over ~7 refreshes
+  // tightens it to a band you can read peaks out of.
+  const avg = new Float64Array(PTS);
+  const AVG_A = 0.15;
+  let averaging = false;
+  const line = ps.addLine({ x: freqs, y: avg, color: "#38bdf8", width: 1.2, name: "PSD", renderType: "dynamic" });
+  ps.setView({ x: [0, fPlot], y: [DB_LO + 5, DB_HI] });
+
+  // --- Waterfall — frequency across, time DOWN: newest row on top ------------
+  // `addWaterfall` owns the scroll, the clock and the time ticks; this panel only
+  // hands it one column per refresh. Swap `timeFormat` to "mm:ss.mmm" for
+  // millisecond labels, or pass a formatter of your own.
+  const pw = new TrackedPlot(panel(grid, "Waterfall", "512 × 400 cells · newest row on top", true, "wide tall"), {
+    // Clock labels are wider than plain numbers, and the default 56px left margin
+    // is not measured from them — mm:ss.mmm would sit under the panel edge.
+    theme: "dark", margin: { left: 72 }, axes: { x: { title: "frequency (kHz)", format: kHz } },
+  });
+  const wf = addWaterfall(pw, {
+    extent: [0, fPlot], cols: WCOLS, rows: ROWS, rowSeconds: ADV / SR,
+    domain: [WF_LO, WF_HI], colormap: "plasma", name: "power (dB)",
+    timeFormat: "hh:mm:ss", timeTitle: "time",
+  });
+
+  // --- Start / stop frequency — the span both panels show --------------------
+  const ctl = document.createElement("div");
+  ctl.className = "ctl";
+  const numBox = (text: string, value: number): HTMLInputElement => {
+    const wrap = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.max = String(Math.round(fPlot / 1000));
+    input.step = "1";
+    input.value = String(value);
+    wrap.append(document.createTextNode(text), input);
+    ctl.appendChild(wrap);
+    return input;
+  };
+  const startIn = numBox("start (kHz)", 0);
+  const stopIn = numBox("stop (kHz)", Math.round(fPlot / 1000));
+  // The waterfall's clock can be relabelled live — the same handle also takes a
+  // formatter of your own, e.g. a UTC time-of-day.
+  const fmtSel = document.createElement("select");
+  for (const f of ["hh:mm:ss", "mm:ss.mmm"] as const) {
+    const o = document.createElement("option");
+    o.value = f; o.textContent = f;
+    fmtSel.appendChild(o);
+  }
+  fmtSel.addEventListener("change", () => wf.setTimeAxis({ format: fmtSel.value as TimeFormat }));
+  const fmtLabel = document.createElement("label");
+  fmtLabel.append(document.createTextNode("time labels"), fmtSel);
+  ctl.appendChild(fmtLabel);
+  const note = document.createElement("span");
+  note.className = "ctl-note";
+  note.textContent = `sample rate ${SR / 1000} kHz · 204 800 bins · 0.78 Hz`;
+  ctl.appendChild(note);
+  const applySpan = (): void => {
+    const a = Math.max(0, Math.min(fPlot, Number(startIn.value) * 1000));
+    const b = Math.max(0, Math.min(fPlot, Number(stopIn.value) * 1000));
+    // An inverted or hairline span would leave both panels unreadable; keep the
+    // last good one and let the boxes show what was typed.
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b - a < 100) return;
+    ps.setView({ x: [a, b] });
+    pw.setView({ x: [a, b] });
+  };
+  for (const input of [startIn, stopIn]) input.addEventListener("change", applySpan);
+  chart.parentElement!.insertBefore(ctl, chart);
+
+  pushUpdater(every(EVERY, () => {
+    advance();
+    const { power } = welch(buf, { sampleRate: SR, segment: SEG, overlap: 0, window: "hann" });
+    for (let b = 0; b < PTS; b++) db[b] = 10 * Math.log10(power[b]! + 1e-20);
+    if (averaging) {
+      for (let b = 0; b < PTS; b++) avg[b] = avg[b]! + AVG_A * (db[b]! - avg[b]!);
+    } else {
+      avg.set(db);
+      averaging = true;
+    }
+    line.setData(freqs, avg);
+    // One column in: the waterfall ages a row, block-maxes the 204 800 bins down
+    // to its 512 cells (so a two-bin tone survives) and advances its clock.
+    wf.push(db);
+    ps.render();
+    pw.render();
+  }));
+}
+
+const built = { static: false, dynamic: false, finance: false, ml: false, signal: false };
 
 function buildStatic(): void {
   reseed();
@@ -1944,13 +2126,16 @@ function buildStatic(): void {
 }
 function buildDynamic(): void {
   reseed();
+  updaterSink = liveUpdaters.dynamic;
   for (const b of CHARTS) { currentPlots = []; b(gridDynamic, true); }
   currentPlots = [];
   buildLinkedFinance(gridDynamic);
 }
 
-type TabName = "static" | "dynamic" | "finance" | "ml";
-const gridOf: Record<TabName, HTMLElement> = { static: gridStatic, dynamic: gridDynamic, finance: gridFinance, ml: gridMl };
+type TabName = "static" | "dynamic" | "finance" | "ml" | "signal";
+const gridOf: Record<TabName, HTMLElement> = {
+  static: gridStatic, dynamic: gridDynamic, finance: gridFinance, ml: gridMl, signal: gridSignal,
+};
 
 function activate(name: TabName): void {
   for (const t of document.querySelectorAll<HTMLElement>(".tab")) t.classList.toggle("active", t.dataset.tab === name);
@@ -1961,11 +2146,12 @@ function activate(name: TabName): void {
     if (name === "static") buildStatic();
     else if (name === "dynamic") buildDynamic();
     else if (name === "finance") buildFinance(gridFinance);
+    else if (name === "signal") buildSignal(gridSignal);
     else buildML(gridMl);
     // Reflect the panel count in the tab label.
     document.getElementById(`count-${name}`)!.textContent = String(gridOf[name].children.length);
   }
-  dynamicActive = name === "dynamic";
+  liveTab = name === "dynamic" || name === "signal" ? name : null;
 }
 
 for (const t of document.querySelectorAll<HTMLElement>(".tab")) {
