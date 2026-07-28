@@ -1,0 +1,19 @@
+/*
+ * GNU linker version script.
+ *
+ * Visibility attributes alone are not enough. libstdc++ marks a handful of its
+ * inline template instantiations (std::string's cold paths, __to_chars_10_impl)
+ * with explicit default visibility, so they leak out of the .so as weak symbols
+ * even under -fvisibility=hidden. That matters here more than in an ordinary
+ * library: this .so gets dlopen'd into a JVM, a CLR and a Qt process, each with
+ * its own libstdc++ already loaded, and weak symbols are exactly the ones the
+ * dynamic linker is free to interpose across.
+ *
+ * This makes the guarantee absolute: ph_* is the entire dynamic surface.
+ */
+PHOTON_1 {
+  global:
+    ph_*;
+  local:
+    *;
+};

@@ -1,0 +1,3 @@
+# macOS exported-symbols list — the ld64 equivalent of cmake/photon.map.
+# Mach-O prefixes C symbols with an underscore.
+_ph_*
