@@ -452,6 +452,64 @@ typedef struct ph_scatter_desc {
   ph_render_type  render_type;
 } ph_scatter_desc;
 
+/** Mirrors core `BarOptions.orientation`. */
+typedef int32_t ph_orientation;
+enum {
+  /** Positions along x, values along y. */
+  PH_ORIENT_VERTICAL   = 0,
+  /** Positions along *y*, values along *x*; `width` becomes the thickness. */
+  PH_ORIENT_HORIZONTAL = 1
+};
+
+/**
+ * Mirrors core `AreaOptions`.
+ *
+ * A band between `y` and a base — a triangle strip alternating base and top at
+ * each x. Pass cumulative values in `base` to stack several areas.
+ */
+typedef struct ph_area_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  y;
+  int32_t        count;
+  /** Per-point lower edge, `count` entries. NULL uses `base_value`. */
+  const double*  base;
+  /** The lower edge when `base` is NULL. Zero is the usual baseline. */
+  double         base_value;
+  /** PH_COLOR_AUTO is the core's translucent blue, rgba(59,130,246,0.4). */
+  ph_color       color;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_area_desc;
+
+/**
+ * Mirrors core `BarOptions`.
+ *
+ * `x` is the bar *centre* along the position axis and `y` its extent along the
+ * value axis; which of those is horizontal depends on `orientation`.
+ */
+typedef struct ph_bar_desc {
+  uint32_t        struct_size;
+  const double*   x;
+  const double*   y;
+  int32_t         count;
+  /** Per-bar baseline, `count` entries. NULL uses `base_value`. */
+  const double*   base;
+  double          base_value;
+  /** Bar width in data units. 0 = 80% of the median spacing, as in the core. */
+  double          width;
+  /** Shift every bar along the position axis — how grouped bars are built. */
+  double          offset;
+  ph_orientation  orientation;
+  ph_color        color;
+  /** Per-bar colour, `count` entries. NULL = uniform `color`. */
+  const ph_color* colors;
+  const char*     name;
+  const char*     y_axis;
+  ph_render_type  render_type;
+} ph_bar_desc;
+
 /**
  * One filled polygon: a ring of x/y, with optional holes.
  *
@@ -599,6 +657,8 @@ PH_API void PH_CALL ph_axis_config_init(ph_axis_config* out);
 PH_API void PH_CALL ph_line_desc_init(ph_line_desc* out);
 PH_API void PH_CALL ph_scatter_desc_init(ph_scatter_desc* out);
 PH_API void PH_CALL ph_patches_desc_init(ph_patches_desc* out);
+PH_API void PH_CALL ph_area_desc_init(ph_area_desc* out);
+PH_API void PH_CALL ph_bar_desc_init(ph_bar_desc* out);
 
 /* ------------------------------------------------------------------------ */
 /* Plot lifecycle                                                             */
@@ -678,6 +738,8 @@ PH_API ph_result PH_CALL ph_plot_add_scatter(ph_plot plot, const ph_scatter_desc
  * functions over `addPatches` rather than layers of their own.
  */
 PH_API ph_result PH_CALL ph_plot_add_patches(ph_plot plot, const ph_patches_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_area(ph_plot plot, const ph_area_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_bar(ph_plot plot, const ph_bar_desc* desc, ph_layer* out);
 
 /*
  * The remaining 24 layer types (bar, area, heatmap, box, hexbin, contour,

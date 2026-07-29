@@ -75,7 +75,7 @@ include/photon/photon.h   the entire public surface — the only file bindings s
 src/
   abi.cpp                 C entry points: validate, translate, delegate
   plot.{hpp,cpp}          layout, scale stack, autoscale, pan/zoom/box, frames
-  layer.{hpp,cpp}         the layer contract; line, scatter and patches
+  layer.{hpp,cpp}         the layer contract; line, scatter, area, bar, patches
   scale.{hpp,cpp}         the five scale projections, ticks and label formats
   color.{hpp,cpp}         packed ABI colours unpacked
   axes/ticks.{hpp,cpp}    nice-number tick generation and number formatting

@@ -333,6 +333,50 @@ void main() {
   outColor = vec4(c.rgb * c.a * alpha, c.a * alpha);
 })";
 
+/// The core's default area fill, rgba(59,130,246,0.4) — translucent on purpose,
+/// because an area is drawn under something.
+constexpr ph_color kDefaultAreaColor = 0x3b82f666u;
+
+/// Unit rect corners, for the instanced bar quad.
+const float kUnitCorners[12] = {0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1};
+
+/// Area: a plain position attribute filled with one uniform colour.
+const char* const kAreaVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aPos;
+)";
+
+const char* const kAreaVertMain = R"(
+void main() { gl_Position = vec4(dataToClip(aPos), 0.0, 1.0); })";
+
+const char* const kAreaFrag = R"(#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 outColor;
+void main() { outColor = vec4(uColor.rgb * uColor.a, uColor.a); })";
+
+/// Bar: one instanced unit quad per bar, stretched to a per-bar rectangle.
+const char* const kBarVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aRect;
+layout(location = 2) in vec4 aColor;
+)";
+
+const char* const kBarVertMain = R"(
+out vec4 vColor;
+void main() {
+  vec2 p = mix(aRect.xy, aRect.zw, aCorner);
+  vColor = aColor;
+  gl_Position = vec4(dataToClip(p), 0.0, 1.0);
+})";
+
+const char* const kBarFrag = R"(#version 300 es
+precision highp float;
+in vec4 vColor;
+out vec4 outColor;
+void main() { outColor = vec4(vColor.rgb * vColor.a, vColor.a); })";
+
 /// A solid-fill program driven by a per-vertex colour triangle soup. Copied
 /// from FILL_VERT/FILL_FRAG in layers/patches.ts, where pie shares it too.
 const char* const kFillVertBody = R"(
@@ -914,6 +958,309 @@ void PatchesLayer::release_gl(Api& api) {
   api.DeleteBuffers(2, buffers);
   vao_ = 0;
   position_buffer_ = color_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- AreaLayer --------------------------------------------------------------
+
+AreaLayer::AreaLayer(const ph_area_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  // The core's default is a translucent blue rather than the opaque series
+  // colour: an area is drawn under something, and an opaque one hides it.
+  color_ = desc.color != PH_COLOR_AUTO ? desc.color : kDefaultAreaColor;
+  render_type_ = desc.render_type;
+  base_value_ = desc.base_value;
+
+  if (desc.count > 0 && desc.x && desc.y) {
+    x_.assign(desc.x, desc.x + desc.count);
+    y_.assign(desc.y, desc.y + desc.count);
+    if (desc.base) base_.assign(desc.base, desc.base + desc.count);
+  }
+  build();
+}
+
+void AreaLayer::build() {
+  const size_t n = std::min(x_.size(), y_.size());
+  strip_.clear();
+  area_bounds_ = false;
+  if (n == 0) {
+    dirty_ = true;
+    return;
+  }
+
+  x_ref_ = x_[0];
+  y_ref_ = y_[0];
+  strip_.resize(n * 4);
+
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+
+  for (size_t i = 0; i < n; ++i) {
+    const double x = x_[i];
+    const double base = i < base_.size() ? base_[i] : base_value_;
+    const double top = y_[i];
+    // Two vertices per sample, base then top: a strip drawn this way fills the
+    // band without an index buffer or a second pass.
+    strip_[i * 4] = static_cast<float>(x - x_ref_);
+    strip_[i * 4 + 1] = static_cast<float>(base - y_ref_);
+    strip_[i * 4 + 2] = static_cast<float>(x - x_ref_);
+    strip_[i * 4 + 3] = static_cast<float>(top - y_ref_);
+    if (!finite(x) || !finite(base) || !finite(top)) continue;
+    min_x = std::min(min_x, x);
+    max_x = std::max(max_x, x);
+    min_y = std::min({min_y, base, top});
+    max_y = std::max({max_y, base, top});
+    area_bounds_ = true;
+  }
+  if (area_bounds_) {
+    area_x_ = ph_range{min_x, max_x};
+    area_y_ = ph_range{min_y, max_y};
+  }
+  dirty_ = true;
+}
+
+bool AreaLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!area_bounds_) return false;
+  x = area_x_;
+  y = area_y_;
+  return true;
+}
+
+bool AreaLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &buffer_);
+    if (vao_ == 0) {
+      error = "failed to create area layer vertex array";
+      return false;
+    }
+    api.BindVertexArray(vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindVertexArray(0);
+  }
+  if (dirty_) {
+    api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(strip_.size() * sizeof(float)),
+                   strip_.empty() ? nullptr : strip_.data(), buffer_usage(render_type_));
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool AreaLayer::draw(const DrawState& state, std::string& error) {
+  if (strip_.size() < 8 || !state.api) return true;  // fewer than two samples
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms = with_transform_uniforms({"uColor"});
+  const Program* program = get_program(api, "area", vertex_source(kAreaVertBody, kAreaVertMain),
+                                       kAreaFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+
+  const Rgba color = unpack_color_exact(color_);
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(program->uniform("uColor"), color.r, color.g, color.b, color.a);
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_TRIANGLE_STRIP, 0, static_cast<GLsizei>(strip_.size() / 2));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void AreaLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  vao_ = 0;
+  buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- BarLayer ---------------------------------------------------------------
+
+BarLayer::BarLayer(const ph_bar_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  base_value_ = desc.base_value;
+  width_ = desc.width;
+  offset_ = desc.offset;
+  orientation_ = desc.orientation;
+
+  if (desc.count > 0 && desc.x && desc.y) {
+    x_.assign(desc.x, desc.x + desc.count);
+    y_.assign(desc.y, desc.y + desc.count);
+    if (desc.base) base_.assign(desc.base, desc.base + desc.count);
+  }
+
+  const size_t n = std::min(x_.size(), y_.size());
+  const Rgba fallback = unpack_color(color_);
+  bar_colors_.resize(n * 4);
+  for (size_t i = 0; i < n; ++i) {
+    const Rgba c = desc.colors ? unpack_color_exact(desc.colors[i]) : fallback;
+    bar_colors_[i * 4] = c.r;
+    bar_colors_[i * 4 + 1] = c.g;
+    bar_colors_[i * 4 + 2] = c.b;
+    bar_colors_[i * 4 + 3] = c.a;
+  }
+  build();
+}
+
+void BarLayer::build() {
+  const size_t n = std::min(x_.size(), y_.size());
+  rects_.clear();
+  bar_bounds_ = false;
+  if (n == 0) {
+    dirty_ = true;
+    return;
+  }
+
+  // Default width is 80% of the median spacing, so bars touch without merging.
+  double width = width_;
+  if (!(width > 0.0)) {
+    if (n < 2) {
+      width = 0.8;
+    } else {
+      std::vector<double> gaps;
+      gaps.reserve(n - 1);
+      for (size_t i = 1; i < n; ++i) gaps.push_back(std::abs(x_[i] - x_[i - 1]));
+      std::sort(gaps.begin(), gaps.end());
+      const double median = gaps[gaps.size() / 2];
+      width = (median > 0.0 ? median : 1.0) * 0.8;
+    }
+  }
+
+  const bool horizontal = orientation_ == PH_ORIENT_HORIZONTAL;
+  // The position axis references x[0] and the value axis y[0]; which of the two
+  // is the plot's x depends on the orientation.
+  const double position_ref = x_[0];
+  const double value_ref = y_[0];
+  x_ref_ = horizontal ? value_ref : position_ref;
+  y_ref_ = horizontal ? position_ref : value_ref;
+
+  rects_.resize(n * 4);
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+
+  for (size_t i = 0; i < n; ++i) {
+    const double centre = x_[i] + offset_;
+    const double p0 = centre - width / 2.0;
+    const double p1 = centre + width / 2.0;
+    const double base = i < base_.size() ? base_[i] : base_value_;
+    const double value = y_[i];
+
+    const double ax0 = horizontal ? base : p0;
+    const double ax1 = horizontal ? value : p1;
+    const double ay0 = horizontal ? p0 : base;
+    const double ay1 = horizontal ? p1 : value;
+
+    rects_[i * 4] = static_cast<float>(ax0 - x_ref_);
+    rects_[i * 4 + 1] = static_cast<float>(ay0 - y_ref_);
+    rects_[i * 4 + 2] = static_cast<float>(ax1 - x_ref_);
+    rects_[i * 4 + 3] = static_cast<float>(ay1 - y_ref_);
+
+    if (!finite(ax0) || !finite(ax1) || !finite(ay0) || !finite(ay1)) continue;
+    min_x = std::min({min_x, ax0, ax1});
+    max_x = std::max({max_x, ax0, ax1});
+    min_y = std::min({min_y, ay0, ay1});
+    max_y = std::max({max_y, ay0, ay1});
+    bar_bounds_ = true;
+  }
+  if (bar_bounds_) {
+    bar_x_ = ph_range{min_x, max_x};
+    bar_y_ = ph_range{min_y, max_y};
+  }
+  dirty_ = true;
+}
+
+bool BarLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!bar_bounds_) return false;
+  x = bar_x_;
+  y = bar_y_;
+  return true;
+}
+
+bool BarLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &corner_buffer_);
+    api.GenBuffers(1, &rect_buffer_);
+    api.GenBuffers(1, &color_buffer_);
+    if (vao_ == 0) {
+      error = "failed to create bar layer vertex array";
+      return false;
+    }
+    api.BindVertexArray(vao_);
+
+    api.BindBuffer(GL_ARRAY_BUFFER, corner_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(kUnitCorners)), kUnitCorners,
+                   GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+
+    api.BindBuffer(GL_ARRAY_BUFFER, rect_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.EnableVertexAttribArray(2);
+    api.VertexAttribPointer(2, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(2, 1);
+
+    api.BindVertexArray(0);
+  }
+
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, rect_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(rects_.size() * sizeof(float)),
+                   rects_.empty() ? nullptr : rects_.data(), usage);
+    // The colour attribute must cover every instance even when the caller gave
+    // none, or the divisor reads past the end of the buffer.
+    std::vector<float> colors = bar_colors_;
+    colors.resize(rects_.size(), 0.0f);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(colors.size() * sizeof(float)),
+                   colors.empty() ? nullptr : colors.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool BarLayer::draw(const DrawState& state, std::string& error) {
+  if (rects_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms = with_transform_uniforms({});
+  const Program* program = get_program(api, "bar", vertex_source(kBarVertBody, kBarVertMain),
+                                       kBarFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref_, y_ref_);
+  api.BindVertexArray(vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(rects_.size() / 4));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void BarLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  const GLuint buffers[] = {corner_buffer_, rect_buffer_, color_buffer_};
+  api.DeleteBuffers(3, buffers);
+  vao_ = 0;
+  corner_buffer_ = rect_buffer_ = color_buffer_ = 0;
   dirty_ = true;
 }
 

@@ -145,6 +145,78 @@ class LineLayer : public XYLayer {
  * the web core is a free function over addPatches rather than a layer of its
  * own, and why porting this one unblocks the most.
  */
+/**
+ * A filled band between a series and a base.
+ *
+ * A triangle strip alternating base and top at each x, which is why it is not
+ * an XYLayer: the vertex buffer holds two points per sample, not one. Stacking
+ * is the caller's job — pass cumulative values as the base, exactly as the web
+ * core's addStackedArea does.
+ */
+class AreaLayer : public XYLayer {
+ public:
+  explicit AreaLayer(const ph_area_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+  /// Rebuild the strip, the refs and the bounds from x_/y_/base_.
+  void build();
+
+  std::vector<double> base_;
+  double base_value_ = 0.0;
+  /// Interleaved (x, base) and (x, top) float32 pairs — two vertices per sample.
+  std::vector<float> strip_;
+  ph_range area_x_{0.0, 0.0};
+  ph_range area_y_{0.0, 0.0};
+  bool area_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+};
+
+/**
+ * Rectangles, one per sample, instanced from a unit quad.
+ *
+ * `x` is the bar centre along the *position* axis and `y` its extent along the
+ * *value* axis. Which of those is the horizontal one is `orientation`, and the
+ * whole of the difference between vertical and horizontal bars is which way
+ * round the rectangle is written — the shader does not know.
+ */
+class BarLayer : public XYLayer {
+ public:
+  explicit BarLayer(const ph_bar_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+  void build();
+
+  std::vector<double> base_;
+  double base_value_ = 0.0;
+  double width_ = 0.0;
+  double offset_ = 0.0;
+  ph_orientation orientation_ = PH_ORIENT_VERTICAL;
+  /// Four floats per bar: (x0, y0, x1, y1) in offset data space.
+  std::vector<float> rects_;
+  /// Four floats per bar, straight RGBA.
+  std::vector<float> bar_colors_;
+  ph_range bar_x_{0.0, 0.0};
+  ph_range bar_y_{0.0, 0.0};
+  bool bar_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint corner_buffer_ = 0;
+  gl::GLuint rect_buffer_ = 0;
+  gl::GLuint color_buffer_ = 0;
+};
+
 class PatchesLayer : public Layer {
  public:
   explicit PatchesLayer(const ph_patches_desc& desc);

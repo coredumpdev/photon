@@ -292,6 +292,60 @@ public final class PhotonSmokeTest {
         return line;
     }
 
+    /** An area band and a bar chart over the same samples. */
+    static void areaAndBars(Arena arena, long plot) {
+        final int count = 8;
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, count);
+        MemorySegment ys = arena.allocate(ValueLayout.JAVA_DOUBLE, count);
+        for (int i = 0; i < count; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 10.0 + i);
+        }
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+
+        MemorySegment area = ph_area_desc.allocate(arena);
+        ph_area_desc_init(area);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_X, xs);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_Y, ys);
+        area.set(ValueLayout.JAVA_INT, ph_area_desc.OFFSET_COUNT, count);
+        area.set(ValueLayout.JAVA_DOUBLE, ph_area_desc.OFFSET_BASE_VALUE, 5.0);
+        checkEq(ph_plot_add_area(plot, area, handle), PH_OK, "ph_plot_add_area");
+        long areaLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(areaLayer, bx, by), PH_OK, "area bounds");
+        // The band runs from the base to the top, so the base is the low end.
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 5.0, "area y lo is the base");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 17.0, "area y hi");
+
+        MemorySegment bar = ph_bar_desc.allocate(arena);
+        ph_bar_desc_init(bar);
+        bar.set(ValueLayout.ADDRESS, ph_bar_desc.OFFSET_X, xs);
+        bar.set(ValueLayout.ADDRESS, ph_bar_desc.OFFSET_Y, ys);
+        bar.set(ValueLayout.JAVA_INT, ph_bar_desc.OFFSET_COUNT, count);
+        bar.set(ValueLayout.JAVA_DOUBLE, ph_bar_desc.OFFSET_WIDTH, 0.5);
+        checkEq(ph_plot_add_bar(plot, bar, handle), PH_OK, "ph_plot_add_bar");
+        long barLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(barLayer, bx, by), PH_OK, "bar bounds");
+        // Bars are centred on x and half a width wide either side.
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -0.25, "bar x lo");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 7.25, "bar x hi");
+
+        // Horizontal bars swap which axis carries positions and which values.
+        bar.set(ValueLayout.JAVA_INT, ph_bar_desc.OFFSET_ORIENTATION, PH_ORIENT_HORIZONTAL);
+        checkEq(ph_plot_add_bar(plot, bar, handle), PH_OK, "horizontal bars");
+        checkEq(ph_layer_bounds(handle.get(ValueLayout.JAVA_LONG, 0), bx, by), PH_OK,
+                "horizontal bar bounds");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -0.25,
+              "the position axis is y now");
+
+        checkEq(ph_layer_destroy(areaLayer), PH_OK, "the area layer is destroyed");
+        checkEq(ph_layer_destroy(barLayer), PH_OK, "the bar layer is destroyed");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and the second");
+
+        ran("ph_area_desc_init", "ph_bar_desc_init", "ph_plot_add_area", "ph_plot_add_bar");
+    }
+
     /** Filled polygons, including the hole path through the triangulator. */
     static void patches(Arena arena, long plot) {
         // A 10x10 square with a 4x4 hole: eight vertices, the hole starting at
@@ -452,6 +506,8 @@ public final class PhotonSmokeTest {
             axes(arena, plot);
             step("layers");
             long line = layers(arena, plot);
+            step("areaAndBars");
+            areaAndBars(arena, plot);
             step("patches");
             patches(arena, plot);
             step("interaction");

@@ -74,13 +74,19 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (14 remaining of 17)
+### Layers with their own shaders (12 remaining of 17)
 
-`area` `bar` `box` `candlestick` `contour` `errorbar` `graph` `heatmap`
-`hexbin` `image` `ohlc` `pie` `quiver` `stem`
+`box` `candlestick` `contour` `errorbar` `graph` `heatmap` `hexbin` `image`
+`ohlc` `pie` `quiver` `stem`
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
       under it. `pie` shares its fill program and is the next cheapest.
+- [x] ~~`area` and `bar`~~ — the two most-used types after line and scatter.
+      Neither has `setData`, so neither can stream yet; see the note below.
+- [ ] Grouped and stacked bars are the caller's job in the web core too
+      (`addGroupedBars` passes an `offset`, `addStackedBars` a cumulative
+      `base`), and both fields are in `ph_bar_desc`. What is missing is the
+      convenience wrapper, which belongs above the ABI.
 - [ ] `heatmap`, `hexbin`, `contour` need `color/colormap.ts` (272 lines) and
       `color/palettes.ts` ported first.
 - [ ] `candlestick` + `ohlc` need the ordinal-time axis, which is already done.
@@ -88,9 +94,10 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       through a colormap, and those fields are absent from `ph_patches_desc`
       rather than accepted and ignored. Adding them is additive once the
       colormaps land.
-- [ ] Patches has no `setData`. The web layer can be restreamed; here the rings
-      are triangulated once in the constructor. `ph_layer_set_xy` does not fit
-      the shape, so it wants its own call.
+- [ ] **No layer added in Faz 4 can stream.** `ph_layer_set_xy` fits line and
+      scatter and nothing else: patches is a list of rings, area has a base and
+      bar has a base, a width and per-bar colours. Each wants a
+      `ph_layer_set_<name>` taking its own descriptor, which is additive.
 
 ### Colour and the colorbar
 

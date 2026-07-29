@@ -274,6 +274,44 @@ internal static class PhotonSmokeTest
         return line;
     }
 
+    /// An area band and a bar chart over the same samples.
+    private static void AreaAndBars(ulong plot)
+    {
+        var xs = new double[] { 0, 1, 2, 3, 4, 5, 6, 7 };
+        var ys = new double[] { 10, 11, 12, 13, 14, 15, 16, 17 };
+        var xsHandle = GCHandle.Alloc(xs, GCHandleType.Pinned);
+        var ysHandle = GCHandle.Alloc(ys, GCHandleType.Pinned);
+        try
+        {
+            ph_area_desc_init(out var area);
+            area.x = xsHandle.AddrOfPinnedObject();
+            area.y = ysHandle.AddrOfPinnedObject();
+            area.count = xs.Length;
+            area.base_value = 5.0;
+            CheckEq(ph_plot_add_area(plot, in area, out var areaLayer), PH_OK, "ph_plot_add_area");
+            CheckEq(ph_layer_bounds(areaLayer, out _, out var areaY), PH_OK, "area bounds");
+            Check(areaY.lo == 5.0 && areaY.hi == 17.0, "the band runs from base to top");
+            CheckEq(ph_layer_destroy(areaLayer), PH_OK, "the area layer is destroyed");
+
+            ph_bar_desc_init(out var bar);
+            bar.x = xsHandle.AddrOfPinnedObject();
+            bar.y = ysHandle.AddrOfPinnedObject();
+            bar.count = xs.Length;
+            bar.width = 0.5;
+            CheckEq(ph_plot_add_bar(plot, in bar, out var barLayer), PH_OK, "ph_plot_add_bar");
+            CheckEq(ph_layer_bounds(barLayer, out var barX, out _), PH_OK, "bar bounds");
+            Check(barX.lo == -0.25 && barX.hi == 7.25, "bars are centred on x");
+            CheckEq(ph_layer_destroy(barLayer), PH_OK, "the bar layer is destroyed");
+        }
+        finally
+        {
+            xsHandle.Free();
+            ysHandle.Free();
+        }
+
+        Ran("ph_area_desc_init", "ph_bar_desc_init", "ph_plot_add_area", "ph_plot_add_bar");
+    }
+
     /// Filled polygons, including the hole path through the triangulator.
     private static void Patches(ulong plot)
     {
@@ -426,6 +464,7 @@ internal static class PhotonSmokeTest
         var plot = BuildPlot();
         Axes(plot);
         var line = Layers(plot);
+        AreaAndBars(plot);
         Patches(plot);
         Interaction(plot);
         Events(plot);

@@ -551,6 +551,59 @@ extern "C" void PH_CALL ph_patches_desc_init(ph_patches_desc* out) {
   out->render_type = PH_RENDER_STATIC;
 }
 
+extern "C" void PH_CALL ph_area_desc_init(ph_area_desc* out) {
+  if (!out) return;
+  *out = ph_area_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_area_desc));
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" void PH_CALL ph_bar_desc_init(ph_bar_desc* out) {
+  if (!out) return;
+  *out = ph_bar_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_bar_desc));
+  out->orientation = PH_ORIENT_VERTICAL;
+  out->render_type = PH_RENDER_STATIC;
+  // width 0 means "80% of the median spacing", which is the core's default and
+  // is also what a zero-initialized struct says.
+}
+
+/// The shape every xy layer's entry point has: validate, construct, register.
+template <typename Desc, typename LayerType, typename InitFn>
+ph_result add_xy_layer(ph_plot handle, const Desc* desc, ph_layer* out, InitFn init,
+                       const char* what) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, std::string(what) + ".struct_size is larger than this build's");
+  }
+  const Desc normalized = normalize(desc, init);
+  if (normalized.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (normalized.count > 0 && (!normalized.x || !normalized.y)) {
+    return fail(PH_E_INVALID_ARGUMENT, "x and y must be non-null when count > 0");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<LayerType>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, std::string("out of memory creating ") + what);
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_area(ph_plot handle, const ph_area_desc* desc,
+                                              ph_layer* out) {
+  return add_xy_layer<ph_area_desc, photon::AreaLayer>(handle, desc, out, ph_area_desc_init,
+                                                       "ph_area_desc");
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_bar(ph_plot handle, const ph_bar_desc* desc,
+                                             ph_layer* out) {
+  return add_xy_layer<ph_bar_desc, photon::BarLayer>(handle, desc, out, ph_bar_desc_init,
+                                                     "ph_bar_desc");
+}
+
 extern "C" ph_result PH_CALL ph_plot_add_patches(ph_plot handle, const ph_patches_desc* desc,
                                                  ph_layer* out) {
   clear_error();

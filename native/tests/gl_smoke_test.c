@@ -324,6 +324,70 @@ int main(void) {
   CHECK(cyan < expected * 1.05);
 
   CHECK_EQ(ph_plot_destroy(patch_plot), PH_OK);
+
+  /* ---- area and bars: fixed domains, so the coverage is arithmetic ---- */
+
+  ph_plot fill_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &fill_plot), PH_OK);
+
+  /* A band from y=0 to y=3 across the whole width: 30% of the region. */
+  const double area_x[2] = {0.0, 10.0};
+  const double area_y[2] = {3.0, 3.0};
+  ph_area_desc area_desc;
+  ph_area_desc_init(&area_desc);
+  area_desc.x = area_x;
+  area_desc.y = area_y;
+  area_desc.count = 2;
+  area_desc.base_value = 0.0;
+  CHECK_EQ(ph_color_parse("#ffff00", &area_desc.color), PH_OK);
+  ph_layer area_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_area(fill_plot, &area_desc, &area_layer) != PH_OK) {
+    printf("  FAIL add_area: %s\n", ph_last_error());
+    return 1;
+  }
+
+  /* Four bars a tenth of the width each, from y=5 to y=9: 16% of the region. */
+  const double bar_x[4] = {2.0, 4.0, 6.0, 8.0};
+  const double bar_y[4] = {9.0, 9.0, 9.0, 9.0};
+  ph_bar_desc bar_desc;
+  ph_bar_desc_init(&bar_desc);
+  bar_desc.x = bar_x;
+  bar_desc.y = bar_y;
+  bar_desc.count = 4;
+  bar_desc.base_value = 5.0;
+  bar_desc.width = 1.0;
+  CHECK_EQ(ph_color_parse("#ff00ff", &bar_desc.color), PH_OK);
+  ph_layer bar_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_bar(fill_plot, &bar_desc, &bar_layer) != PH_OK) {
+    printf("  FAIL add_bar: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* fill_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!fill_pixels) return 1;
+  const ph_result fill_result =
+      ph_plot_render_pixels(fill_plot, patch_w, patch_h, 1.0f, fill_pixels, patch_w * 4);
+  if (fill_result != PH_OK) {
+    printf("  FAIL area/bar render (%d): %s\n", fill_result, ph_last_error());
+    return 1;
+  }
+  long yellow = 0, magenta = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = fill_pixels + (size_t)i * 4;
+    if (p[3] < 200) continue;
+    if (p[0] > 200 && p[1] > 200 && p[2] < 40) yellow++;
+    if (p[0] > 200 && p[1] < 40 && p[2] > 200) magenta++;
+  }
+  free(fill_pixels);
+
+  printf("  area=%ld px (expect ~%.0f), bars=%ld px (expect ~%.0f)\n",
+         yellow, 18432.0 * 0.30, magenta, 18432.0 * 0.16);
+  CHECK(yellow > 18432.0 * 0.30 * 0.95);
+  CHECK(yellow < 18432.0 * 0.30 * 1.05);
+  CHECK(magenta > 18432.0 * 0.16 * 0.95);
+  CHECK(magenta < 18432.0 * 0.16 * 1.05);
+
+  CHECK_EQ(ph_plot_destroy(fill_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

@@ -73,6 +73,8 @@ public static partial class Ph
     public const int PH_TOGGLE_DEFAULT = 0;
     public const int PH_TOGGLE_ON = 1;
     public const int PH_TOGGLE_OFF = -1;
+    public const int PH_ORIENT_VERTICAL = 0;
+    public const int PH_ORIENT_HORIZONTAL = 1;
     public const int PH_EVENT_NONE = 0;
     public const int PH_EVENT_VIEW_CHANGED = 1;
     public const int PH_EVENT_CURSOR_MOVED = 2;
@@ -356,6 +358,66 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_area_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_area_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public int count;
+        /// <summary>offset 32</summary>
+        public IntPtr @base;
+        /// <summary>offset 40</summary>
+        public double base_value;
+        /// <summary>offset 48</summary>
+        public uint color;
+        /// <summary>offset 56</summary>
+        public IntPtr name;
+        /// <summary>offset 64</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 72</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_bar_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_bar_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public int count;
+        /// <summary>offset 32</summary>
+        public IntPtr @base;
+        /// <summary>offset 40</summary>
+        public double base_value;
+        /// <summary>offset 48</summary>
+        public double width;
+        /// <summary>offset 56</summary>
+        public double offset;
+        /// <summary>offset 64</summary>
+        public int orientation;
+        /// <summary>offset 68</summary>
+        public uint color;
+        /// <summary>offset 72</summary>
+        public IntPtr colors;
+        /// <summary>offset 80</summary>
+        public IntPtr name;
+        /// <summary>offset 88</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_patch — 40 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_patch
@@ -441,6 +503,8 @@ public static partial class Ph
         "ph_line_desc_init",
         "ph_scatter_desc_init",
         "ph_patches_desc_init",
+        "ph_area_desc_init",
+        "ph_bar_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -460,6 +524,8 @@ public static partial class Ph
         "ph_plot_add_line",
         "ph_plot_add_scatter",
         "ph_plot_add_patches",
+        "ph_plot_add_area",
+        "ph_plot_add_bar",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -527,6 +593,12 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_patches_desc_init")]
     public static extern void ph_patches_desc_init(out ph_patches_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_area_desc_init")]
+    public static extern void ph_area_desc_init(out ph_area_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_bar_desc_init")]
+    public static extern void ph_bar_desc_init(out ph_bar_desc @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_create")]
     public static extern int ph_plot_create(IntPtr desc, out ulong @out);
@@ -608,6 +680,18 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_patches")]
     public static extern int ph_plot_add_patches(ulong plot, in ph_patches_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_area")]
+    public static extern int ph_plot_add_area(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_area")]
+    public static extern int ph_plot_add_area(ulong plot, in ph_area_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_bar")]
+    public static extern int ph_plot_add_bar(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_bar")]
+    public static extern int ph_plot_add_bar(ulong plot, in ph_bar_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_xy")]
     public static extern int ph_layer_set_xy(ulong layer, double[] x, double[] y, int count);
