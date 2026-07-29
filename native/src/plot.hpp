@@ -162,6 +162,12 @@ class Plot {
 
   /// Union of every visible layer's extent. False when nothing has data.
   bool data_bounds(ph_range& x, ph_range& y) const;
+  /**
+   * Whether a proposed domain is one the view can come back from.
+   *
+   * `data` is the axis's data extent, or null when nothing is plotted.
+   */
+  static bool zoom_fits(const Scale& scale, double lo, double hi, const ph_range* data);
   /// Keep the view inside the data when bounded_pan is on.
   void apply_bounds_clamp();
 

@@ -20,6 +20,37 @@ constexpr double kTitleReserve = 28.0;
 /// Offset from an axis line to its rotated title, from yAxisPositions().
 constexpr double kYTitleOffset = 42.0;
 
+/**
+ * How far a view may be zoomed out, as a multiple of the data's own extent.
+ *
+ * A chart a billion times wider than its data is already a blank rectangle with
+ * a hairline in it, so nothing is lost. What is gained is the way back.
+ *
+ * Zooming about the centre keeps the centre fixed, which means any rounding
+ * error introduced in it is kept too — as an absolute offset that later
+ * zoom-ins cannot shrink. Each step costs about an eps of the endpoints'
+ * magnitude, so a view a billion times too wide leaves a centre error of about
+ * 1e-7 of the data extent: invisible. Left unbounded it is not: reported from
+ * the Qt gallery, zooming a long way out and back left the series gone for
+ * good, and at that point the domain had reached 1e133 wide with a centre that
+ * had drifted to 1e117 — so that when the span finally came back down to ten,
+ * `lo` and `hi` rounded to the same double.
+ */
+constexpr double kMaxZoomOut = 1e9;
+
+/**
+ * How narrow a view may get, as a fraction of its own magnitude.
+ *
+ * The same collapse from the other side. Doubles near a value v are spaced
+ * about v * 2.2e-16 apart, so a view narrower than that has both ends on the
+ * same double — and from there `invert(t) = lo + t * 0` returns `lo` for every
+ * t, so no amount of zooming back out ever moves it again. This floor leaves
+ * some forty distinct values across the view: far past being able to see
+ * anything, and still nowhere near a legitimate deep zoom. One millisecond on
+ * an epoch-ms time axis is 6e-13 of its magnitude, comfortably above.
+ */
+constexpr double kMinZoomIn = 1e-14;
+
 const char* kPrimaryY = "y";
 
 bool same_id(const char* a, const std::string& b) {
@@ -269,7 +300,7 @@ bool Plot::set_scale(const char* axis, const ph_axis_desc& desc) {
 bool Plot::set_domain(const char* axis, ph_range domain) {
   Scale* scale = find_scale(axis);
   if (!scale) return false;
-  scale->set_domain(domain.lo, domain.hi);
+  if (!scale->set_domain(domain.lo, domain.hi)) return false;
   // An explicit domain is a decision; the axis stops re-fitting itself.
   if (std::strcmp(axis, "x") == 0) {
     auto_x_ = false;
@@ -452,18 +483,45 @@ void Plot::pan_pixels(double dx, double dy) {
   emit_view_changed();
 }
 
+bool Plot::zoom_fits(const Scale& scale, double lo, double hi, const ph_range* data) {
+  if (!std::isfinite(lo) || !std::isfinite(hi) || !std::isfinite(hi - lo)) return false;
+
+  const double span = std::abs(hi - lo);
+  const double magnitude = std::max(std::abs(lo), std::abs(hi));
+  if (!(span > magnitude * kMinZoomIn)) return false;
+
+  // A log axis zooms in log space, where the numbers stay within a few hundred
+  // and precision is not the problem. Its failure mode is pow() overflowing,
+  // which the finite check above already catches.
+  if (scale.is_log() || !data) return true;
+  const double extent = data->hi - data->lo;
+  if (!(extent > 0.0)) return true;
+  return span <= kMaxZoomOut * extent;
+}
+
 void Plot::zoom_around(double nx, double ny, double factor) {
   const AxisLock lock = axis_lock();
+  ph_range data_x{}, data_y{};
+  const bool have_data = data_bounds(data_x, data_y);
+
   if (lock.x) {
     const double t = nx * (1.0 - factor);
-    scale_x_.set_domain(scale_x_.invert(t), scale_x_.invert(t + factor));
-    auto_x_ = false;
+    const double lo = scale_x_.invert(t);
+    const double hi = scale_x_.invert(t + factor);
+    if (zoom_fits(scale_x_, lo, hi, have_data ? &data_x : nullptr)) {
+      scale_x_.set_domain(lo, hi);
+      auto_x_ = false;
+    }
   }
   if (lock.y) {
     const double t = ny * (1.0 - factor);
     for (auto& axis : y_axes_) {
-      axis.scale.set_domain(axis.scale.invert(t), axis.scale.invert(t + factor));
-      axis.automatic = false;
+      const double lo = axis.scale.invert(t);
+      const double hi = axis.scale.invert(t + factor);
+      if (zoom_fits(axis.scale, lo, hi, have_data ? &data_y : nullptr)) {
+        axis.scale.set_domain(lo, hi);
+        axis.automatic = false;
+      }
     }
   }
   apply_bounds_clamp();

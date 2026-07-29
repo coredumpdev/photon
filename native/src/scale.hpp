@@ -41,8 +41,15 @@ struct Scale {
   /// Default label for a tick value, when the tick carries none of its own.
   std::string format_tick(double value) const;
 
-  /// Apply a domain, sanitizing it for log scales (which need lo > 0).
-  void set_domain(double new_lo, double new_hi);
+  /**
+   * Apply a domain, sanitizing it for log scales (which need lo > 0).
+   *
+   * Returns false — and changes nothing — for a domain that is not
+   * representable. That is not a theoretical case: it is what zooming out far
+   * enough produces, and it is unrecoverable, so it has to be refused here
+   * rather than absorbed. See the definition.
+   */
+  bool set_domain(double new_lo, double new_hi);
 
   /// Band domain [-0.5, n-0.5] for the two index-based scale types.
   void set_band_domain(size_t n);

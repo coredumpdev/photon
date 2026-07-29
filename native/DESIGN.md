@@ -218,6 +218,21 @@ checks them against values hand-derived from `plot.ts`, not from running this
 code. The DOM half (three stacked canvases, pointer listeners, toolbar, context
 menu) does not cross over.
 
+**Deliberately diverges**: the zoom bounds. `plot.ts` lets a wheel zoom run
+until the domain overflows a double, and the native port used to as well —
+until the Qt gallery showed what that costs. A few thousand notches out takes
+the span past 1e130, and because zooming about the centre preserves the centre
+it preserves the rounding error in it too, which by then is around 1e117; when
+the span comes back down to something readable, both ends have rounded onto the
+same double and the chart is blank for good. The mirror image happens zooming
+in, below about an eps of the view's own magnitude.
+
+So `Plot::zoom_fits` bounds a zoom-out at a billion times the data's extent and
+a zoom-in at 1e-14 of the view's magnitude — both far outside any readable
+chart, both leaving the way back intact. **The web core still has the original
+behaviour**, so this is a real divergence rather than a port detail, and it is
+recorded here because parity is otherwise the rule.
+
 **Deliberately not ported**: `gl/shared.ts`. See above.
 
 **Had no equivalent and had to be written**: text, and the overlay that uses it.

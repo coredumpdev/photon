@@ -14,6 +14,7 @@
 #include <photon/photon.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -391,6 +392,13 @@ extern "C" ph_result PH_CALL ph_plot_set_domain(ph_plot handle, const char* axis
   const ph_result r = resolve_plot(handle, &plot);
   if (r != PH_OK) return r;
   if (!axis) return fail(PH_E_INVALID_ARGUMENT, "axis must be non-null");
+  // Checked here so the message can say which of the two things went wrong.
+  if (!std::isfinite(domain.lo) || !std::isfinite(domain.hi) ||
+      !std::isfinite(domain.hi - domain.lo)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "domain must be finite, and so must its span — an unrepresentable view "
+                "projects every point to the same place and cannot be zoomed back out of");
+  }
   if (!plot->set_domain(axis, domain)) {
     return fail(PH_E_INVALID_ARGUMENT, std::string("no such axis: ") + axis);
   }

@@ -161,10 +161,24 @@ double Scale::invert(double t) const {
   return lo + t * (hi - lo);
 }
 
-void Scale::set_domain(double new_lo, double new_hi) {
+bool Scale::set_domain(double new_lo, double new_hi) {
+  // A view has to stay representable, and past a certain zoom-out it stops
+  // being so: each wheel notch multiplies the span, and after enough of them
+  // `hi - lo` overflows to infinity. From that moment norm() divides by
+  // infinity, every point in the series projects to the same place, and
+  // invert() can no longer produce a finite domain — so zooming back in does
+  // not recover. The chart goes blank and stays blank.
+  //
+  // Refusing the update turns that cliff into a wall: the furthest zoom-out is
+  // simply as far as it goes. The endpoints and the span are all checked,
+  // because two finite endpoints can still have an infinite difference.
+  if (!std::isfinite(new_lo) || !std::isfinite(new_hi) || !std::isfinite(new_hi - new_lo)) {
+    return false;
+  }
   lo = new_lo;
   hi = new_hi;
   if (is_log()) sanitize_log(lo, hi);
+  return true;
 }
 
 void Scale::set_band_domain(size_t n) {

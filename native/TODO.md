@@ -179,6 +179,12 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
 
 ## Cross-cutting / risks
 
+- [ ] **The same zoom collapse is still in the web core.** `plot.ts`'s
+      `zoomAround` has no bound, so a few thousand wheel notches out and back
+      leaves a blank chart there exactly as it did here — see the divergence
+      note in DESIGN.md. The native fix is `Plot::zoom_fits`; porting it back
+      to TypeScript is a handful of lines and wants its own release.
+
 - [ ] **Only Linux has ever been compiled.** Windows (MSVC) and macOS are
       unverified. The `msvc` preset exists but has never run. Expect the first
       MSVC build to surface `/W4` warnings and possibly `__stdcall` issues in

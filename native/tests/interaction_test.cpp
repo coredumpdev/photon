@@ -14,6 +14,7 @@
 #include <photon/photon.h>
 
 #include <cmath>
+#include <limits>
 #include <thread>
 
 #include "check.h"
@@ -146,6 +147,193 @@ void test_wheel_uses_the_browser_factor() {
   CHECK(x.hi - x.lo > 10.0);
 
   CHECK_EQ(ph_plot_destroy(plot), PH_OK);
+}
+
+/**
+ * Zooming out until the span overflows, and finding the way back.
+ *
+ * Reported from the Qt gallery: zoom a long way out and the series sometimes
+ * vanishes for good. Each wheel notch multiplies the span by ~1.105, so about
+ * six hundred of them take a domain of ten units past what a double can hold.
+ * Once `hi - lo` is infinite, norm() divides by it and projects every point to
+ * the same place; invert() then cannot produce a finite domain, so zooming back
+ * in never recovers. The scale refuses such a domain instead — the furthest
+ * zoom-out is a wall, not a cliff.
+ */
+/**
+ * Zoom out until it stops, then all the way back. Reported from the Qt gallery:
+ * a long zoom out and back left the series gone for good.
+ *
+ * Two separate collapses were behind it, and both are permanent once reached
+ * because `invert(t) = lo + t * (hi - lo)` cannot recover from either.
+ *
+ *  - **Out.** Each notch multiplies the span, so a few thousand of them take it
+ *    past 1e130. Zooming about the centre preserves the centre *and* the
+ *    rounding error in it, which by then is around 1e117 — so when the span
+ *    finally came back down to something readable, both ends had rounded onto
+ *    the same double. The zoom-out is now bounded by the data's own extent.
+ *  - **In.** The mirror image: below about an eps of the view's magnitude the
+ *    two ends are the same double, and every later `invert` returns it.
+ *
+ * The assertion that matters is the last one. Not "the numbers stayed finite" —
+ * they did before, at 1e133 — but "the chart came back".
+ */
+void test_zooming_out_and_back_returns_the_view() {
+  ph_plot plot = make_plot({0.0, 10.0}, {0.0, 100.0});
+
+  // The caps are relative to the data, so there has to be some.
+  double xs[64], ys[64];
+  for (int i = 0; i < 64; i++) {
+    xs[i] = i * (10.0 / 63.0);
+    ys[i] = 100.0 * std::sin(xs[i]);
+  }
+  ph_line_desc line;
+  ph_line_desc_init(&line);
+  line.x = xs;
+  line.y = ys;
+  line.count = 64;
+  ph_layer layer = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_add_line(plot, &line, &layer), PH_OK);
+  CHECK_EQ(ph_plot_set_domain(plot, "x", ph_range{0.0, 10.0}), PH_OK);
+
+  const double cx = kRegionLeft + kRegionWidth / 2;
+  const double cy = kRegionTop + kRegionHeight / 2;
+  const auto span = [](ph_range r) { return r.hi - r.lo; };
+
+  for (int i = 0; i < 3000; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, 100.0, PH_MOD_NONE), PH_OK);
+  }
+  const ph_range wide = domain_of(plot, "x");
+  CHECK(std::isfinite(span(wide)));
+  // Bounded by the data's extent — ten units of data, so a billion times that.
+  CHECK(span(wide) <= 1.0e9 * 10.0 * 1.001);
+  CHECK(span(wide) > 1.0e8);  // and it really did zoom out
+
+  // Further zooming out is a wall, not a cliff: nothing moves.
+  for (int i = 0; i < 20; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, 100.0, PH_MOD_NONE), PH_OK);
+  }
+  CHECK_NEAR(span(domain_of(plot, "x")), span(wide), 0.0);
+
+  // And back. This is what used to leave a blank chart.
+  for (int i = 0; i < 3000; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, -100.0, PH_MOD_NONE), PH_OK);
+  }
+  for (int i = 0; i < 3000; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, 100.0, PH_MOD_NONE), PH_OK);
+  }
+  // Back at the wall, within one notch of it — the step that would cross the
+  // cap is refused, so where it lands depends on where the sequence happened to
+  // be, and one factor of exp(0.1) is the most that can cost.
+  const ph_range returned = domain_of(plot, "x");
+  CHECK(std::isfinite(span(returned)));
+  CHECK(span(returned) <= span(wide));
+  CHECK(span(returned) > span(wide) / 1.2);
+
+  // And reset still works, whatever happened in between: this plot was created
+  // without an explicit domain, so it autoscales back over the data with the
+  // core's 5% padding.
+  CHECK_EQ(ph_plot_reset_view(plot), PH_OK);
+  const ph_range reset = domain_of(plot, "x");
+  CHECK_NEAR(reset.lo, -0.5, 1e-9);
+  CHECK_NEAR(reset.hi, 10.5, 1e-9);
+
+  ph_plot_destroy(plot);
+}
+
+/// Zooming *in* has a floor for the same reason, and it is escapable too.
+void test_zooming_in_forever_never_collapses_the_view() {
+  ph_plot plot = make_plot({1000.0, 1010.0}, {0.0, 100.0});
+  const double cx = kRegionLeft + kRegionWidth / 2;
+  const double cy = kRegionTop + kRegionHeight / 2;
+
+  for (int i = 0; i < 3000; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, -100.0, PH_MOD_NONE), PH_OK);
+  }
+  const ph_range tight = domain_of(plot, "x");
+  CHECK(tight.hi > tight.lo);  // the two ends are still distinguishable
+  // Around 1005, doubles are spaced 2.3e-13 apart; the floor keeps some tens of
+  // them across the view.
+  CHECK(tight.hi - tight.lo > 1.0e-12);
+  CHECK(tight.hi - tight.lo < 1.0e-10);
+
+  // Escapable: zooming out moves it again.
+  for (int i = 0; i < 3000; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, 100.0, PH_MOD_NONE), PH_OK);
+  }
+  CHECK(domain_of(plot, "x").hi - domain_of(plot, "x").lo > 1.0);
+
+  ph_plot_destroy(plot);
+}
+
+/**
+ * Zoom out and back by the same amount and the view returns to where it was.
+ *
+ * Not to the last bit, and the reason is worth knowing rather than papering
+ * over: two hundred notches take the span to 10 * e^20, about 5e9, where the
+ * gap between adjacent doubles is around 1e-6. Zooming about the centre
+ * preserves the centre, so an error introduced out there is preserved with it —
+ * it comes back as an absolute offset rather than shrinking away.
+ */
+void test_zoom_is_reversible() {
+  ph_plot plot = make_plot({0.0, 10.0}, {0.0, 100.0});
+  const double cx = kRegionLeft + kRegionWidth / 2;
+  const double cy = kRegionTop + kRegionHeight / 2;
+
+  for (int i = 0; i < 200; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, 100.0, PH_MOD_NONE), PH_OK);
+  }
+  for (int i = 0; i < 200; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, cx, cy, -100.0, PH_MOD_NONE), PH_OK);
+  }
+
+  const ph_range x = domain_of(plot, "x");
+  CHECK_NEAR(x.lo, 0.0, 1e-5);
+  CHECK_NEAR(x.hi, 10.0, 1e-5);
+
+  ph_plot_destroy(plot);
+}
+
+/// A log axis overflows the same way, in log space, and is refused the same way.
+void test_zooming_a_log_axis_out_forever_is_also_bounded() {
+  ph_plot plot = PH_NULL_HANDLE;
+  ph_plot_desc desc;
+  ph_plot_desc_init(&desc);
+  desc.width = 640;
+  desc.height = 400;
+  desc.y.type = PH_SCALE_LOG;
+  desc.y.domain = ph_range{1.0, 1.0e6};
+  CHECK_EQ(ph_plot_create(&desc, &plot), PH_OK);
+
+  for (int i = 0; i < 1000; i++) {
+    CHECK_EQ(ph_plot_wheel(plot, kRegionLeft + kRegionWidth / 2,
+                           kRegionTop + kRegionHeight / 2, 100.0, PH_MOD_NONE),
+             PH_OK);
+  }
+  const ph_range y = domain_of(plot, "y");
+  CHECK(std::isfinite(y.lo) && std::isfinite(y.hi));
+  CHECK(y.lo > 0.0);  // a log axis needs a positive low end at any zoom
+  CHECK(y.hi > y.lo);
+
+  ph_plot_destroy(plot);
+}
+
+/// The same refusal, spelled out, when a host asks for it directly.
+void test_the_abi_refuses_an_unrepresentable_domain() {
+  ph_plot plot = make_plot({0.0, 10.0}, {0.0, 100.0});
+  const double infinity = std::numeric_limits<double>::infinity();
+
+  CHECK_EQ(ph_plot_set_domain(plot, "x", ph_range{0.0, infinity}), PH_E_INVALID_ARGUMENT);
+  CHECK_EQ(ph_plot_set_domain(plot, "x", ph_range{-infinity, 0.0}), PH_E_INVALID_ARGUMENT);
+  // Two finite endpoints whose difference is not.
+  const double huge = 1.0e308;
+  CHECK_EQ(ph_plot_set_domain(plot, "x", ph_range{-huge, huge}), PH_E_INVALID_ARGUMENT);
+  // The rejected calls left the view alone.
+  const ph_range x = domain_of(plot, "x");
+  CHECK_NEAR(x.lo, 0.0, 1e-12);
+  CHECK_NEAR(x.hi, 10.0, 1e-12);
+
+  ph_plot_destroy(plot);
 }
 
 void test_log_scale_zooms_multiplicatively() {
@@ -572,6 +760,11 @@ int main() {
   RUN(test_pan_matches_plot_ts);
   RUN(test_zoom_around_matches_plot_ts);
   RUN(test_wheel_uses_the_browser_factor);
+  RUN(test_zooming_out_and_back_returns_the_view);
+  RUN(test_zooming_in_forever_never_collapses_the_view);
+  RUN(test_zoom_is_reversible);
+  RUN(test_zooming_a_log_axis_out_forever_is_also_bounded);
+  RUN(test_the_abi_refuses_an_unrepresentable_domain);
   RUN(test_log_scale_zooms_multiplicatively);
   RUN(test_box_zoom_and_axis_lock);
   RUN(test_drag_pans_by_the_pointer_delta);
