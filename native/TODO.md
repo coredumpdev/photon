@@ -209,10 +209,27 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       zoom.test.ts` covers it, including a control that shows the unguarded
       arithmetic still destroys the view. Not yet released to npm.
 
-- [ ] **Only Linux has ever been compiled.** Windows (MSVC) and macOS are
-      unverified. The `msvc` preset exists but has never run. Expect the first
-      MSVC build to surface `/W4` warnings and possibly `__stdcall` issues in
-      the GL loader.
+- [x] ~~Only Linux has ever been compiled.~~ Linux, macOS and Windows all build
+      and pass in CI, debug and release. It took five runs to get there and the
+      first four each found something — none of it in the engine:
+      * `tests/scale_test.cpp` used `std::fabs`, `std::nan`, `std::lround` and
+        `std::floor` with no `<cmath>`. libstdc++ drags it in and MSVC does not,
+        so the file had been wrong since it was written.
+      * A zoom test asserted against where the first pass *happened* to stop
+        rather than against the cap, and arm64 contracts multiply-adds where
+        x86-64 does not, so three thousand chained steps end a few ulps apart.
+      * The Qt floor said 6.5 because that was the version on the author's
+        machine; Ubuntu LTS ships 6.4.2. Lowering it then exposed two 6.5-isms
+        in the gallery — `loadFromModule`, and the QML resource prefix whose
+        *default* moved in 6.5.
+      * `java-version: 22` stopped resolving: a non-LTS release that has gone.
+      * A JVM crash on Windows Release turned out to be Temurin 22.0.2 rather
+        than this library, and went with the JDK bump.
+- [ ] The `msvc` preset still pins "Visual Studio 17 2022" and CI does not use
+      it — the runner has moved past that generator. It is fine for a developer
+      who has VS2022 and untested for anyone else.
+- [ ] Windows and macOS build the library and run the tests; neither builds a
+      *host*. The GLFW and Qt hosts are compiled on Linux only.
 - [x] ~~No CI for `native/`.~~ `.github/workflows/native.yml` matrixes
       {ubuntu, macos, windows} × {debug, release}, plus an asan leg, a
       generated-sources check and a host build. **It has never run** — the

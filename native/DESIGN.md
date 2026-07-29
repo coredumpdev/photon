@@ -36,6 +36,7 @@ generated bindings. Faz 4 is the rest of the layers.
 | Java host | LWJGL window, Panama upcall for GL resolution — output pixel-identical to the C host |
 | C# and Java bindings | generated from the header; Java built and run by ctest |
 | Layout verification | every generated field offset asserted against the compiler |
+| CI | Linux, macOS and Windows × debug/release, plus asan and a stale-bindings check |
 
 `tests/gl_smoke_test.c` is the one that matters most here: it creates a
 surfaceless EGL context, renders a chart through the public ABI, and reads the
