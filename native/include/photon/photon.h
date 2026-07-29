@@ -208,6 +208,49 @@ enum {
   PH_LEGEND_BOTTOM_RIGHT = 3
 };
 
+/** Horizontal text anchor, mirroring Canvas2D's textAlign. */
+typedef int32_t ph_text_align;
+enum {
+  PH_ALIGN_LEFT   = 0,
+  PH_ALIGN_CENTER = 1,
+  PH_ALIGN_RIGHT  = 2
+};
+
+/** Vertical text anchor, mirroring Canvas2D's textBaseline. */
+typedef int32_t ph_text_baseline;
+enum {
+  PH_BASELINE_ALPHABETIC = 0,
+  PH_BASELINE_TOP        = 1,
+  PH_BASELINE_MIDDLE     = 2,
+  PH_BASELINE_BOTTOM     = 3
+};
+
+/** Which axis a value lies on. Mirrors core `Dim`. */
+typedef int32_t ph_dim;
+enum {
+  PH_DIM_X = 0,
+  PH_DIM_Y = 1
+};
+
+/** Mirrors core `Annotation["type"]`. */
+typedef int32_t ph_annotation_type;
+enum {
+  /** A full-width or full-height guide at one value. */
+  PH_ANNOTATION_SPAN  = 0,
+  /** A shaded range between two values on one axis. */
+  PH_ANNOTATION_BAND  = 1,
+  /** A rectangle in data space, optionally filled, bordered and captioned. */
+  PH_ANNOTATION_BOX   = 2,
+  /** Text at a data-space point. */
+  PH_ANNOTATION_LABEL = 3,
+  /** A segment between two data-space points. */
+  PH_ANNOTATION_LINE  = 4,
+  /** The same, extended past its second point to the region's edge. */
+  PH_ANNOTATION_RAY   = 5,
+  /** Fibonacci retracement levels between `high` and `low` across x0..x1. */
+  PH_ANNOTATION_FIB   = 6
+};
+
 typedef int32_t ph_theme;
 enum {
   PH_THEME_DARK  = 0,
@@ -911,6 +954,64 @@ typedef struct ph_ohlc_desc {
 } ph_ohlc_desc;
 
 /**
+ * Mirrors the core `Annotation` union, flattened.
+ *
+ * Flat rather than tagged because C# and Java marshal a plain struct for free
+ * and a union not at all — the same reason `ph_event` is flat. Which fields
+ * matter depends on `type`; the rest are ignored, so a zeroed struct plus two
+ * or three assignments is the whole of a call.
+ *
+ * All coordinates are data space, so an annotation pans and zooms with the
+ * chart. Pointers are borrowed for the duration of the call and copied.
+ */
+typedef struct ph_annotation {
+  uint32_t           struct_size;
+  ph_annotation_type type;
+  /** SPAN and BAND: which axis the value(s) lie on. */
+  ph_dim             dim;
+  /**
+   * SPAN: the value.  BAND: from `x0` to `x1` on `dim`.  BOX: two corners.
+   * LABEL: the anchor.  LINE and RAY: the two ends.  FIB: the x extent.
+   */
+  double             x0;
+  double             y0;
+  double             x1;
+  double             y1;
+  /** FIB: the two prices the levels are measured between. */
+  double             high;
+  double             low;
+  /** FIB: the retracement ratios. NULL uses the classic seven. */
+  const double*      ratios;
+  int32_t            ratio_count;
+  /** Line or fill colour. PH_COLOR_AUTO takes the theme's axis colour. */
+  ph_color           color;
+  /** BOX: the outline, drawn only when set. */
+  ph_color           border;
+  /** Stroke width in logical px. 0 = 1 for a span, 1.5 for a line or ray. */
+  float              width;
+  /** Dash pattern in logical px, or NULL for solid. */
+  const float*       dash;
+  int32_t            dash_count;
+  /** BOX, LINE, RAY and FIB: a caption beside the shape. */
+  const char*        label;
+  /** LABEL: the text itself. */
+  const char*        text;
+  /** LABEL: nudge in screen px after projection, so a stack keeps its spacing. */
+  float              dx;
+  float              dy;
+  ph_text_align      align;
+  ph_text_baseline   baseline;
+  /** LABEL: em size in logical px. 0 = the theme's label size. */
+  float              size;
+  /** FIB: shade alternate bands between the levels. */
+  ph_bool            fill;
+  const char*        y_axis;
+} ph_annotation;
+
+/** Identifies one annotation within its plot, for removal. */
+typedef int32_t ph_annotation_id;
+
+/**
  * Mirrors core `LegendOptions`, plus the on/off the descriptor also carries.
  *
  * The same four knobs as `ph_plot_desc`'s legend fields, so a caller can set
@@ -1155,6 +1256,7 @@ PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
 PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
+PH_API void PH_CALL ph_annotation_init(ph_annotation* out);
 PH_API void PH_CALL ph_legend_config_init(ph_legend_config* out);
 PH_API void PH_CALL ph_contour_desc_init(ph_contour_desc* out);
 PH_API void PH_CALL ph_graph_desc_init(ph_graph_desc* out);
@@ -1213,6 +1315,20 @@ PH_API ph_result PH_CALL ph_plot_set_pick_mode(ph_plot plot, ph_pick_mode mode);
  * DESIGN.md makes about the toolbar.
  */
 PH_API ph_result PH_CALL ph_plot_set_tooltip(ph_plot plot, ph_bool enabled);
+
+/**
+ * Add an annotation, drawn above the data and clipped to the plot region.
+ *
+ * `out` receives an id that identifies it for removal — the native equivalent of
+ * the unsubscribe closure `addAnnotation` returns in the TypeScript.
+ */
+PH_API ph_result PH_CALL ph_plot_add_annotation(ph_plot plot, const ph_annotation* annotation,
+                                                ph_annotation_id* out);
+
+/** Remove one annotation. PH_E_INVALID_ARGUMENT when the id is not live. */
+PH_API ph_result PH_CALL ph_plot_remove_annotation(ph_plot plot, ph_annotation_id id);
+
+PH_API ph_result PH_CALL ph_plot_clear_annotations(ph_plot plot);
 
 /**
  * Show, place and configure the legend.

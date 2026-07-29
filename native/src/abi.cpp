@@ -527,6 +527,72 @@ extern "C" ph_result PH_CALL ph_plot_set_legend(ph_plot handle, const ph_legend_
   return PH_OK;
 }
 
+extern "C" void PH_CALL ph_annotation_init(ph_annotation* out) {
+  if (!out) return;
+  *out = ph_annotation{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_annotation));
+  // A zeroed struct is a PH_ANNOTATION_SPAN on x at zero, left-aligned and
+  // middle-baselined — which is what the equivalent TypeScript defaults to.
+  out->baseline = PH_BASELINE_MIDDLE;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_annotation(ph_plot handle,
+                                                    const ph_annotation* annotation,
+                                                    ph_annotation_id* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (annotation && !desc_size_ok(annotation)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_annotation.struct_size is larger than this build's");
+  }
+  const ph_annotation normalized = normalize(annotation, ph_annotation_init);
+  if (normalized.type < PH_ANNOTATION_SPAN || normalized.type > PH_ANNOTATION_FIB) {
+    return fail(PH_E_INVALID_ARGUMENT, "unknown annotation type");
+  }
+  if (normalized.type == PH_ANNOTATION_LABEL && !normalized.text) {
+    // A label with no text draws nothing, which is the silent-blank failure
+    // this ABI reports rather than performs.
+    return fail(PH_E_INVALID_ARGUMENT, "a label annotation needs `text`");
+  }
+  if (normalized.ratio_count < 0 || normalized.dash_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "ratio_count and dash_count must be non-negative");
+  }
+  if (normalized.ratio_count > 0 && !normalized.ratios) {
+    return fail(PH_E_INVALID_ARGUMENT, "ratios must be non-null when ratio_count > 0");
+  }
+  if (normalized.dash_count > 0 && !normalized.dash) {
+    return fail(PH_E_INVALID_ARGUMENT, "dash must be non-null when dash_count > 0");
+  }
+  try {
+    *out = plot->add_annotation(normalized);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory adding an annotation");
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_remove_annotation(ph_plot handle, ph_annotation_id id) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!plot->remove_annotation(id)) {
+    return fail(PH_E_INVALID_ARGUMENT, "no annotation with that id");
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_clear_annotations(ph_plot handle) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->clear_annotations();
+  return PH_OK;
+}
+
 extern "C" ph_result PH_CALL ph_plot_set_tooltip(ph_plot handle, ph_bool enabled) {
   clear_error();
   Plot* plot = nullptr;

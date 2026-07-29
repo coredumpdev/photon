@@ -724,6 +724,43 @@ public final class PhotonGallery {
         if (ph_plot_add_candlestick(plot, desc, out) != PH_OK) {
             throw new IllegalStateException(Photon.lastError());
         }
+
+        // Annotations are what a price chart is usually marked up with: a value
+        // area, the level it is measured from, and a trendline through the low.
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment id = scratch.allocate(ValueLayout.JAVA_INT);
+            MemorySegment note = ph_annotation.allocate(scratch);
+
+            ph_annotation_init(note);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_TYPE, PH_ANNOTATION_BAND);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_DIM, PH_DIM_Y);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y0, 96.0);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y1, 100.0);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_COLOR, color("#38bdf826"));
+            ph_plot_add_annotation(plot, note, id);
+
+            MemorySegment dash = scratch.allocate(ValueLayout.JAVA_FLOAT, 2);
+            dash.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 5.0f);
+            dash.setAtIndex(ValueLayout.JAVA_FLOAT, 1, 4.0f);
+            ph_annotation_init(note);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_TYPE, PH_ANNOTATION_SPAN);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_DIM, PH_DIM_Y);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y0, 100.0);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_COLOR, color("#94a3b8"));
+            note.set(ValueLayout.ADDRESS, ph_annotation.OFFSET_DASH, dash);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_DASH_COUNT, 2);
+            ph_plot_add_annotation(plot, note, id);
+
+            ph_annotation_init(note);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_TYPE, PH_ANNOTATION_LINE);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_X0, 12.0);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y0, 91.0);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_X1, 33.0);
+            note.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y1, 103.0);
+            note.set(ValueLayout.JAVA_FLOAT, ph_annotation.OFFSET_WIDTH, 1.5f);
+            note.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_COLOR, color("#a3e635"));
+            ph_plot_add_annotation(plot, note, id);
+        }
     }
 
     /** Panel 13 — the same sessions as OHLC bars, so the two are comparable. */

@@ -115,6 +115,10 @@ std::string default_format(double value) {
   return format_c(value, std::chars_format::general, 6);
 }
 
+std::string fixed_format(double value, int places) {
+  return format_c(value, std::chars_format::fixed, places);
+}
+
 std::string compact_format(double value) {
   if (value == 0.0) return "0";
   if (!std::isfinite(value)) return default_format(value);

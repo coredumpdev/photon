@@ -89,6 +89,22 @@ public final class Photon {
     public static final int PH_LEGEND_TOP_LEFT = 1;
     public static final int PH_LEGEND_BOTTOM_LEFT = 2;
     public static final int PH_LEGEND_BOTTOM_RIGHT = 3;
+    public static final int PH_ALIGN_LEFT = 0;
+    public static final int PH_ALIGN_CENTER = 1;
+    public static final int PH_ALIGN_RIGHT = 2;
+    public static final int PH_BASELINE_ALPHABETIC = 0;
+    public static final int PH_BASELINE_TOP = 1;
+    public static final int PH_BASELINE_MIDDLE = 2;
+    public static final int PH_BASELINE_BOTTOM = 3;
+    public static final int PH_DIM_X = 0;
+    public static final int PH_DIM_Y = 1;
+    public static final int PH_ANNOTATION_SPAN = 0;
+    public static final int PH_ANNOTATION_BAND = 1;
+    public static final int PH_ANNOTATION_BOX = 2;
+    public static final int PH_ANNOTATION_LABEL = 3;
+    public static final int PH_ANNOTATION_LINE = 4;
+    public static final int PH_ANNOTATION_RAY = 5;
+    public static final int PH_ANNOTATION_FIB = 6;
     public static final int PH_THEME_DARK = 0;
     public static final int PH_THEME_LIGHT = 1;
     public static final int PH_GFX_GL33 = 0;
@@ -1125,6 +1141,74 @@ public final class Photon {
         }
     }
 
+    /** ph_annotation — 152 bytes, alignment 8. */
+    public static final class ph_annotation {
+        private ph_annotation() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            ValueLayout.JAVA_INT.withName("type"),
+            ValueLayout.JAVA_INT.withName("dim"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("x0"),
+            ValueLayout.JAVA_DOUBLE.withName("y0"),
+            ValueLayout.JAVA_DOUBLE.withName("x1"),
+            ValueLayout.JAVA_DOUBLE.withName("y1"),
+            ValueLayout.JAVA_DOUBLE.withName("high"),
+            ValueLayout.JAVA_DOUBLE.withName("low"),
+            ValueLayout.ADDRESS.withName("ratios"),
+            ValueLayout.JAVA_INT.withName("ratio_count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_INT.withName("border"),
+            ValueLayout.JAVA_FLOAT.withName("width"),
+            ValueLayout.ADDRESS.withName("dash"),
+            ValueLayout.JAVA_INT.withName("dash_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("label"),
+            ValueLayout.ADDRESS.withName("text"),
+            ValueLayout.JAVA_FLOAT.withName("dx"),
+            ValueLayout.JAVA_FLOAT.withName("dy"),
+            ValueLayout.JAVA_INT.withName("align"),
+            ValueLayout.JAVA_INT.withName("baseline"),
+            ValueLayout.JAVA_FLOAT.withName("size"),
+            ValueLayout.JAVA_INT.withName("fill"),
+            ValueLayout.ADDRESS.withName("y_axis")
+        ).withName("ph_annotation");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_TYPE = 4L;
+        public static final long OFFSET_DIM = 8L;
+        public static final long OFFSET_X0 = 16L;
+        public static final long OFFSET_Y0 = 24L;
+        public static final long OFFSET_X1 = 32L;
+        public static final long OFFSET_Y1 = 40L;
+        public static final long OFFSET_HIGH = 48L;
+        public static final long OFFSET_LOW = 56L;
+        public static final long OFFSET_RATIOS = 64L;
+        public static final long OFFSET_RATIO_COUNT = 72L;
+        public static final long OFFSET_COLOR = 76L;
+        public static final long OFFSET_BORDER = 80L;
+        public static final long OFFSET_WIDTH = 84L;
+        public static final long OFFSET_DASH = 88L;
+        public static final long OFFSET_DASH_COUNT = 96L;
+        public static final long OFFSET_LABEL = 104L;
+        public static final long OFFSET_TEXT = 112L;
+        public static final long OFFSET_DX = 120L;
+        public static final long OFFSET_DY = 124L;
+        public static final long OFFSET_ALIGN = 128L;
+        public static final long OFFSET_BASELINE = 132L;
+        public static final long OFFSET_SIZE = 136L;
+        public static final long OFFSET_FILL = 140L;
+        public static final long OFFSET_Y_AXIS = 144L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_legend_config — 20 bytes, alignment 4. */
     public static final class ph_legend_config {
         private ph_legend_config() {}
@@ -1385,6 +1469,7 @@ public final class Photon {
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_annotation_init",
         "ph_legend_config_init",
         "ph_contour_desc_init",
         "ph_graph_desc_init",
@@ -1404,6 +1489,9 @@ public final class Photon {
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
         "ph_plot_set_tooltip",
+        "ph_plot_add_annotation",
+        "ph_plot_remove_annotation",
+        "ph_plot_clear_annotations",
         "ph_plot_set_legend",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
@@ -1484,6 +1572,7 @@ public final class Photon {
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_ANNOTATION_INIT = handle("ph_annotation_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_LEGEND_CONFIG_INIT = handle("ph_legend_config_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_CONTOUR_DESC_INIT = handle("ph_contour_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_GRAPH_DESC_INIT = handle("ph_graph_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
@@ -1503,6 +1592,9 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_SET_COLORBAR = handle("ph_plot_set_colorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_PICK_MODE = handle("ph_plot_set_pick_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_TOOLTIP = handle("ph_plot_set_tooltip", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT_ADD_ANNOTATION = handle("ph_plot_add_annotation", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_REMOVE_ANNOTATION = handle("ph_plot_remove_annotation", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT_CLEAR_ANNOTATIONS = handle("ph_plot_clear_annotations", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_PLOT_SET_LEGEND = handle("ph_plot_set_legend", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_SCALE = handle("ph_plot_set_scale", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_DOMAIN = handle("ph_plot_set_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ph_range.LAYOUT));
@@ -1792,6 +1884,14 @@ public final class Photon {
         }
     }
 
+    public static void ph_annotation_init(MemorySegment out) {
+        try {
+            PH_ANNOTATION_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_annotation_init failed", photonFailure);
+        }
+    }
+
     public static void ph_legend_config_init(MemorySegment out) {
         try {
             PH_LEGEND_CONFIG_INIT.invokeExact(out);
@@ -1941,6 +2041,30 @@ public final class Photon {
             return (int) PH_PLOT_SET_TOOLTIP.invokeExact(plot, enabled);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_set_tooltip failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_annotation(long plot, MemorySegment annotation, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_ANNOTATION.invokeExact(plot, annotation, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_annotation failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_remove_annotation(long plot, int id) {
+        try {
+            return (int) PH_PLOT_REMOVE_ANNOTATION.invokeExact(plot, id);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_remove_annotation failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_clear_annotations(long plot) {
+        try {
+            return (int) PH_PLOT_CLEAR_ANNOTATIONS.invokeExact(plot);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_clear_annotations failed", photonFailure);
         }
     }
 

@@ -154,6 +154,54 @@ void Plot::set_title(const char* title) {
   request_render();
 }
 
+ph_annotation_id Plot::add_annotation(const ph_annotation& in) {
+  render::Annotation out;
+  out.type = in.type;
+  out.dim = in.dim;
+  out.x0 = in.x0;
+  out.y0 = in.y0;
+  out.x1 = in.x1;
+  out.y1 = in.y1;
+  out.high = in.high;
+  out.low = in.low;
+  if (in.ratios && in.ratio_count > 0) {
+    out.ratios.assign(in.ratios, in.ratios + in.ratio_count);
+  }
+  out.color = in.color;
+  out.border = in.border;
+  out.width = in.width;
+  if (in.dash && in.dash_count > 0) out.dash.assign(in.dash, in.dash + in.dash_count);
+  if (in.label) out.label = in.label;
+  if (in.text) out.text = in.text;
+  out.dx = in.dx;
+  out.dy = in.dy;
+  out.align = in.align;
+  out.baseline = in.baseline;
+  out.size = in.size;
+  out.fill = in.fill != 0;
+  if (in.y_axis) out.y_axis = in.y_axis;
+  out.id = next_annotation_id_++;
+  annotations_.push_back(std::move(out));
+  request_render();
+  return annotations_.back().id;
+}
+
+bool Plot::remove_annotation(ph_annotation_id id) {
+  for (size_t i = 0; i < annotations_.size(); ++i) {
+    if (annotations_[i].id != id) continue;
+    annotations_.erase(annotations_.begin() + static_cast<ptrdiff_t>(i));
+    request_render();
+    return true;
+  }
+  return false;
+}
+
+void Plot::clear_annotations() {
+  if (annotations_.empty()) return;
+  annotations_.clear();
+  request_render();
+}
+
 std::vector<Layer*> Plot::legend_layers() const {
   std::vector<Layer*> out;
   if (!legend_) return out;
@@ -983,8 +1031,32 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
       }
     }
 
-    api.Disable(GL_SCISSOR_TEST);
+    // Annotations sit above the data and below the axis chrome, and they get
+    // their own flush *inside* the scissor: a ray is deliberately extended
+    // 8000 px past its second point, so without the clip one would paint over
+    // the axes, the title and everything else on the canvas.
     api.Viewport(vx, vy, vw, vh);
+    if (!annotations_.empty()) {
+      for (const render::Annotation& annotation : annotations_) {
+        const YAxis* axis = &primary;
+        if (!annotation.y_axis.empty()) {
+          for (const YAxis& candidate : y_axes_) {
+            if (candidate.id == annotation.y_axis) {
+              axis = &candidate;
+              break;
+            }
+          }
+        }
+        render::AnnotationScales scales;
+        scales.x = &scale_x_;
+        scales.y = &axis->scale;
+        render::draw_annotation(painter, rect, annotation, scales, theme_);
+      }
+      if (!shapes_.flush(api, gfx, pixels, error)) return false;
+      if (!labels_.flush(api, gfx, pixels, error)) return false;
+    }
+
+    api.Disable(GL_SCISSOR_TEST);
   }
   if (!ok) return false;
 

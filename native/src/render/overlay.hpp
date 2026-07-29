@@ -57,6 +57,13 @@ class Painter {
   void dashed(bool vertical, double pos, double from, double to, double width,
               const std::vector<float>& dash, Rgba color);
 
+  /**
+   * A segment at any angle. `dash` alternates on/off lengths in logical px; an
+   * empty pattern draws it solid.
+   */
+  void segment(double x0, double y0, double x1, double y1, double width,
+               const std::vector<float>& dash, Rgba color);
+
   void label(const std::string& utf8, double x, double y, text::Align align,
              text::Baseline baseline, Rgba color, double size, double rotation_degrees = 0.0,
              float bold = 0.0f);
@@ -155,6 +162,49 @@ struct LegendEntry {
  */
 Rect draw_legend(Painter& painter, const Rect& region, const std::vector<LegendEntry>& entries,
                  ph_legend_position position, bool horizontal, ph_theme theme);
+
+/**
+ * An owning copy of ph_annotation.
+ *
+ * The ABI's struct borrows its pointers for the duration of the call — the same
+ * contract the data descriptors have — so the plot keeps this instead.
+ */
+struct Annotation {
+  ph_annotation_type type = PH_ANNOTATION_SPAN;
+  ph_dim dim = PH_DIM_X;
+  double x0 = 0.0;
+  double y0 = 0.0;
+  double x1 = 0.0;
+  double y1 = 0.0;
+  double high = 0.0;
+  double low = 0.0;
+  std::vector<double> ratios;
+  ph_color color = PH_COLOR_AUTO;
+  ph_color border = PH_COLOR_AUTO;
+  float width = 0.0f;
+  std::vector<float> dash;
+  std::string label;
+  std::string text;
+  float dx = 0.0f;
+  float dy = 0.0f;
+  ph_text_align align = PH_ALIGN_LEFT;
+  ph_text_baseline baseline = PH_BASELINE_MIDDLE;
+  float size = 0.0f;
+  bool fill = false;
+  std::string y_axis;
+  /// Identifies it for removal; assigned by the plot.
+  ph_annotation_id id = 0;
+};
+
+/// One annotation's projection: the x scale and whichever y axis it named.
+struct AnnotationScales {
+  const Scale* x = nullptr;
+  const Scale* y = nullptr;
+};
+
+/// Draw one annotation, clipped by the caller to the plot region.
+void draw_annotation(Painter& painter, const Rect& region, const Annotation& annotation,
+                     const AnnotationScales& scales, ph_theme theme);
 
 /// One tooltip line: an optional swatch, then text. A header row has no swatch.
 struct TooltipRow {

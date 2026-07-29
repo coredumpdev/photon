@@ -1189,6 +1189,113 @@ int main(void) {
   CHECK(high_layer != PH_NULL_HANDLE && anonymous != PH_NULL_HANDLE);
 
   CHECK_EQ(ph_plot_destroy(legend_plot2), PH_OK);
+
+  /* ---- annotations: a band, a span and a diagonal, all in data space ---- */
+
+  ph_plot note_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &note_plot), PH_OK);
+
+  /* A band over y 2..4 of a 0..10 view: 20% of the region, in green. */
+  ph_annotation note;
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_BAND;
+  note.dim = PH_DIM_Y;
+  note.y0 = 2.0;
+  note.y1 = 4.0;
+  CHECK_EQ(ph_color_parse("#00ff00", &note.color), PH_OK);
+  ph_annotation_id band_id = 0;
+  if (ph_plot_add_annotation(note_plot, &note, &band_id) != PH_OK) {
+    printf("  FAIL add band: %s\n", ph_last_error());
+    return 1;
+  }
+
+  /* A vertical span at x = 5, four logical px wide. */
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_SPAN;
+  note.dim = PH_DIM_X;
+  note.x0 = 5.0;
+  note.width = 4.0f;
+  CHECK_EQ(ph_color_parse("#ff00ff", &note.color), PH_OK);
+  ph_annotation_id span_id = 0;
+  CHECK_EQ(ph_plot_add_annotation(note_plot, &note, &span_id), PH_OK);
+
+  /* A diagonal from corner to corner — the case the axis-aligned hairline
+   * cannot draw, and the reason Primitives grew a rotated quad. */
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_LINE;
+  note.x0 = 0.0;
+  note.y0 = 0.0;
+  note.x1 = 10.0;
+  note.y1 = 10.0;
+  note.width = 4.0f;
+  CHECK_EQ(ph_color_parse("#ffff00", &note.color), PH_OK);
+  ph_annotation_id line_id = 0;
+  CHECK_EQ(ph_plot_add_annotation(note_plot, &note, &line_id), PH_OK);
+
+  unsigned char* note_px = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!note_px) return 1;
+  if (ph_plot_render_pixels(note_plot, patch_w, patch_h, 1.0f, note_px, patch_w * 4) != PH_OK) {
+    printf("  FAIL annotation render: %s\n", ph_last_error());
+    return 1;
+  }
+  long note_band = 0, note_span = 0, note_diag = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = note_px + (size_t)i * 4;
+    if (p[3] < 200) continue;
+    if (p[1] > 200 && p[0] < 40 && p[2] < 40) note_band++;
+    if (p[0] > 200 && p[1] < 40 && p[2] > 200) note_span++;
+    if (p[0] > 200 && p[1] > 200 && p[2] < 40) note_diag++;
+  }
+  free(note_px);
+  /* The band is 20% of a 128x144 region; the span is 4 px by 144; the diagonal
+   * runs corner to corner at 4 px wide, so about sqrt(128^2+144^2) * 4. */
+  printf("  annotations band=%ld span=%ld diagonal=%ld\n", note_band, note_span, note_diag);
+  CHECK(note_band > 18432 * 0.20 * 0.9 && note_band < 18432 * 0.20 * 1.1);
+  CHECK(note_span > 400 && note_span < 700);
+  CHECK(note_diag > 600 && note_diag < 1000);
+
+  /* A ray is deliberately extended 8000 px past its second point, so the only
+   * thing keeping it off the axes and the title is the region clip. Point one
+   * straight up out of the view and check nothing reached the margins. */
+  CHECK_EQ(ph_plot_clear_annotations(note_plot), PH_OK);
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_RAY;
+  note.x0 = 5.0;
+  note.y0 = 5.0;
+  note.x1 = 5.0;
+  note.y1 = 6.0;
+  note.width = 6.0f;
+  CHECK_EQ(ph_color_parse("#ff0000", &note.color), PH_OK);
+  ph_annotation_id ray_id = 0;
+  CHECK_EQ(ph_plot_add_annotation(note_plot, &note, &ray_id), PH_OK);
+
+  unsigned char* ray_px = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!ray_px) return 1;
+  if (ph_plot_render_pixels(note_plot, patch_w, patch_h, 1.0f, ray_px, patch_w * 4) != PH_OK) {
+    printf("  FAIL ray render: %s\n", ph_last_error());
+    return 1;
+  }
+  long inside = 0, outside = 0;
+  for (int row = 0; row < patch_h; row++) {
+    for (int col = 0; col < patch_w; col++) {
+      const unsigned char* p = ray_px + ((size_t)row * patch_w + col) * 4;
+      if (p[3] < 200 || p[0] < 200 || p[1] > 40 || p[2] > 40) continue;
+      const int in_region = row >= 16 && row < 160 && col >= 56 && col < 184;
+      if (in_region) inside++; else outside++;
+    }
+  }
+  free(ray_px);
+  printf("  ray inside=%ld outside=%ld\n", inside, outside);
+  CHECK(inside > 200);
+  CHECK(outside == 0);
+
+  CHECK_EQ(ph_plot_clear_annotations(note_plot), PH_OK);
+  CHECK_EQ(ph_plot_add_annotation(note_plot, &note, &band_id), PH_OK);
+  CHECK_EQ(ph_plot_remove_annotation(note_plot, band_id), PH_OK);
+  CHECK_EQ(ph_plot_remove_annotation(note_plot, band_id), PH_E_INVALID_ARGUMENT);
+  CHECK_EQ(ph_plot_clear_annotations(note_plot), PH_OK);
+
+  CHECK_EQ(ph_plot_destroy(note_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

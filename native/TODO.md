@@ -204,7 +204,16 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       series, re-fits the auto axes and emits PH_EVENT_LAYER_VISIBILITY; the
       click is consumed, so it never also starts a pan. `ph_plot_set_legend`
       takes the same four knobs the descriptor does.
-- [ ] **Annotations** — `Annotation` union, `addAnnotation`, `clearAnnotations`.
+- [x] ~~**Annotations**~~ — all seven types through one flat `ph_annotation`,
+      flat for the reason `ph_event` is: C# and Java marshal a plain struct for
+      free and a union not at all. `ph_plot_add_annotation` returns an id, which
+      is the native shape of the unsubscribe closure the TypeScript returns.
+      They flush *inside* the region scissor, because a ray is deliberately
+      extended 8000 px past its second point and without the clip one would
+      paint over the axes and the title.
+- [ ] Diagonal annotations go through a rotated quad with no coverage term, so a
+      trendline is hard-edged where the Canvas2D one is antialiased. The
+      primitives shader would need a distance-to-edge fade.
 - [ ] **Drawing tools** — trendline / hline / ray / fib / rect, plus hit-testing
       and handle dragging. Large; likely Faz 5.
 - [ ] **Grouped / stacked bars and stacked areas** — `addGroupedBars`,

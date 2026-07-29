@@ -29,6 +29,15 @@ std::vector<Tick> with_minor_ticks(const std::vector<Tick>& major, int count);
 std::string default_format(double value);
 
 /**
+ * `value` with exactly `places` digits after the point.
+ *
+ * `std::to_chars` rather than snprintf, for the same reason every other number
+ * here goes through it: Qt calls `setlocale(LC_ALL, "")` and a Turkish locale
+ * would turn the separator into a comma the web core never writes.
+ */
+std::string fixed_format(double value, int places);
+
+/**
  * The colorbar's own formatter, from `compact()` in colorbar.ts: three
  * significant digits, which is plenty beside a gradient, and a shorter
  * exponential threshold than an axis uses because the labels sit in a narrow

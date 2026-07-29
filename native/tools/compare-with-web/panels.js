@@ -389,6 +389,11 @@ function candles(container) {
   const plot = sessionPlot(container, "Candles");
   const { index, open, high, low, close } = SESSION_BARS;
   plot.addCandlestick({ x: index, open, high, low, close });
+  // Annotations are what a price chart is usually marked up with: a value area,
+  // the level it is measured from, and a trendline through the low.
+  plot.addAnnotation({ type: "band", dim: "y", from: 96, to: 100, color: "rgba(56,189,248,0.15)" });
+  plot.addAnnotation({ type: "span", dim: "y", value: 100, color: "#94a3b8", dash: [5, 4] });
+  plot.addAnnotation({ type: "line", x0: 12, y0: 91, x1: 33, y1: 103, color: "#a3e635", width: 1.5 });
   return plot;
 }
 

@@ -378,6 +378,34 @@ PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, name) == 80, "ph_ohlc_desc.name offset")
 PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, y_axis) == 88, "ph_ohlc_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, render_type) == 96, "ph_ohlc_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_annotation) == 152, "ph_annotation size");
+PH_ASSERT_LAYOUT(_Alignof(ph_annotation) == 8, "ph_annotation alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, struct_size) == 0, "ph_annotation.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, type) == 4, "ph_annotation.type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, dim) == 8, "ph_annotation.dim offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, x0) == 16, "ph_annotation.x0 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, y0) == 24, "ph_annotation.y0 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, x1) == 32, "ph_annotation.x1 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, y1) == 40, "ph_annotation.y1 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, high) == 48, "ph_annotation.high offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, low) == 56, "ph_annotation.low offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, ratios) == 64, "ph_annotation.ratios offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, ratio_count) == 72, "ph_annotation.ratio_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, color) == 76, "ph_annotation.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, border) == 80, "ph_annotation.border offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, width) == 84, "ph_annotation.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, dash) == 88, "ph_annotation.dash offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, dash_count) == 96, "ph_annotation.dash_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, label) == 104, "ph_annotation.label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, text) == 112, "ph_annotation.text offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, dx) == 120, "ph_annotation.dx offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, dy) == 124, "ph_annotation.dy offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, align) == 128, "ph_annotation.align offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, baseline) == 132, "ph_annotation.baseline offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, size) == 136, "ph_annotation.size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, fill) == 140, "ph_annotation.fill offset");
+PH_ASSERT_LAYOUT(offsetof(ph_annotation, y_axis) == 144, "ph_annotation.y_axis offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_legend_config) == 20, "ph_legend_config size");
 PH_ASSERT_LAYOUT(_Alignof(ph_legend_config) == 4, "ph_legend_config alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_legend_config, struct_size) == 0, "ph_legend_config.struct_size offset");
@@ -457,7 +485,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid o
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 31);
+  printf("%d struct layouts match the generated bindings\n", 32);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

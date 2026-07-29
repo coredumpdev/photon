@@ -39,6 +39,15 @@ class Primitives {
    */
   void hairline(bool vertical, float pos, float from, float to, float thickness, Rgba color);
 
+  /**
+   * A segment at any angle, `thickness` device pixels wide.
+   *
+   * The hairline path only does axis-aligned lines, because that is all an axis
+   * or a grid ever needs. A trendline is not axis-aligned, so this emits a
+   * rotated quad instead of snapping anything to the pixel grid.
+   */
+  void segment(float x0, float y0, float x1, float y1, float thickness, Rgba color);
+
   /// A dashed hairline. `dash` alternates on/off lengths in device pixels.
   void dashed_hairline(bool vertical, float pos, float from, float to, float thickness,
                        const std::vector<float>& dash, Rgba color);

@@ -68,6 +68,28 @@ void Primitives::hairline(bool vertical, float pos, float from, float to, float 
   }
 }
 
+void Primitives::segment(float x0, float y0, float x1, float y1, float thickness, Rgba color) {
+  if (!color.visible()) return;
+  const float dx = x1 - x0;
+  const float dy = y1 - y0;
+  const float len = std::sqrt(dx * dx + dy * dy);
+  if (len <= 0.0f) return;
+  const float nx = -dy / len * thickness * 0.5f;
+  const float ny = dx / len * thickness * 0.5f;
+  // Two triangles round the quad's four corners, in the same winding rect()
+  // uses so the two share one draw.
+  const float cx[6] = {x0 + nx, x1 + nx, x1 - nx, x0 + nx, x1 - nx, x0 - nx};
+  const float cy[6] = {y0 + ny, y1 + ny, y1 - ny, y0 + ny, y1 - ny, y0 - ny};
+  for (int i = 0; i < 6; ++i) {
+    vertices_.push_back(cx[i]);
+    vertices_.push_back(cy[i]);
+    vertices_.push_back(color.r);
+    vertices_.push_back(color.g);
+    vertices_.push_back(color.b);
+    vertices_.push_back(color.a);
+  }
+}
+
 void Primitives::dashed_hairline(bool vertical, float pos, float from, float to, float thickness,
                                  const std::vector<float>& dash, Rgba color) {
   if (dash.empty()) {

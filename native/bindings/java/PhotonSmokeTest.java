@@ -575,6 +575,61 @@ public final class PhotonSmokeTest {
             "ph_plot_add_box");
     }
 
+    /** Annotations: every type, and the two ways one leaves again. */
+    static void annotations(Arena arena, long plot) {
+        MemorySegment a = ph_annotation.allocate(arena);
+        ph_annotation_init(a);
+        MemorySegment id = arena.allocate(ValueLayout.JAVA_INT);
+
+        // One of each type, so every branch of the renderer is reached.
+        final int[] types = {PH_ANNOTATION_SPAN, PH_ANNOTATION_BAND, PH_ANNOTATION_BOX,
+                             PH_ANNOTATION_LINE, PH_ANNOTATION_RAY, PH_ANNOTATION_FIB};
+        int[] ids = new int[types.length + 1];
+        for (int i = 0; i < types.length; i++) {
+            ph_annotation_init(a);
+            a.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_TYPE, types[i]);
+            a.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_X0, 1.0);
+            a.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y0, 1.0);
+            a.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_X1, 3.0);
+            a.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_Y1, 4.0);
+            a.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_HIGH, 5.0);
+            a.set(ValueLayout.JAVA_DOUBLE, ph_annotation.OFFSET_LOW, 1.0);
+            checkEq(ph_plot_add_annotation(plot, a, id), PH_OK, "ph_plot_add_annotation");
+            ids[i] = id.get(ValueLayout.JAVA_INT, 0);
+            check(ids[i] != 0, "an annotation id is not zero");
+        }
+
+        // A label needs text: one without draws nothing, which is the
+        // silent-blank failure this ABI reports rather than performs.
+        ph_annotation_init(a);
+        a.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_TYPE, PH_ANNOTATION_LABEL);
+        checkEq(ph_plot_add_annotation(plot, a, id), PH_E_INVALID_ARGUMENT,
+                "a label annotation needs text");
+        a.set(ValueLayout.ADDRESS, ph_annotation.OFFSET_TEXT, utf8(arena, "peak"));
+        checkEq(ph_plot_add_annotation(plot, a, id), PH_OK, "with text it is fine");
+        ids[types.length] = id.get(ValueLayout.JAVA_INT, 0);
+
+        ph_annotation_init(a);
+        a.set(ValueLayout.JAVA_INT, ph_annotation.OFFSET_TYPE, 99);
+        checkEq(ph_plot_add_annotation(plot, a, id), PH_E_INVALID_ARGUMENT,
+                "an unknown annotation type");
+
+        // Ids are unique, and removing one twice is an error the second time.
+        for (int i = 0; i < ids.length; i++) {
+            for (int j = i + 1; j < ids.length; j++) check(ids[i] != ids[j], "ids are distinct");
+        }
+        checkEq(ph_plot_remove_annotation(plot, ids[0]), PH_OK, "ph_plot_remove_annotation");
+        checkEq(ph_plot_remove_annotation(plot, ids[0]), PH_E_INVALID_ARGUMENT,
+                "removing it twice is not allowed");
+        checkEq(ph_plot_clear_annotations(plot), PH_OK, "ph_plot_clear_annotations");
+        checkEq(ph_plot_clear_annotations(plot), PH_OK, "clearing an empty list is fine");
+        checkEq(ph_plot_remove_annotation(plot, ids[1]), PH_E_INVALID_ARGUMENT,
+                "clear removed the rest");
+
+        ran("ph_annotation_init", "ph_plot_add_annotation", "ph_plot_remove_annotation",
+            "ph_plot_clear_annotations");
+    }
+
     /** Iso-lines and a node-link graph — the last two layers, and the only two
      * whose geometry the core derives rather than receives. */
     static void isoAndGraph(Arena arena, long plot) {
@@ -1073,6 +1128,8 @@ public final class PhotonSmokeTest {
             pieAndStem(arena, plot);
             step("errorBarsAndBoxes");
             errorBarsAndBoxes(arena, plot);
+            step("annotations");
+            annotations(arena, plot);
             step("isoAndGraph");
             isoAndGraph(arena, plot);
             step("fields");

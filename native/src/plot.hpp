@@ -108,6 +108,11 @@ class Plot {
   bool colorbar() const { return colorbar_; }
 
   void set_pick_mode(ph_pick_mode mode) { pick_ = mode; }
+  /// Add an annotation and return its id. Copies everything it points at.
+  ph_annotation_id add_annotation(const ph_annotation& annotation);
+  bool remove_annotation(ph_annotation_id id);
+  void clear_annotations();
+
   void set_tooltip(bool on) {
     tooltip_ = on;
     request_render();
@@ -244,6 +249,8 @@ class Plot {
   bool crosshair_ = true;
   bool colorbar_ = true;
   bool tooltip_ = true;
+  std::vector<render::Annotation> annotations_;
+  ph_annotation_id next_annotation_id_ = 1;
   bool legend_ = false;
   ph_legend_position legend_position_ = PH_LEGEND_TOP_RIGHT;
   bool legend_horizontal_ = false;

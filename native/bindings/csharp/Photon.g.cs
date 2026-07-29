@@ -66,6 +66,22 @@ public static partial class Ph
     public const int PH_LEGEND_TOP_LEFT = 1;
     public const int PH_LEGEND_BOTTOM_LEFT = 2;
     public const int PH_LEGEND_BOTTOM_RIGHT = 3;
+    public const int PH_ALIGN_LEFT = 0;
+    public const int PH_ALIGN_CENTER = 1;
+    public const int PH_ALIGN_RIGHT = 2;
+    public const int PH_BASELINE_ALPHABETIC = 0;
+    public const int PH_BASELINE_TOP = 1;
+    public const int PH_BASELINE_MIDDLE = 2;
+    public const int PH_BASELINE_BOTTOM = 3;
+    public const int PH_DIM_X = 0;
+    public const int PH_DIM_Y = 1;
+    public const int PH_ANNOTATION_SPAN = 0;
+    public const int PH_ANNOTATION_BAND = 1;
+    public const int PH_ANNOTATION_BOX = 2;
+    public const int PH_ANNOTATION_LABEL = 3;
+    public const int PH_ANNOTATION_LINE = 4;
+    public const int PH_ANNOTATION_RAY = 5;
+    public const int PH_ANNOTATION_FIB = 6;
     public const int PH_THEME_DARK = 0;
     public const int PH_THEME_LIGHT = 1;
     public const int PH_GFX_GL33 = 0;
@@ -801,6 +817,62 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_annotation — 152 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_annotation
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 4</summary>
+        public int type;
+        /// <summary>offset 8</summary>
+        public int dim;
+        /// <summary>offset 16</summary>
+        public double x0;
+        /// <summary>offset 24</summary>
+        public double y0;
+        /// <summary>offset 32</summary>
+        public double x1;
+        /// <summary>offset 40</summary>
+        public double y1;
+        /// <summary>offset 48</summary>
+        public double high;
+        /// <summary>offset 56</summary>
+        public double low;
+        /// <summary>offset 64</summary>
+        public IntPtr ratios;
+        /// <summary>offset 72</summary>
+        public int ratio_count;
+        /// <summary>offset 76</summary>
+        public uint color;
+        /// <summary>offset 80</summary>
+        public uint border;
+        /// <summary>offset 84</summary>
+        public float width;
+        /// <summary>offset 88</summary>
+        public IntPtr dash;
+        /// <summary>offset 96</summary>
+        public int dash_count;
+        /// <summary>offset 104</summary>
+        public IntPtr label;
+        /// <summary>offset 112</summary>
+        public IntPtr text;
+        /// <summary>offset 120</summary>
+        public float dx;
+        /// <summary>offset 124</summary>
+        public float dy;
+        /// <summary>offset 128</summary>
+        public int align;
+        /// <summary>offset 132</summary>
+        public int baseline;
+        /// <summary>offset 136</summary>
+        public float size;
+        /// <summary>offset 140</summary>
+        public int fill;
+        /// <summary>offset 144</summary>
+        public IntPtr y_axis;
+    }
+
     /// <summary>ph_legend_config — 20 bytes, alignment 4.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_legend_config
@@ -986,6 +1058,7 @@ public static partial class Ph
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_annotation_init",
         "ph_legend_config_init",
         "ph_contour_desc_init",
         "ph_graph_desc_init",
@@ -1005,6 +1078,9 @@ public static partial class Ph
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
         "ph_plot_set_tooltip",
+        "ph_plot_add_annotation",
+        "ph_plot_remove_annotation",
+        "ph_plot_clear_annotations",
         "ph_plot_set_legend",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
@@ -1151,6 +1227,9 @@ public static partial class Ph
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_box_desc_init")]
     public static extern void ph_box_desc_init(out ph_box_desc @out);
 
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_annotation_init")]
+    public static extern void ph_annotation_init(out ph_annotation @out);
+
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_legend_config_init")]
     public static extern void ph_legend_config_init(out ph_legend_config @out);
 
@@ -1213,6 +1292,18 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_tooltip")]
     public static extern int ph_plot_set_tooltip(ulong plot, int enabled);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_annotation")]
+    public static extern int ph_plot_add_annotation(ulong plot, IntPtr annotation, out int @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_annotation")]
+    public static extern int ph_plot_add_annotation(ulong plot, in ph_annotation annotation, out int @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_remove_annotation")]
+    public static extern int ph_plot_remove_annotation(ulong plot, int id);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_clear_annotations")]
+    public static extern int ph_plot_clear_annotations(ulong plot);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_legend")]
     public static extern int ph_plot_set_legend(ulong plot, IntPtr config);

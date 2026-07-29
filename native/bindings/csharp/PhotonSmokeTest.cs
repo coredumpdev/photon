@@ -499,6 +499,55 @@ internal static class PhotonSmokeTest
             "ph_plot_add_box");
     }
 
+    /// Annotations: every type, and the two ways one leaves again.
+    private static void Annotations(ulong plot)
+    {
+        var types = new[]
+        {
+            PH_ANNOTATION_SPAN, PH_ANNOTATION_BAND, PH_ANNOTATION_BOX,
+            PH_ANNOTATION_LINE, PH_ANNOTATION_RAY, PH_ANNOTATION_FIB,
+        };
+        var ids = new List<int>();
+        foreach (var type in types)
+        {
+            ph_annotation_init(out var a);
+            a.type = type;
+            a.x0 = 1.0;
+            a.y0 = 1.0;
+            a.x1 = 3.0;
+            a.y1 = 4.0;
+            a.high = 5.0;
+            a.low = 1.0;
+            CheckEq(ph_plot_add_annotation(plot, in a, out var id), PH_OK,
+                "ph_plot_add_annotation");
+            Check(id != 0, "an annotation id is not zero");
+            ids.Add(id);
+        }
+
+        // A label needs text: one without draws nothing, which is the
+        // silent-blank failure this ABI reports rather than performs.
+        ph_annotation_init(out var label);
+        label.type = PH_ANNOTATION_LABEL;
+        CheckEq(ph_plot_add_annotation(plot, in label, out _), PH_E_INVALID_ARGUMENT,
+            "a label annotation needs text");
+
+        ph_annotation_init(out var bad);
+        bad.type = 99;
+        CheckEq(ph_plot_add_annotation(plot, in bad, out _), PH_E_INVALID_ARGUMENT,
+            "an unknown annotation type");
+
+        Check(ids.Distinct().Count() == ids.Count, "ids are distinct");
+        CheckEq(ph_plot_remove_annotation(plot, ids[0]), PH_OK, "ph_plot_remove_annotation");
+        CheckEq(ph_plot_remove_annotation(plot, ids[0]), PH_E_INVALID_ARGUMENT,
+            "removing it twice is not allowed");
+        CheckEq(ph_plot_clear_annotations(plot), PH_OK, "ph_plot_clear_annotations");
+        CheckEq(ph_plot_remove_annotation(plot, ids[1]), PH_E_INVALID_ARGUMENT,
+            "clear removed the rest");
+
+        Ran("ph_annotation_init", "ph_plot_add_annotation", "ph_plot_remove_annotation",
+            "ph_plot_clear_annotations");
+    }
+
     /// Iso-lines and a node-link graph — the only two layers whose geometry the
     /// core derives rather than receives.
     private static void IsoAndGraph(ulong plot)
@@ -954,6 +1003,7 @@ internal static class PhotonSmokeTest
         AreaAndBars(plot);
         PieAndStem(plot);
         ErrorBarsAndBoxes(plot);
+        Annotations(plot);
         IsoAndGraph(plot);
         Fields(plot);
         Ohlc(plot);

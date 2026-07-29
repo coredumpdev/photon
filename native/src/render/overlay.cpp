@@ -61,6 +61,42 @@ void Painter::dashed(bool vertical, double pos, double from, double to, double w
                            color);
 }
 
+void Painter::segment(double x0, double y0, double x1, double y1, double width,
+                      const std::vector<float>& dash, Rgba color) {
+  const float fx0 = static_cast<float>(x0 * dpr_);
+  const float fy0 = static_cast<float>(y0 * dpr_);
+  const float fx1 = static_cast<float>(x1 * dpr_);
+  const float fy1 = static_cast<float>(y1 * dpr_);
+  const float thickness = static_cast<float>(width * dpr_);
+  if (dash.empty()) {
+    shapes_->segment(fx0, fy0, fx1, fy1, thickness, color);
+    return;
+  }
+  // Walk the pattern along the segment. The line is at an angle, so this cannot
+  // reuse dashed_hairline, which steps along one axis.
+  const double dx = fx1 - fx0;
+  const double dy = fy1 - fy0;
+  const double len = std::hypot(dx, dy);
+  if (len <= 0.0) return;
+  const double ux = dx / len;
+  const double uy = dy / len;
+  double at = 0.0;
+  size_t i = 0;
+  bool on = true;
+  while (at < len) {
+    const double step = std::max(0.5, static_cast<double>(dash[i % dash.size()]) * dpr_);
+    const double next = std::min(len, at + step);
+    if (on) {
+      shapes_->segment(static_cast<float>(fx0 + ux * at), static_cast<float>(fy0 + uy * at),
+                       static_cast<float>(fx0 + ux * next), static_cast<float>(fy0 + uy * next),
+                       thickness, color);
+    }
+    at = next;
+    on = !on;
+    ++i;
+  }
+}
+
 void Painter::label(const std::string& utf8, double x, double y, text::Align align,
                     text::Baseline baseline, Rgba color, double size, double rotation_degrees,
                     float bold) {
@@ -526,6 +562,162 @@ void draw_tooltip(Painter& painter, const Rect& bounds, double cursor_px, double
     painter.label(row.text, x, mid, text::Align::Left, text::Baseline::Middle,
                   row.swatch ? text : with_alpha(text, kTipHeaderAlpha), kTipFontSize);
     y += kTipLineHeight + (row.swatch ? 0.0 : kTipHeaderGap);
+  }
+}
+
+namespace {
+
+/// The classic seven retracement levels, from the TypeScript's default.
+const std::vector<double>& default_fib_ratios() {
+  static const std::vector<double> kRatios = {0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0};
+  return kRatios;
+}
+
+/// The core's default band fill, rgba(59,130,246,0.15).
+constexpr ph_color kBandColor = 0x3b82f626u;
+constexpr double kAnnotationLabelSize = 12.0;
+
+}  // namespace
+
+void draw_annotation(Painter& painter, const Rect& region, const Annotation& a,
+                     const AnnotationScales& scales, ph_theme theme) {
+  if (!scales.x || !scales.y) return;
+  const Theme& colors = theme_for(theme);
+  const Rgba stroke =
+      a.color != PH_COLOR_AUTO ? unpack_color_exact(a.color) : unpack_color_exact(colors.axis);
+  const Rgba text_color =
+      a.color != PH_COLOR_AUTO ? unpack_color_exact(a.color) : unpack_color_exact(colors.text);
+  const auto px = [&](double v) { return px_x(region, scales.x->norm(v)); };
+  const auto py = [&](double v) { return px_y(region, scales.y->norm(v)); };
+
+  switch (a.type) {
+    case PH_ANNOTATION_SPAN: {
+      const double width = a.width > 0.0f ? a.width : 1.0;
+      if (a.dim == PH_DIM_X) {
+        const double x = crisp(px(a.x0));
+        if (a.dash.empty()) {
+          painter.hairline(true, x, region.top, region.bottom(), width, stroke);
+        } else {
+          painter.dashed(true, x, region.top, region.bottom(), width, a.dash, stroke);
+        }
+      } else {
+        const double y = crisp(py(a.y0));
+        if (a.dash.empty()) {
+          painter.hairline(false, y, region.left, region.right(), width, stroke);
+        } else {
+          painter.dashed(false, y, region.left, region.right(), width, a.dash, stroke);
+        }
+      }
+      break;
+    }
+    case PH_ANNOTATION_BAND: {
+      const Rgba fill =
+          a.color != PH_COLOR_AUTO ? unpack_color_exact(a.color) : unpack_color_exact(kBandColor);
+      if (a.dim == PH_DIM_X) {
+        const double p0 = px(a.x0);
+        const double p1 = px(a.x1);
+        painter.fill(std::min(p0, p1), region.top, std::abs(p1 - p0), region.height, fill);
+      } else {
+        const double p0 = py(a.y0);
+        const double p1 = py(a.y1);
+        painter.fill(region.left, std::min(p0, p1), region.width, std::abs(p1 - p0), fill);
+      }
+      break;
+    }
+    case PH_ANNOTATION_BOX: {
+      const double bx0 = px(a.x0);
+      const double bx1 = px(a.x1);
+      const double by0 = py(a.y0);
+      const double by1 = py(a.y1);
+      const double rx = std::min(bx0, bx1);
+      const double ry = std::min(by0, by1);
+      const double rw = std::abs(bx1 - bx0);
+      const double rh = std::abs(by1 - by0);
+      if (a.color != PH_COLOR_AUTO) painter.fill(rx, ry, rw, rh, unpack_color_exact(a.color));
+      if (a.border != PH_COLOR_AUTO) {
+        const Rgba edge = unpack_color_exact(a.border);
+        painter.hairline(true, crisp(rx), ry, ry + rh, 1.0, edge);
+        painter.hairline(true, crisp(rx + rw), ry, ry + rh, 1.0, edge);
+        painter.hairline(false, crisp(ry), rx, rx + rw, 1.0, edge);
+        painter.hairline(false, crisp(ry + rh), rx, rx + rw, 1.0, edge);
+      }
+      if (!a.label.empty()) {
+        const Rgba caption = a.border != PH_COLOR_AUTO   ? unpack_color_exact(a.border)
+                             : a.color != PH_COLOR_AUTO  ? unpack_color_exact(a.color)
+                                                         : unpack_color_exact(colors.text);
+        painter.label(a.label, rx + 4.0, ry - 3.0, text::Align::Left, text::Baseline::Bottom,
+                      caption, kAnnotationLabelSize);
+      }
+      break;
+    }
+    case PH_ANNOTATION_LABEL: {
+      const text::Align align = a.align == PH_ALIGN_CENTER  ? text::Align::Center
+                                : a.align == PH_ALIGN_RIGHT ? text::Align::Right
+                                                            : text::Align::Left;
+      const text::Baseline baseline = a.baseline == PH_BASELINE_TOP      ? text::Baseline::Top
+                                      : a.baseline == PH_BASELINE_BOTTOM ? text::Baseline::Bottom
+                                      : a.baseline == PH_BASELINE_ALPHABETIC
+                                          ? text::Baseline::Alphabetic
+                                          : text::Baseline::Middle;
+      painter.label(a.text, px(a.x0) + a.dx, py(a.y0) + a.dy, align, baseline, text_color,
+                    a.size > 0.0f ? a.size : kAnnotationLabelSize);
+      break;
+    }
+    case PH_ANNOTATION_LINE:
+    case PH_ANNOTATION_RAY: {
+      const double width = a.width > 0.0f ? a.width : 1.5;
+      const double sx0 = px(a.x0);
+      const double sy0 = py(a.y0);
+      double sx1 = px(a.x1);
+      double sy1 = py(a.y1);
+      if (a.type == PH_ANNOTATION_RAY) {
+        // Extended far past the second point; the region clip trims it to the
+        // edge, which is cheaper than solving for the intersection.
+        const double dx = sx1 - sx0;
+        const double dy = sy1 - sy0;
+        double len = std::hypot(dx, dy);
+        if (len == 0.0) len = 1.0;
+        const double f = 8000.0 / len;
+        sx1 = sx0 + dx * f;
+        sy1 = sy0 + dy * f;
+      }
+      painter.segment(sx0, sy0, sx1, sy1, width, a.dash, stroke);
+      if (!a.label.empty()) {
+        painter.label(a.label, px(a.x1) + 7.0, py(a.y1) - 4.0, text::Align::Left,
+                      text::Baseline::Bottom, text_color, kAnnotationLabelSize);
+      }
+      break;
+    }
+    default: {
+      const std::vector<double>& ratios = a.ratios.empty() ? default_fib_ratios() : a.ratios;
+      const double span = a.high - a.low;
+      const double fx0 = std::min(px(a.x0), px(a.x1));
+      const double fx1 = std::max(px(a.x0), px(a.x1));
+      std::vector<double> ys;
+      ys.reserve(ratios.size());
+      for (const double r : ratios) ys.push_back(py(a.high - span * r));
+      if (a.fill) {
+        for (size_t i = 0; i + 1 < ys.size(); ++i) {
+          const float alpha = (i % 2 == 0) ? 0.06f : 0.12f;
+          painter.fill(fx0, std::min(ys[i], ys[i + 1]), fx1 - fx0, std::abs(ys[i + 1] - ys[i]),
+                       Rgba{96.0f / 255.0f, 165.0f / 255.0f, 250.0f / 255.0f, alpha});
+        }
+      }
+      for (size_t i = 0; i < ratios.size(); ++i) {
+        painter.hairline(false, crisp(ys[i]), fx0, fx1, 1.0, stroke);
+        // "38.2% · 104.71" — the same shape the TypeScript writes, with the
+        // middle dot spelled in UTF-8 because the source file is ASCII.
+        painter.label(fixed_format(ratios[i] * 100.0, 1) + "% \xc2\xb7 " +
+                          fixed_format(a.high - span * ratios[i], 2),
+                      fx0 + 4.0, ys[i] - 2.0, text::Align::Left, text::Baseline::Bottom, stroke,
+                      kAnnotationLabelSize);
+      }
+      if (!a.label.empty() && !ys.empty()) {
+        painter.label(a.label, fx0 + 4.0, *std::min_element(ys.begin(), ys.end()) - 4.0,
+                      text::Align::Left, text::Baseline::Bottom, stroke, kAnnotationLabelSize);
+      }
+      break;
+    }
   }
 }
 

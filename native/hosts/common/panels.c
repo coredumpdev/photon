@@ -697,6 +697,39 @@ static void build_candles(ph_panels* p, ph_plot plot) {
   candles.count = SESSIONS;
   ph_layer layer = PH_NULL_HANDLE;
   ph_plot_add_candlestick(plot, &candles, &layer);
+
+  /* Annotations are what a price chart is usually marked up with, so this is
+   * where they belong: a value area, the level it is measured from, and a
+   * trendline through the low. All in data space, so they pan and zoom. */
+  ph_annotation_id id = 0;
+  ph_annotation note;
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_BAND;
+  note.dim = PH_DIM_Y;
+  note.y0 = 96.0;
+  note.y1 = 100.0;
+  note.color = parse("#38bdf826");
+  ph_plot_add_annotation(plot, &note, &id);
+
+  static const float dash[2] = {5.0f, 4.0f};
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_SPAN;
+  note.dim = PH_DIM_Y;
+  note.y0 = 100.0;
+  note.color = parse("#94a3b8");
+  note.dash = dash;
+  note.dash_count = 2;
+  ph_plot_add_annotation(plot, &note, &id);
+
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_LINE;
+  note.x0 = 12.0;
+  note.y0 = 91.0;
+  note.x1 = 33.0;
+  note.y1 = 103.0;
+  note.width = 1.5f;
+  note.color = parse("#a3e635");
+  ph_plot_add_annotation(plot, &note, &id);
 }
 
 /* Panel 13 — the same sessions as OHLC bars, so the two are comparable. */
