@@ -32,6 +32,7 @@ generated bindings. Faz 4 is the rest of the layers.
 | GLFW host | window, input, dpr, and a four-panel gallery |
 | Qt Quick host | `QQuickFramebufferObject` item, render-thread safe, QML module |
 | Qt Widgets host | `QOpenGLWidget`, same charts, GUI thread |
+| Java host | LWJGL window, Panama upcall for GL resolution — output pixel-identical to the C host |
 | C# and Java bindings | generated from the header; Java built and run by ctest |
 | Layout verification | every generated field offset asserted against the compiler |
 
@@ -335,6 +336,13 @@ against what the compiler produces, built as part of the test suite. And
 Panama and fails if it missed one, which is the only test that exercises the
 marshalled view rather than the C view. The C# twin exists but has never been
 compiled; see [`bindings/README.md`](bindings/README.md).
+
+The claim the whole port rests on — that one engine draws the same chart
+everywhere — is checked rather than asserted. The GLFW gallery and the Java one
+were rendered at the same size and compared pixel by pixel: **0 of 1,075,200
+pixels differ by more than two levels**, and the two that do are rounding in the
+comparison's own alpha compositing. The demo charts use a fixed LCG rather than
+a random source precisely so that this comparison can exist.
 
 ## Adding the remaining layers
 

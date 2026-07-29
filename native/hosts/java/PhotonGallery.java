@@ -1,0 +1,557 @@
+// The Java gallery: the same four charts as the GLFW and Qt ones, in a window.
+//
+// This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
+// that. What it adds is the part of the ABI a headless test cannot reach: a
+// real GL context, and the one place the ABI calls *back* into the host.
+//
+// `ph_host_desc.get_proc_address` is that place, and it is the only callback in
+// the whole ABI. Everything else is polled precisely so that a managed runtime
+// never has to hand a function pointer across — but GL entry points have to be
+// resolved by whoever owns the context, so this one is unavoidable. Panama
+// makes it an upcall stub; see resolveGlStub() below, which is the interesting
+// twenty lines of this file.
+//
+// The window comes from LWJGL's GLFW. Photon does its own GL loading, so
+// lwjgl-opengl is not needed: the only GL this file touches is the context.
+//
+//   ./hosts/java/run-gallery.sh
+//
+//   drag   pan          wheel   zoom about the cursor
+//   B      box zoom     P       back to pan
+//   R      reset view   T       light / dark
+//   space  pause the streaming panel      Esc  quit
+
+import static photon.Photon.*;
+
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.system.MemoryStack;
+import photon.Photon;
+
+public final class PhotonGallery {
+
+    private static final int PANELS = 4;
+    private static final int COLUMNS = 2;
+    private static final int SAMPLES = 512;
+    private static final int SCATTER_POINTS = 1500;
+    private static final int STREAM_POINTS = 400;
+
+    /** Lives as long as the window: the streaming panel rewrites its arrays. */
+    private static final Arena ARENA = Arena.ofShared();
+
+    private static final long[] plots = new long[PANELS];
+    private static long streamLayer = PH_NULL_HANDLE;
+    private static MemorySegment streamX;
+    private static MemorySegment streamY;
+
+    private static long window;
+    private static int theme = PH_THEME_DARK;
+    private static boolean paused = false;
+    private static double cursorX, cursorY;
+    private static int hovered = -1;
+
+    // -----------------------------------------------------------------------
+    // The callback
+    // -----------------------------------------------------------------------
+
+    /**
+     * What Photon calls to resolve a GL entry point.
+     *
+     * It runs on whichever thread is rendering, with the context current, which
+     * here is the main thread. The name arrives as a NUL-terminated C string in
+     * memory the library owns, so it is reinterpreted with an unbounded size
+     * before being read — a raw upcall parameter has length zero until told
+     * otherwise, and getString would refuse.
+     */
+    private static MemorySegment resolveGl(MemorySegment name, MemorySegment user) {
+        String symbol = name.reinterpret(Long.MAX_VALUE).getString(0);
+        long address = GLFW.glfwGetProcAddress(symbol);
+        return address == 0L ? MemorySegment.NULL : MemorySegment.ofAddress(address);
+    }
+
+    private static MemorySegment resolveGlStub() throws Exception {
+        MethodHandle handle = MethodHandles.lookup().findStatic(
+            PhotonGallery.class, "resolveGl",
+            MethodType.methodType(MemorySegment.class, MemorySegment.class, MemorySegment.class));
+        return Linker.nativeLinker().upcallStub(
+            handle,
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+            Arena.global());
+    }
+
+    // -----------------------------------------------------------------------
+    // The charts — the same four as hosts/common/panels.c, through the binding
+    // -----------------------------------------------------------------------
+
+    private static MemorySegment doubles(int count) {
+        return ARENA.allocate(ValueLayout.JAVA_DOUBLE, count);
+    }
+
+    private static long create(String background) {
+        MemorySegment desc = ph_plot_desc.allocate(ARENA);
+        ph_plot_desc_init(desc);
+        desc.set(ValueLayout.JAVA_INT, ph_plot_desc.OFFSET_THEME, theme);
+        desc.set(ValueLayout.JAVA_INT, ph_plot_desc.OFFSET_BACKGROUND, color(background));
+        // The host draws nothing of its own — no glClear, no lwjgl-opengl — so
+        // the plot paints its whole cell, margins included. That is what
+        // `border` is for, and it means every frame fully repaints.
+        desc.set(ValueLayout.JAVA_INT, ph_plot_desc.OFFSET_BORDER, color("#0d1117"));
+
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        int result = ph_plot_create(desc, out);
+        if (result != PH_OK) throw new IllegalStateException(Photon.lastError());
+        return out.get(ValueLayout.JAVA_LONG, 0);
+    }
+
+    private static int color(String css) {
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment out = scratch.allocate(ValueLayout.JAVA_INT);
+            ph_color_parse(scratch.allocateFrom(css), out);
+            return out.get(ValueLayout.JAVA_INT, 0);
+        }
+    }
+
+    private static void styleAxis(long plot, String axis, String title, int minors) {
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment config = ph_axis_config.allocate(scratch);
+            ph_axis_config_init(config);
+            config.set(ValueLayout.ADDRESS, ph_axis_config.OFFSET_TITLE,
+                       scratch.allocateFrom(title));
+            config.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_MINOR_TICKS, minors);
+            ph_plot_set_axis_config(plot, scratch.allocateFrom(axis), config);
+        }
+    }
+
+    private static void setTitle(long plot, String title) {
+        try (Arena scratch = Arena.ofConfined()) {
+            ph_plot_set_title(plot, scratch.allocateFrom(title));
+        }
+    }
+
+    private static long addLine(long plot, MemorySegment xs, MemorySegment ys, int count,
+                                String css, float width, MemorySegment dash, int dashCount,
+                                int join) {
+        MemorySegment desc = ph_line_desc.allocate(ARENA);
+        ph_line_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_COUNT, count);
+        desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_COLOR, color(css));
+        desc.set(ValueLayout.JAVA_FLOAT, ph_line_desc.OFFSET_WIDTH, width);
+        desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_JOIN, join);
+        if (dash != null) {
+            desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_DASH, dash);
+            desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_DASH_COUNT, dashCount);
+        }
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_line(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+        return out.get(ValueLayout.JAVA_LONG, 0);
+    }
+
+    private static void buildWaves(long plot) {
+        MemorySegment xs = doubles(SAMPLES);
+        MemorySegment sine = doubles(SAMPLES);
+        MemorySegment damped = doubles(SAMPLES);
+        for (int i = 0; i < SAMPLES; i++) {
+            double t = i * 0.05;
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, t);
+            sine.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.sin(t));
+            damped.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                              Math.exp(-t * 0.12) * Math.cos(t * 1.6));
+        }
+        setTitle(plot, "Waves");
+        styleAxis(plot, "x", "time (s)", 4);
+        styleAxis(plot, "y", "amplitude", 0);
+
+        addLine(plot, xs, sine, SAMPLES, "#38bdf8", 2.0f, null, 0, PH_JOIN_ROUND);
+        MemorySegment dash = ARENA.allocate(ValueLayout.JAVA_FLOAT, 2);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 6.0f);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 1, 4.0f);
+        addLine(plot, xs, damped, SAMPLES, "#f472b6", 2.0f, dash, 2, PH_JOIN_MITER);
+    }
+
+    private static void buildDecay(long plot) {
+        MemorySegment xs = doubles(SAMPLES);
+        MemorySegment ys = doubles(SAMPLES);
+        for (int i = 0; i < SAMPLES; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 1.0e6 * Math.exp(-i * 0.022) + 1.0);
+        }
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment axis = ph_axis_desc.allocate(scratch);
+            ph_axis_desc_init(axis);
+            axis.set(ValueLayout.JAVA_INT, ph_axis_desc.OFFSET_TYPE, PH_SCALE_LOG);
+            ph_plot_set_scale(plot, scratch.allocateFrom("y"), axis);
+        }
+        setTitle(plot, "Log decay");
+        styleAxis(plot, "x", "sample", 0);
+        styleAxis(plot, "y", "counts", 0);
+        addLine(plot, xs, ys, SAMPLES, "#a3e635", 2.0f, null, 0, PH_JOIN_ROUND);
+    }
+
+    private static void buildScatter(long plot) {
+        MemorySegment xs = doubles(SCATTER_POINTS);
+        MemorySegment ys = doubles(SCATTER_POINTS);
+        MemorySegment sizes = ARENA.allocate(ValueLayout.JAVA_FLOAT, SCATTER_POINTS);
+        MemorySegment colors = ARENA.allocate(ValueLayout.JAVA_INT, SCATTER_POINTS);
+
+        // The same plain LCG the C panels use, so the picture is identical in
+        // every host and on every machine — which is the point of having three.
+        int seed = 12345;
+        int[] palette = {0x60a5faff, 0xf59e0bff, 0x34d399ff, 0xf87171ff};
+        for (int i = 0; i < SCATTER_POINTS; i++) {
+            seed = seed * 1664525 + 1013904223;
+            double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            seed = seed * 1664525 + 1013904223;
+            double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+
+            double radius = Math.sqrt(-2.0 * Math.log(u + 1e-12));
+            double angle = 6.283185307179586 * v;
+            double x = radius * Math.cos(angle);
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, x);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, radius * Math.sin(angle) * 0.6 + x * 0.35);
+            sizes.setAtIndex(ValueLayout.JAVA_FLOAT, i, (float) (3.0 + u * 7.0));
+            colors.setAtIndex(ValueLayout.JAVA_INT, i, palette[i & 3]);
+        }
+
+        setTitle(plot, "Scatter");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        // An array of ph_tick — the ABI's answer to the web core's tick callback.
+        try (Arena scratch = Arena.ofConfined()) {
+            double[] values = {-3.0, -1.5, 0.0, 1.5, 3.0};
+            MemorySegment ticks = scratch.allocate(ph_tick.LAYOUT, values.length);
+            for (int i = 0; i < values.length; i++) {
+                long base = i * ph_tick.SIZE;
+                ticks.set(ValueLayout.JAVA_DOUBLE, base + ph_tick.OFFSET_VALUE, values[i]);
+                ticks.set(ValueLayout.ADDRESS, base + ph_tick.OFFSET_LABEL,
+                          values[i] == 0.0 ? scratch.allocateFrom("origin") : MemorySegment.NULL);
+                ticks.set(ValueLayout.JAVA_INT, base + ph_tick.OFFSET_GRID, PH_TOGGLE_DEFAULT);
+            }
+            ph_plot_set_axis_ticks(plot, scratch.allocateFrom("x"), ticks, values.length);
+        }
+
+        MemorySegment desc = ph_scatter_desc.allocate(ARENA);
+        ph_scatter_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_COUNT, SCATTER_POINTS);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_SIZES, sizes);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_COLORS, colors);
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_MARKER, PH_MARKER_CIRCLE);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_scatter(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    private static void buildStream(long plot) {
+        streamX = doubles(STREAM_POINTS);
+        streamY = doubles(STREAM_POINTS);
+        for (int i = 0; i < STREAM_POINTS; i++) {
+            streamX.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+        }
+        setTitle(plot, "Streaming");
+        styleAxis(plot, "x", "tick", 0);
+        styleAxis(plot, "y", "value", 0);
+
+        MemorySegment desc = ph_line_desc.allocate(ARENA);
+        ph_line_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_X, streamX);
+        desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_Y, streamY);
+        desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_COUNT, STREAM_POINTS);
+        desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_COLOR, color("#c084fc"));
+        desc.set(ValueLayout.JAVA_FLOAT, ph_line_desc.OFFSET_WIDTH, 1.5f);
+        desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_RENDER_TYPE, PH_RENDER_DYNAMIC);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_line(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+        streamLayer = out.get(ValueLayout.JAVA_LONG, 0);
+
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment domain = ph_range.allocate(scratch);
+            domain.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO, -2.2);
+            domain.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI, 2.2);
+            ph_plot_set_domain(plot, scratch.allocateFrom("y"), domain);
+        }
+    }
+
+    private static void advanceStream(double seconds) {
+        for (int i = 0; i < STREAM_POINTS; i++) {
+            double phase = seconds * 2.0 + i * 0.035;
+            streamY.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                Math.sin(phase) + 0.4 * Math.sin(phase * 3.1 + 1.0) + 0.15 * Math.sin(phase * 7.7));
+        }
+        ph_layer_set_xy(streamLayer, streamX, streamY, STREAM_POINTS);
+    }
+
+    // -----------------------------------------------------------------------
+    // Window, layout and input
+    // -----------------------------------------------------------------------
+
+    private static int rows() {
+        return (PANELS + COLUMNS - 1) / COLUMNS;
+    }
+
+    private static int[] windowSize() {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            int[] width = new int[1];
+            int[] height = new int[1];
+            GLFW.glfwGetWindowSize(window, width, height);
+            return new int[] {width[0], height[0]};
+        }
+    }
+
+    private static int[] framebufferSize() {
+        int[] width = new int[1];
+        int[] height = new int[1];
+        GLFW.glfwGetFramebufferSize(window, width, height);
+        return new int[] {width[0], height[0]};
+    }
+
+    /** Which cell (mx, my) falls in, in logical window coordinates. */
+    private static int cellAt(double mx, double my) {
+        int[] size = windowSize();
+        double cw = (double) size[0] / COLUMNS;
+        double ch = (double) size[1] / rows();
+        if (cw <= 0 || ch <= 0) return -1;
+        int column = (int) Math.floor(mx / cw);
+        int row = (int) Math.floor(my / ch);
+        if (column < 0 || column >= COLUMNS || row < 0 || row >= rows()) return -1;
+        int index = row * COLUMNS + column;
+        return index < PANELS ? index : -1;
+    }
+
+    private static double[] cellLocal(int index, double mx, double my) {
+        int[] size = windowSize();
+        double cw = (double) size[0] / COLUMNS;
+        double ch = (double) size[1] / rows();
+        return new double[] {mx - (index % COLUMNS) * cw, my - (index / COLUMNS) * ch};
+    }
+
+    private static void installCallbacks() {
+        GLFW.glfwSetCursorPosCallback(window, (win, mx, my) -> {
+            cursorX = mx;
+            cursorY = my;
+            int index = cellAt(mx, my);
+            if (index != hovered && hovered >= 0) ph_plot_pointer_leave(plots[hovered]);
+            hovered = index;
+            if (index < 0) return;
+            double[] local = cellLocal(index, mx, my);
+            ph_plot_pointer_move(plots[index], local[0], local[1], PH_MOD_NONE);
+        });
+
+        GLFW.glfwSetMouseButtonCallback(window, (win, button, action, mods) -> {
+            int index = cellAt(cursorX, cursorY);
+            if (index < 0) return;
+            double[] local = cellLocal(index, cursorX, cursorY);
+            int which = button == GLFW.GLFW_MOUSE_BUTTON_RIGHT ? PH_BUTTON_RIGHT
+                      : button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE ? PH_BUTTON_MIDDLE
+                      : PH_BUTTON_LEFT;
+            if (action == GLFW.GLFW_PRESS) {
+                ph_plot_pointer_down(plots[index], local[0], local[1], which, PH_MOD_NONE);
+            } else if (action == GLFW.GLFW_RELEASE) {
+                ph_plot_pointer_up(plots[index], local[0], local[1], which, PH_MOD_NONE);
+            }
+        });
+
+        GLFW.glfwSetScrollCallback(window, (win, xoffset, yoffset) -> {
+            int index = cellAt(cursorX, cursorY);
+            if (index < 0) return;
+            double[] local = cellLocal(index, cursorX, cursorY);
+            // GLFW counts notches, positive upward. The core follows the
+            // browser's WheelEvent.deltaY: positive downward, ~100 per notch.
+            ph_plot_wheel(plots[index], local[0], local[1], -yoffset * 100.0, PH_MOD_NONE);
+        });
+
+        GLFW.glfwSetKeyCallback(window, (win, key, scancode, action, mods) -> {
+            if (action != GLFW.GLFW_PRESS) return;
+            switch (key) {
+                case GLFW.GLFW_KEY_ESCAPE -> GLFW.glfwSetWindowShouldClose(win, true);
+                case GLFW.GLFW_KEY_R -> {
+                    for (long plot : plots) ph_plot_reset_view(plot);
+                }
+                case GLFW.GLFW_KEY_B -> {
+                    for (long plot : plots) ph_plot_set_mode(plot, PH_MODE_BOX);
+                }
+                case GLFW.GLFW_KEY_P -> {
+                    for (long plot : plots) ph_plot_set_mode(plot, PH_MODE_PAN);
+                }
+                case GLFW.GLFW_KEY_T -> {
+                    theme = theme == PH_THEME_DARK ? PH_THEME_LIGHT : PH_THEME_DARK;
+                    for (long plot : plots) ph_plot_set_theme(plot, theme);
+                }
+                case GLFW.GLFW_KEY_SPACE -> paused = !paused;
+                default -> { }
+            }
+        });
+    }
+
+    private static void drawFrame(Arena frame) {
+        int[] logical = windowSize();
+        int[] device = framebufferSize();
+        if (device[0] <= 0 || device[1] <= 0) return;
+        // From the two sizes rather than the content scale: on fractional
+        // scaling they disagree, and it is the framebuffer that must win.
+        float dpr = logical[0] > 0 ? (float) device[0] / logical[0] : 1.0f;
+
+        double cw = (double) logical[0] / COLUMNS;
+        double ch = (double) logical[1] / rows();
+        for (int i = 0; i < PANELS; i++) ph_plot_set_size(plots[i], (int) Math.round(cw),
+                                                          (int) Math.round(ch));
+
+        MemorySegment target = ph_frame_target.allocate(frame);
+        for (int i = 0; i < PANELS; i++) {
+            int column = i % COLUMNS;
+            int row = i / COLUMNS;
+            ph_frame_target_init(target);
+            int x = (int) Math.round(column * cw * dpr);
+            int right = (int) Math.round((column + 1) * cw * dpr);
+            int top = (int) Math.round(row * ch * dpr);
+            int bottom = (int) Math.round((row + 1) * ch * dpr);
+
+            target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_FRAMEBUFFER, 0);
+            target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_X, x);
+            target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_WIDTH, right - x);
+            // GL's origin is bottom-left, so the top row of cells is the high y.
+            target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_Y, device[1] - bottom);
+            target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_HEIGHT, bottom - top);
+            target.set(ValueLayout.JAVA_FLOAT, ph_frame_target.OFFSET_DPR, dpr);
+
+            if (ph_plot_render(plots[i], target) != PH_OK) {
+                throw new IllegalStateException("render: " + Photon.lastError());
+            }
+        }
+    }
+
+    /**
+     * Render every panel through ph_plot_render_pixels and write a PNG.
+     *
+     * The same `--grab` the Qt galleries have, and for the same reason: the
+     * comparison against the web gallery should be an image diff rather than a
+     * squint. It also needs no GL beyond the context — the readback path is
+     * what JavaFX and WPF would use, so exercising it here is free coverage.
+     */
+    private static void grab(String path, Arena frame) throws Exception {
+        int cellWidth = 640;
+        int cellHeight = 420;
+        int stride = cellWidth * 4;
+        MemorySegment pixels = frame.allocate((long) stride * cellHeight);
+        BufferedImage sheet = new BufferedImage(cellWidth * COLUMNS, cellHeight * rows(),
+                                                BufferedImage.TYPE_INT_ARGB);
+        for (int i = 0; i < PANELS; i++) {
+            ph_plot_set_size(plots[i], cellWidth, cellHeight);
+            int result = ph_plot_render_pixels(plots[i], cellWidth, cellHeight, 1.0f, pixels,
+                                               stride);
+            if (result != PH_OK) throw new IllegalStateException(Photon.lastError());
+            int ox = (i % COLUMNS) * cellWidth;
+            int oy = (i / COLUMNS) * cellHeight;
+            for (int y = 0; y < cellHeight; y++) {
+                for (int x = 0; x < cellWidth; x++) {
+                    long at = (long) y * stride + (long) x * 4;
+                    int r = pixels.get(ValueLayout.JAVA_BYTE, at) & 0xFF;
+                    int g = pixels.get(ValueLayout.JAVA_BYTE, at + 1) & 0xFF;
+                    int b = pixels.get(ValueLayout.JAVA_BYTE, at + 2) & 0xFF;
+                    int a = pixels.get(ValueLayout.JAVA_BYTE, at + 3) & 0xFF;
+                    sheet.setRGB(ox + x, oy + y, (a << 24) | (r << 16) | (g << 8) | b);
+                }
+            }
+        }
+        ImageIO.write(sheet, "png", new java.io.File(path));
+        System.out.println("wrote " + path + " " + sheet.getWidth() + "x" + sheet.getHeight());
+    }
+
+    public static void main(String[] args) throws Exception {
+        GLFWErrorCallback.createPrint(System.err).set();
+        if (!GLFW.glfwInit()) throw new IllegalStateException("could not initialize GLFW");
+
+        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
+        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3);
+        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE);
+        GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GLFW.GLFW_TRUE);
+        GLFW.glfwWindowHint(GLFW.GLFW_SCALE_TO_MONITOR, GLFW.GLFW_TRUE);
+
+        window = GLFW.glfwCreateWindow(1280, 800, "Photon — Java gallery", 0L, 0L);
+        if (window == 0L) throw new IllegalStateException("could not create a GL 3.3 core window");
+        GLFW.glfwMakeContextCurrent(window);
+        GLFW.glfwSwapInterval(1);
+
+        MemorySegment host = ph_host_desc.allocate(ARENA);
+        ph_host_desc_init(host);
+        host.set(ValueLayout.JAVA_INT, ph_host_desc.OFFSET_API, PH_GFX_GL33);
+        host.set(ValueLayout.ADDRESS, ph_host_desc.OFFSET_GET_PROC_ADDRESS, resolveGlStub());
+        if (ph_init(ABI_VERSION, host) != PH_OK) {
+            throw new IllegalStateException("ph_init: " + Photon.lastError());
+        }
+
+        for (int i = 0; i < PANELS; i++) plots[i] = create("#0f172a");
+        buildWaves(plots[0]);
+        buildDecay(plots[1]);
+        buildScatter(plots[2]);
+        buildStream(plots[3]);
+
+        installCallbacks();
+
+        // `--frames N` renders N frames and exits, so the gallery can be run in
+        // a check rather than only by hand.
+        int limit = -1;
+        String grabPath = null;
+        for (int i = 0; i + 1 < args.length; i++) {
+            if (args[i].equals("--frames")) limit = Integer.parseInt(args[i + 1]);
+            if (args[i].equals("--grab")) grabPath = args[i + 1];
+        }
+
+        if (grabPath != null) {
+            try (Arena frame = Arena.ofConfined()) {
+                advanceStream(1.7);  // a fixed phase, so the image is reproducible
+                grab(grabPath, frame);
+            }
+            ph_shutdown();
+            GLFW.glfwDestroyWindow(window);
+            GLFW.glfwTerminate();
+            ARENA.close();
+            return;
+        }
+
+        try (Arena frame = Arena.ofConfined()) {
+            MemorySegment event = ph_event.allocate(frame);
+            long drawn = 0;
+            while (!GLFW.glfwWindowShouldClose(window) && (limit < 0 || drawn < limit)) {
+                if (!paused) advanceStream(GLFW.glfwGetTime());
+                drawFrame(frame);
+                GLFW.glfwSwapBuffers(window);
+                drawn++;
+
+                for (long plot : plots) {
+                    while (ph_plot_poll_event(plot, event) == PH_OK
+                           && event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE)
+                              != PH_EVENT_NONE) {
+                        // Drained so the queue cannot grow; this host redraws
+                        // every frame anyway, so nothing here needs acting on.
+                    }
+                }
+                GLFW.glfwPollEvents();
+            }
+            if (limit >= 0) System.out.println("rendered " + drawn + " frames");
+        }
+
+        ph_shutdown();
+        GLFW.glfwDestroyWindow(window);
+        GLFW.glfwTerminate();
+        ARENA.close();
+    }
+}

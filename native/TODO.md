@@ -49,7 +49,14 @@ The bindings are generated and the Java one is tested; the samples are not.
 - [ ] JavaFX and WPF samples driving `ph_plot_render_pixels` into a
       `WritableImage` / `WriteableBitmap`.
 - [ ] An idiomatic wrapper over each binding. Both are faithful mirrors of the C
-      names on purpose; something pleasant belongs above them, not instead.
+      names on purpose; something pleasant belongs above them, not instead. The
+      Java gallery shows why one is wanted — it says
+      `desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_X, xs)` where a wrapper
+      would say `line.x(xs)`.
+- [ ] The Java gallery transcribes the demo charts rather than sharing
+      `hosts/common/panels.c`, which is ordinary C and not part of the ABI. The
+      pixel comparison in `hosts/java/README.md` is what keeps the two honest;
+      if a fifth host appears, that comparison should become a script.
 - [ ] `tools/generate_bindings.py --check` in CI, so a header change that is not
       regenerated fails the build rather than being noticed later.
 - [ ] The generator assumes a 64-bit target. 32-bit would need its own pair, and

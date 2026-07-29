@@ -7,10 +7,11 @@ can drive GLFW, Qt/QML, C# and Java hosts.
 interaction model are complete and tested; the OpenGL 3.3 backend draws line and
 scatter series with a full chart around them — grid, axes, tick labels, axis
 titles and a plot title, all rendered from an embedded SDF font.
-`ph_plot_render_pixels` covers hosts with no GL interop. Three hosts drive the
-same engine: GLFW, Qt Quick and Qt Widgets, all showing the same four charts
-from `hosts/common/panels.c`. C# and Java bindings are generated from the header,
-and the Java one is built and run by `ctest`. Next are the remaining layer types.
+`ph_plot_render_pixels` covers hosts with no GL interop. Four hosts drive the
+same engine: GLFW, Qt Quick, Qt Widgets and Java, all showing the same four charts
+from `hosts/common/panels.c`. C# and Java bindings are generated from the header;
+the Java one is built and run by `ctest`, and drives a fourth gallery whose
+output is pixel-identical to the C one. Next are the remaining layer types.
 See [DESIGN.md](DESIGN.md) for the architecture and the reasoning behind it, and
 [TODO.md](TODO.md) for what is still outstanding.
 
@@ -33,9 +34,9 @@ presets).
 
 ### The galleries
 
-The same four charts, under three hosts. Both host options are off by default —
-GLFW because it is fetched over the network, Qt because it is a large thing to
-require of anyone building the library.
+The same four charts, under four hosts. The CMake host options are off by
+default — GLFW because it is fetched over the network, Qt because it is a large
+thing to require of anyone building the library.
 
 ```bash
 cmake -S . -B build/hosts -DPHOTON_BUILD_GLFW_HOST=ON -DPHOTON_BUILD_QT_HOST=ON
@@ -44,6 +45,12 @@ cmake --build build/hosts
 ./build/hosts/bin/photon_gallery            # GLFW
 ./build/hosts/bin/photon_gallery_qml        # Qt Quick
 ./build/hosts/bin/photon_gallery_widgets    # Qt Widgets
+```
+
+The Java one is a script rather than a CMake target, and fetches LWJGL itself:
+
+```bash
+./hosts/java/run-gallery.sh                 # needs a JDK 22+
 ```
 
 The GLFW gallery's keys:
@@ -97,6 +104,7 @@ hosts/
   common/panels.c         the demo charts, shared by every host
   glfw/                   window, input, a grid of plots in one context
   qt/                     a QQuickFramebufferObject item and a QOpenGLWidget
+  java/                   LWJGL window, Panama upcall for GL resolution
 third_party/
   stb_truetype.h          public domain, v1.26
   fonts/                  Inter subset (OFL-1.1) + its license
