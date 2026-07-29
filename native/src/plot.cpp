@@ -128,6 +128,7 @@ Plot::Plot(const ph_plot_desc& desc) {
   interactive_ = desc.no_interaction == 0;
   hover_enabled_ = desc.no_hover == 0;
   crosshair_ = desc.no_crosshair == 0;
+  tooltip_ = desc.no_tooltip == 0;
   colorbar_ = desc.no_colorbar == 0;
   legend_ = desc.legend != 0;
   legend_position_ = desc.legend_position;
@@ -1014,8 +1015,36 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
     } else {
       render::draw_crosshair(painter, rect, hover_px_, theme_);
     }
-    for (const Hit& hit : hover_hits()) {
+    const std::vector<Hit> hits = hover_hits();
+    for (const Hit& hit : hits) {
       render::draw_marker(painter, hit.px, hit.py, unpack_color(hit.layer->color()));
+    }
+    if (tooltip_) {
+      // The header is the cursor's x through the axis's own formatter, so a
+      // time axis reads as a date and a categorical one as its factor.
+      double data_x = 0.0;
+      double data_y = 0.0;
+      data_at_pixel(hover_px_, hover_py_, data_x, data_y);
+      std::vector<render::TooltipRow> rows;
+      rows.push_back(render::TooltipRow{"x = " + scale_x_.format_tick(data_x), Rgba{}, false});
+      for (const Hit& hit : hits) {
+        // Unnamed layers are builder helpers; naming one "line-3" in a tooltip
+        // would be worse than leaving it out.
+        if (hit.layer->name().empty()) continue;
+        const YAxis* axis = &primary_y();
+        for (const YAxis& candidate : y_axes_) {
+          if (candidate.id == hit.layer->y_axis()) {
+            axis = &candidate;
+            break;
+          }
+        }
+        rows.push_back(render::TooltipRow{
+            hit.layer->name() + ": " + axis->scale.format_tick(hit.point.y),
+            unpack_color(hit.layer->color()), true});
+      }
+      const render::Rect bounds{0.0, 0.0, static_cast<double>(width_),
+                                static_cast<double>(height_)};
+      render::draw_tooltip(painter, bounds, hover_px_, hover_py_, rows, theme_);
     }
   }
 

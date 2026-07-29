@@ -527,6 +527,15 @@ extern "C" ph_result PH_CALL ph_plot_set_legend(ph_plot handle, const ph_legend_
   return PH_OK;
 }
 
+extern "C" ph_result PH_CALL ph_plot_set_tooltip(ph_plot handle, ph_bool enabled) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_tooltip(enabled != 0);
+  return PH_OK;
+}
+
 extern "C" ph_result PH_CALL ph_plot_set_pick_mode(ph_plot handle, ph_pick_mode mode) {
   clear_error();
   Plot* plot = nullptr;

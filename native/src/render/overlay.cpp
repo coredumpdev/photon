@@ -450,6 +450,85 @@ Rect draw_legend(Painter& painter, const Rect& region, const std::vector<LegendE
   return panel;
 }
 
+namespace {
+
+/// The tooltip's own numbers, from the DOM style in plot.ts.
+constexpr double kTipPadX = 8.0;
+constexpr double kTipPadY = 6.0;
+constexpr double kTipRadius = 6.0;
+constexpr double kTipFontSize = 12.0;
+constexpr double kTipLineHeight = 18.0;
+constexpr double kTipDot = 8.0;
+constexpr double kTipDotGap = 6.0;
+constexpr double kTipHeaderGap = 3.0;
+constexpr double kTipCursorGap = 14.0;
+/// The header is dimmer than the rows, as the web's 0.7 opacity makes it.
+constexpr float kTipHeaderAlpha = 0.7f;
+
+}  // namespace
+
+void draw_tooltip(Painter& painter, const Rect& bounds, double cursor_px, double cursor_py,
+                  const std::vector<TooltipRow>& rows, ph_theme theme) {
+  if (rows.empty()) return;
+
+  double width = 0.0;
+  double height = 0.0;
+  for (const TooltipRow& row : rows) {
+    double w = painter.measure(row.text, kTipFontSize);
+    if (row.swatch) w += kTipDot + kTipDotGap;
+    width = std::max(width, w);
+    height += kTipLineHeight;
+    if (!row.swatch) height += kTipHeaderGap;
+  }
+
+  Rect panel;
+  panel.width = width + 2.0 * kTipPadX;
+  panel.height = height + 2.0 * kTipPadY;
+  // Near the cursor, flipped to whichever side keeps it inside — the same rule
+  // the web uses, and the reason a tooltip at the right edge does not vanish.
+  panel.left = cursor_px + kTipCursorGap;
+  if (panel.left + panel.width > bounds.right()) {
+    panel.left = cursor_px - panel.width - kTipCursorGap;
+  }
+  panel.top = cursor_py + kTipCursorGap;
+  if (panel.top + panel.height > bounds.bottom()) {
+    panel.top = cursor_py - panel.height - kTipCursorGap;
+  }
+  panel.left = std::max(0.0, panel.left);
+  panel.top = std::max(0.0, panel.top);
+
+  const bool dark = theme == PH_THEME_DARK;
+  const Rgba fill = dark ? Rgba{15.0f / 255.0f, 23.0f / 255.0f, 42.0f / 255.0f, 0.92f}
+                         : Rgba{1.0f, 1.0f, 1.0f, 0.95f};
+  const Rgba border = dark
+                          ? Rgba{148.0f / 255.0f, 163.0f / 255.0f, 184.0f / 255.0f, 0.25f}
+                          : Rgba{100.0f / 255.0f, 116.0f / 255.0f, 139.0f / 255.0f, 0.2f};
+  const Rgba text = dark ? Rgba{226.0f / 255.0f, 232.0f / 255.0f, 240.0f / 255.0f, 1.0f}
+                         : Rgba{30.0f / 255.0f, 41.0f / 255.0f, 59.0f / 255.0f, 1.0f};
+  fill_panel(painter, panel, kTipRadius, fill, border);
+
+  double y = panel.top + kTipPadY;
+  for (const TooltipRow& row : rows) {
+    const double mid = y + kTipLineHeight / 2.0;
+    double x = panel.left + kTipPadX;
+    if (row.swatch) {
+      // A disc, so a series reads the same here as it does under the cursor.
+      const int steps = std::max(1, static_cast<int>(std::ceil(kTipDot * painter.dpr())));
+      const double r = kTipDot / 2.0;
+      for (int i = 0; i < steps; ++i) {
+        const double dy = -r + (static_cast<double>(i) + 0.5) * (kTipDot / steps);
+        const double half = std::sqrt(std::max(0.0, r * r - dy * dy));
+        if (half <= 0.0) continue;
+        painter.fill(x + r - half, mid + dy, half * 2.0, kTipDot / steps + 0.5, row.color);
+      }
+      x += kTipDot + kTipDotGap;
+    }
+    painter.label(row.text, x, mid, text::Align::Left, text::Baseline::Middle,
+                  row.swatch ? text : with_alpha(text, kTipHeaderAlpha), kTipFontSize);
+    y += kTipLineHeight + (row.swatch ? 0.0 : kTipHeaderGap);
+  }
+}
+
 void draw_selection(Painter& painter, const Rect& region, double x0, double y0, double x1,
                     double y1, bool lock_x, bool lock_y) {
   const auto clamp = [](double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); };

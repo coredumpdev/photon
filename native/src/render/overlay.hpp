@@ -156,6 +156,23 @@ struct LegendEntry {
 Rect draw_legend(Painter& painter, const Rect& region, const std::vector<LegendEntry>& entries,
                  ph_legend_position position, bool horizontal, ph_theme theme);
 
+/// One tooltip line: an optional swatch, then text. A header row has no swatch.
+struct TooltipRow {
+  std::string text;
+  Rgba color{};
+  bool swatch = false;
+};
+
+/**
+ * The hover tooltip, near the cursor and flipped to stay inside `bounds`.
+ *
+ * `bounds` is the whole canvas, not the plot region: the web core positions
+ * against the container, so a tooltip near the right edge flips to the cursor's
+ * left rather than being clipped by the axis.
+ */
+void draw_tooltip(Painter& painter, const Rect& bounds, double cursor_px, double cursor_py,
+                  const std::vector<TooltipRow>& rows, ph_theme theme);
+
 /// Row `index`'s rectangle inside a legend panel laid out at `panel`.
 Rect legend_row_rect(const Rect& panel, size_t index, size_t count, bool horizontal,
                      const std::vector<LegendEntry>& entries, const Painter& painter);

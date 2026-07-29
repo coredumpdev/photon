@@ -372,7 +372,7 @@ public final class Photon {
         }
     }
 
-    /** ph_plot_desc — 208 bytes, alignment 8. */
+    /** ph_plot_desc — 216 bytes, alignment 8. */
     public static final class ph_plot_desc {
         private ph_plot_desc() {}
 
@@ -392,13 +392,15 @@ public final class Photon {
             ValueLayout.JAVA_INT.withName("no_interaction"),
             ValueLayout.JAVA_INT.withName("no_hover"),
             ValueLayout.JAVA_INT.withName("no_crosshair"),
+            ValueLayout.JAVA_INT.withName("no_tooltip"),
             ValueLayout.JAVA_INT.withName("no_colorbar"),
             ValueLayout.JAVA_INT.withName("equal_aspect"),
             ValueLayout.JAVA_INT.withName("bounded_pan"),
             ValueLayout.JAVA_INT.withName("legend"),
             ValueLayout.JAVA_INT.withName("legend_position"),
             ValueLayout.JAVA_INT.withName("legend_horizontal"),
-            ValueLayout.JAVA_INT.withName("legend_static")
+            ValueLayout.JAVA_INT.withName("legend_static"),
+            MemoryLayout.paddingLayout(4)
         ).withName("ph_plot_desc");
 
         public static final long SIZE = LAYOUT.byteSize();
@@ -418,13 +420,14 @@ public final class Photon {
         public static final long OFFSET_NO_INTERACTION = 168L;
         public static final long OFFSET_NO_HOVER = 172L;
         public static final long OFFSET_NO_CROSSHAIR = 176L;
-        public static final long OFFSET_NO_COLORBAR = 180L;
-        public static final long OFFSET_EQUAL_ASPECT = 184L;
-        public static final long OFFSET_BOUNDED_PAN = 188L;
-        public static final long OFFSET_LEGEND = 192L;
-        public static final long OFFSET_LEGEND_POSITION = 196L;
-        public static final long OFFSET_LEGEND_HORIZONTAL = 200L;
-        public static final long OFFSET_LEGEND_STATIC = 204L;
+        public static final long OFFSET_NO_TOOLTIP = 180L;
+        public static final long OFFSET_NO_COLORBAR = 184L;
+        public static final long OFFSET_EQUAL_ASPECT = 188L;
+        public static final long OFFSET_BOUNDED_PAN = 192L;
+        public static final long OFFSET_LEGEND = 196L;
+        public static final long OFFSET_LEGEND_POSITION = 200L;
+        public static final long OFFSET_LEGEND_HORIZONTAL = 204L;
+        public static final long OFFSET_LEGEND_STATIC = 208L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1400,6 +1403,7 @@ public final class Photon {
         "ph_plot_set_title",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
+        "ph_plot_set_tooltip",
         "ph_plot_set_legend",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
@@ -1498,6 +1502,7 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_SET_TITLE = handle("ph_plot_set_title", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_COLORBAR = handle("ph_plot_set_colorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_PICK_MODE = handle("ph_plot_set_pick_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT_SET_TOOLTIP = handle("ph_plot_set_tooltip", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_LEGEND = handle("ph_plot_set_legend", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_SCALE = handle("ph_plot_set_scale", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_DOMAIN = handle("ph_plot_set_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ph_range.LAYOUT));
@@ -1928,6 +1933,14 @@ public final class Photon {
             return (int) PH_PLOT_SET_PICK_MODE.invokeExact(plot, mode);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_set_pick_mode failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_set_tooltip(long plot, int enabled) {
+        try {
+            return (int) PH_PLOT_SET_TOOLTIP.invokeExact(plot, enabled);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_tooltip failed", photonFailure);
         }
     }
 

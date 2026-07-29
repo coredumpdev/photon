@@ -481,6 +481,7 @@ typedef struct ph_plot_desc {
   ph_bool      no_interaction;  /* wheel-zoom and drag off      */
   ph_bool      no_hover;        /* hover crosshair + tooltip off */
   ph_bool      no_crosshair;    /* XY guide lines off            */
+  ph_bool      no_tooltip;      /* the hover readout panel off   */
   ph_bool      no_colorbar;     /* auto colorbar off             */
   /* These are OFF by default, so they read positively. */
   ph_bool      equal_aspect;
@@ -1203,6 +1204,15 @@ PH_API ph_result PH_CALL ph_plot_set_colorbar(ph_plot plot, ph_bool enabled);
  * x-only match highlights something the cursor is nowhere near.
  */
 PH_API ph_result PH_CALL ph_plot_set_pick_mode(ph_plot plot, ph_pick_mode mode);
+
+/**
+ * Show or hide the hover readout panel. On by default, as in the core.
+ *
+ * A host that would rather draw its own — a themed Qt popup, say — turns this
+ * off and builds one from PH_EVENT_POINT_PICKED, which is the same argument
+ * DESIGN.md makes about the toolbar.
+ */
+PH_API ph_result PH_CALL ph_plot_set_tooltip(ph_plot plot, ph_bool enabled);
 
 /**
  * Show, place and configure the legend.

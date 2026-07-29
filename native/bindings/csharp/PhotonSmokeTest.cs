@@ -180,6 +180,8 @@ internal static class PhotonSmokeTest
         // for it either way, so this is only the switch being wired.
         CheckEq(ph_plot_set_colorbar(plot, 0), PH_OK, "ph_plot_set_colorbar");
         CheckEq(ph_plot_set_colorbar(plot, 1), PH_OK, "ph_plot_set_colorbar(on)");
+        CheckEq(ph_plot_set_tooltip(plot, 0), PH_OK, "ph_plot_set_tooltip");
+        CheckEq(ph_plot_set_tooltip(plot, 1), PH_OK, "ph_plot_set_tooltip(on)");
         CheckEq(ph_plot_set_pick_mode(plot, PH_PICK_XY), PH_OK, "ph_plot_set_pick_mode");
         CheckEq(ph_plot_set_pick_mode(plot, 99), PH_E_INVALID_ARGUMENT, "an unknown pick mode");
         CheckEq(ph_plot_set_pick_mode(plot, PH_PICK_X), PH_OK, "back to the default");
@@ -201,7 +203,7 @@ internal static class PhotonSmokeTest
         CheckEq(ph_plot_set_margin(plot, in margin), PH_OK, "ph_plot_set_margin");
 
         Ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
-            "ph_plot_set_colorbar", "ph_plot_set_pick_mode",
+            "ph_plot_set_colorbar", "ph_plot_set_pick_mode", "ph_plot_set_tooltip",
             "ph_legend_config_init", "ph_plot_set_legend",
             "ph_plot_set_title", "ph_plot_set_margin");
         return plot;

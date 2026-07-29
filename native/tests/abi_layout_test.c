@@ -111,7 +111,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_axis_config, grid_dash) == 88, "ph_axis_config.grid
 PH_ASSERT_LAYOUT(offsetof(ph_axis_config, grid_dash_count) == 96, "ph_axis_config.grid_dash_count offset");
 PH_ASSERT_LAYOUT(offsetof(ph_axis_config, minor_ticks) == 100, "ph_axis_config.minor_ticks offset");
 
-PH_ASSERT_LAYOUT(sizeof(ph_plot_desc) == 208, "ph_plot_desc size");
+PH_ASSERT_LAYOUT(sizeof(ph_plot_desc) == 216, "ph_plot_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_plot_desc) == 8, "ph_plot_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, struct_size) == 0, "ph_plot_desc.struct_size offset");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, width) == 4, "ph_plot_desc.width offset");
@@ -128,13 +128,14 @@ PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, pick) == 164, "ph_plot_desc.pick offset"
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_interaction) == 168, "ph_plot_desc.no_interaction offset");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_hover) == 172, "ph_plot_desc.no_hover offset");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_crosshair) == 176, "ph_plot_desc.no_crosshair offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_colorbar) == 180, "ph_plot_desc.no_colorbar offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, equal_aspect) == 184, "ph_plot_desc.equal_aspect offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, bounded_pan) == 188, "ph_plot_desc.bounded_pan offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend) == 192, "ph_plot_desc.legend offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_position) == 196, "ph_plot_desc.legend_position offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_horizontal) == 200, "ph_plot_desc.legend_horizontal offset");
-PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_static) == 204, "ph_plot_desc.legend_static offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_tooltip) == 180, "ph_plot_desc.no_tooltip offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_colorbar) == 184, "ph_plot_desc.no_colorbar offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, equal_aspect) == 188, "ph_plot_desc.equal_aspect offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, bounded_pan) == 192, "ph_plot_desc.bounded_pan offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend) == 196, "ph_plot_desc.legend offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_position) == 200, "ph_plot_desc.legend_position offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_horizontal) == 204, "ph_plot_desc.legend_horizontal offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_static) == 208, "ph_plot_desc.legend_static offset");
 
 PH_ASSERT_LAYOUT(sizeof(ph_line_desc) == 96, "ph_line_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_line_desc) == 8, "ph_line_desc alignment");

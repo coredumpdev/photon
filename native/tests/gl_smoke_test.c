@@ -1063,9 +1063,23 @@ int main(void) {
       if (p[3] > 200 && p[0] > 230 && p[1] > 230 && p[2] > 230) rim++;
     }
   }
-  free(hover_pixels);
   printf("  hover marker rim=%ld px\n", rim);
   CHECK(rim > 20);
+
+  /* The tooltip is a panel near the cursor. It reads "x = 5" and one row per
+   * named series; this line has no name, so the panel is the header alone.
+   * Count its fill: at 14 px right and down from (120, 88), on a transparent
+   * background, it is the only opaque thing over there. */
+  long tip = 0;
+  for (int row = 100; row < 140; row++) {
+    for (int col = 132; col < 200; col++) {
+      const unsigned char* p = hover_pixels + ((size_t)row * patch_w + col) * 4;
+      if (p[3] > 180) tip++;
+    }
+  }
+  printf("  tooltip ink=%ld px\n", tip);
+  CHECK(tip > 200);
+  free(hover_pixels);
 
   /* Moving to the same point again must not repeat the event — a host drawing
    * a tooltip should not have to filter a stream of identical ones. */

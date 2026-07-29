@@ -267,7 +267,7 @@ public static partial class Ph
         public int minor_ticks;
     }
 
-    /// <summary>ph_plot_desc — 208 bytes, alignment 8.</summary>
+    /// <summary>ph_plot_desc — 216 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_plot_desc
     {
@@ -302,18 +302,20 @@ public static partial class Ph
         /// <summary>offset 176</summary>
         public int no_crosshair;
         /// <summary>offset 180</summary>
-        public int no_colorbar;
+        public int no_tooltip;
         /// <summary>offset 184</summary>
-        public int equal_aspect;
+        public int no_colorbar;
         /// <summary>offset 188</summary>
-        public int bounded_pan;
+        public int equal_aspect;
         /// <summary>offset 192</summary>
-        public int legend;
+        public int bounded_pan;
         /// <summary>offset 196</summary>
-        public int legend_position;
+        public int legend;
         /// <summary>offset 200</summary>
-        public int legend_horizontal;
+        public int legend_position;
         /// <summary>offset 204</summary>
+        public int legend_horizontal;
+        /// <summary>offset 208</summary>
         public int legend_static;
     }
 
@@ -1002,6 +1004,7 @@ public static partial class Ph
         "ph_plot_set_title",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
+        "ph_plot_set_tooltip",
         "ph_plot_set_legend",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
@@ -1207,6 +1210,9 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_pick_mode")]
     public static extern int ph_plot_set_pick_mode(ulong plot, int mode);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_tooltip")]
+    public static extern int ph_plot_set_tooltip(ulong plot, int enabled);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_legend")]
     public static extern int ph_plot_set_legend(ulong plot, IntPtr config);

@@ -189,10 +189,15 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       `tests/pick_test.cpp` checks the binary search against the scan it
       replaces — an optimisation that picks a different point is a bug that only
       shows up as the tooltip naming the wrong sample.
-- [ ] **Tooltip / hover readout** — pick is done, so this is unblocked. What is
-      missing is a rounded panel primitive and multi-line layout. A host can
-      already build its own from `PH_EVENT_POINT_PICKED`, which may be the
-      better answer for Qt — the same argument as the toolbar.
+- [x] ~~**Tooltip / hover readout**~~ — the header formats the cursor's x
+      through the axis's own scale, so a time axis reads as a date; one dotted
+      row per *named* series under the cursor. Shares `fill_panel` with the
+      legend. `ph_plot_set_tooltip` turns it off for a host that would rather
+      draw a themed popup from `PH_EVENT_POINT_PICKED` — the same argument
+      DESIGN.md makes about the toolbar.
+- [ ] `PlotOptions.hoverReadout` — a custom tooltip header — has no native
+      equivalent. It is a callback, and the ABI has exactly one of those on
+      purpose; a host that wants it can turn the tooltip off and draw its own.
 - [x] ~~**Legend**~~ — drawn in the overlay rather than as a DOM box, with a
       rounded panel primitive `fill_panel` the tooltip will share. Only *named*
       layers appear, which is the web's rule too. Clicking an entry toggles its

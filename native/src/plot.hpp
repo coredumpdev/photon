@@ -108,6 +108,10 @@ class Plot {
   bool colorbar() const { return colorbar_; }
 
   void set_pick_mode(ph_pick_mode mode) { pick_ = mode; }
+  void set_tooltip(bool on) {
+    tooltip_ = on;
+    request_render();
+  }
 
   void set_legend(bool on, ph_legend_position position, bool horizontal, bool interactive) {
     legend_ = on;
@@ -239,6 +243,7 @@ class Plot {
   int32_t picked_index_ = -1;
   bool crosshair_ = true;
   bool colorbar_ = true;
+  bool tooltip_ = true;
   bool legend_ = false;
   ph_legend_position legend_position_ = PH_LEGEND_TOP_RIGHT;
   bool legend_horizontal_ = false;
