@@ -312,6 +312,46 @@ internal static class PhotonSmokeTest
         Ran("ph_area_desc_init", "ph_bar_desc_init", "ph_plot_add_area", "ph_plot_add_bar");
     }
 
+    /// A donut and a lollipop chart.
+    private static void PieAndStem(ulong plot)
+    {
+        var values = new double[] { 1, 2, 3, 4 };
+        var xs = new double[] { 0, 1, 2, 3, 4 };
+        var ys = new double[] { 3, 2, 1, 0, -1 };
+        var valuesHandle = GCHandle.Alloc(values, GCHandleType.Pinned);
+        var xsHandle = GCHandle.Alloc(xs, GCHandleType.Pinned);
+        var ysHandle = GCHandle.Alloc(ys, GCHandleType.Pinned);
+        try
+        {
+            ph_pie_desc_init(out var pie);
+            pie.values = valuesHandle.AddrOfPinnedObject();
+            pie.count = values.Length;
+            pie.radius = 2.0;
+            pie.inner_radius = 1.0;
+            CheckEq(ph_plot_add_pie(plot, in pie, out var pieLayer), PH_OK, "ph_plot_add_pie");
+            CheckEq(ph_layer_bounds(pieLayer, out var pieX, out _), PH_OK, "pie bounds");
+            Check(pieX.lo == -2.0 && pieX.hi == 2.0, "the bounds are the circle's box");
+            CheckEq(ph_layer_destroy(pieLayer), PH_OK, "the pie layer is destroyed");
+
+            ph_stem_desc_init(out var stem);
+            stem.x = xsHandle.AddrOfPinnedObject();
+            stem.y = ysHandle.AddrOfPinnedObject();
+            stem.count = xs.Length;
+            CheckEq(ph_plot_add_stem(plot, in stem, out var stemLayer), PH_OK, "ph_plot_add_stem");
+            CheckEq(ph_layer_bounds(stemLayer, out _, out var stemY), PH_OK, "stem bounds");
+            Check(stemY.lo == -1.0 && stemY.hi == 3.0, "the baseline is inside the range");
+            CheckEq(ph_layer_destroy(stemLayer), PH_OK, "the stem layer is destroyed");
+        }
+        finally
+        {
+            valuesHandle.Free();
+            xsHandle.Free();
+            ysHandle.Free();
+        }
+
+        Ran("ph_pie_desc_init", "ph_stem_desc_init", "ph_plot_add_pie", "ph_plot_add_stem");
+    }
+
     /// Filled polygons, including the hole path through the triangulator.
     private static void Patches(ulong plot)
     {
@@ -465,6 +505,7 @@ internal static class PhotonSmokeTest
         Axes(plot);
         var line = Layers(plot);
         AreaAndBars(plot);
+        PieAndStem(plot);
         Patches(plot);
         Interaction(plot);
         Events(plot);

@@ -511,6 +511,56 @@ typedef struct ph_bar_desc {
 } ph_bar_desc;
 
 /**
+ * Mirrors core `PieOptions`.
+ *
+ * Slices sweep clockwise from `start_angle`, and the values need not sum to
+ * anything — they are normalized. Set `equal_aspect` on the plot or the circle
+ * comes out an ellipse.
+ */
+typedef struct ph_pie_desc {
+  uint32_t        struct_size;
+  /** Slice magnitudes. */
+  const double*   values;
+  int32_t         count;
+  /** Per-slice colour, `count` entries. NULL uses the core's ten-colour palette. */
+  const ph_color* colors;
+  double          center_x;
+  double          center_y;
+  /** Outer radius in data units. 0 = 1. */
+  double          radius;
+  /** Inner radius. Greater than zero makes a donut. */
+  double          inner_radius;
+  /** First slice edge in radians. 0 = pi/2, twelve o'clock, as in the core. */
+  double          start_angle;
+  const char*     name;
+  const char*     y_axis;
+  ph_render_type  render_type;
+} ph_pie_desc;
+
+/**
+ * Mirrors core `StemOptions`.
+ *
+ * A vertical line from `baseline` to each y, with a disc at the tip — a lollipop
+ * chart, and the usual way to draw a discrete signal.
+ */
+typedef struct ph_stem_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  y;
+  int32_t        count;
+  /** Where the stems start. Zero is the usual baseline. */
+  double         baseline;
+  ph_color       color;
+  /** Stem thickness in logical px. 0 = 1.5. */
+  float          width;
+  /** Tip marker diameter in logical px. Negative hides it; 0 = 6. */
+  float          marker_size;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_stem_desc;
+
+/**
  * One filled polygon: a ring of x/y, with optional holes.
  *
  * `holes[k]` is the *vertex* index where hole ring k begins — the same
@@ -659,6 +709,8 @@ PH_API void PH_CALL ph_scatter_desc_init(ph_scatter_desc* out);
 PH_API void PH_CALL ph_patches_desc_init(ph_patches_desc* out);
 PH_API void PH_CALL ph_area_desc_init(ph_area_desc* out);
 PH_API void PH_CALL ph_bar_desc_init(ph_bar_desc* out);
+PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
+PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 
 /* ------------------------------------------------------------------------ */
 /* Plot lifecycle                                                             */
@@ -740,6 +792,8 @@ PH_API ph_result PH_CALL ph_plot_add_scatter(ph_plot plot, const ph_scatter_desc
 PH_API ph_result PH_CALL ph_plot_add_patches(ph_plot plot, const ph_patches_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_area(ph_plot plot, const ph_area_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_bar(ph_plot plot, const ph_bar_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_pie(ph_plot plot, const ph_pie_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_stem(ph_plot plot, const ph_stem_desc* desc, ph_layer* out);
 
 /*
  * The remaining 24 layer types (bar, area, heatmap, box, hexbin, contour,

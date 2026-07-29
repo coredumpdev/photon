@@ -346,6 +346,52 @@ public final class PhotonSmokeTest {
         ran("ph_area_desc_init", "ph_bar_desc_init", "ph_plot_add_area", "ph_plot_add_bar");
     }
 
+    /** A donut and a lollipop chart. */
+    static void pieAndStem(Arena arena, long plot) {
+        MemorySegment values = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        for (int i = 0; i < 4; i++) values.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i + 1);
+
+        MemorySegment pie = ph_pie_desc.allocate(arena);
+        ph_pie_desc_init(pie);
+        pie.set(ValueLayout.ADDRESS, ph_pie_desc.OFFSET_VALUES, values);
+        pie.set(ValueLayout.JAVA_INT, ph_pie_desc.OFFSET_COUNT, 4);
+        pie.set(ValueLayout.JAVA_DOUBLE, ph_pie_desc.OFFSET_RADIUS, 2.0);
+        pie.set(ValueLayout.JAVA_DOUBLE, ph_pie_desc.OFFSET_INNER_RADIUS, 1.0);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_pie(plot, pie, handle), PH_OK, "ph_plot_add_pie");
+        long pieLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(pieLayer, bx, by), PH_OK, "pie bounds");
+        // The bounds are the circle's box, whatever the slices are.
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -2.0, "pie x lo");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 2.0, "pie y hi");
+
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, 5);
+        MemorySegment ys = arena.allocate(ValueLayout.JAVA_DOUBLE, 5);
+        for (int i = 0; i < 5; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 3.0 - i);
+        }
+        MemorySegment stem = ph_stem_desc.allocate(arena);
+        ph_stem_desc_init(stem);
+        stem.set(ValueLayout.ADDRESS, ph_stem_desc.OFFSET_X, xs);
+        stem.set(ValueLayout.ADDRESS, ph_stem_desc.OFFSET_Y, ys);
+        stem.set(ValueLayout.JAVA_INT, ph_stem_desc.OFFSET_COUNT, 5);
+        checkEq(ph_plot_add_stem(plot, stem, handle), PH_OK, "ph_plot_add_stem");
+        long stemLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(stemLayer, bx, by), PH_OK, "stem bounds");
+        // y runs 3 down to -1, and the baseline at 0 is inside that, so it does
+        // not widen the range — but a stem's bounds must include it regardless.
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -1.0, "stem y lo");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 3.0, "stem y hi");
+
+        checkEq(ph_layer_destroy(pieLayer), PH_OK, "the pie layer is destroyed");
+        checkEq(ph_layer_destroy(stemLayer), PH_OK, "the stem layer is destroyed");
+        ran("ph_pie_desc_init", "ph_stem_desc_init", "ph_plot_add_pie", "ph_plot_add_stem");
+    }
+
     /** Filled polygons, including the hole path through the triangulator. */
     static void patches(Arena arena, long plot) {
         // A 10x10 square with a 4x4 hole: eight vertices, the hole starting at
@@ -508,6 +554,8 @@ public final class PhotonSmokeTest {
             long line = layers(arena, plot);
             step("areaAndBars");
             areaAndBars(arena, plot);
+            step("pieAndStem");
+            pieAndStem(arena, plot);
             step("patches");
             patches(arena, plot);
             step("interaction");

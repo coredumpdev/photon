@@ -189,6 +189,35 @@ PH_ASSERT_LAYOUT(offsetof(ph_bar_desc, name) == 80, "ph_bar_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_bar_desc, y_axis) == 88, "ph_bar_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_bar_desc, render_type) == 96, "ph_bar_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_pie_desc) == 96, "ph_pie_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_pie_desc) == 8, "ph_pie_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, struct_size) == 0, "ph_pie_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, values) == 8, "ph_pie_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, count) == 16, "ph_pie_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, colors) == 24, "ph_pie_desc.colors offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, center_x) == 32, "ph_pie_desc.center_x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, center_y) == 40, "ph_pie_desc.center_y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, radius) == 48, "ph_pie_desc.radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, inner_radius) == 56, "ph_pie_desc.inner_radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, start_angle) == 64, "ph_pie_desc.start_angle offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, name) == 72, "ph_pie_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, y_axis) == 80, "ph_pie_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pie_desc, render_type) == 88, "ph_pie_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_stem_desc) == 80, "ph_stem_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_stem_desc) == 8, "ph_stem_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, struct_size) == 0, "ph_stem_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, x) == 8, "ph_stem_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, y) == 16, "ph_stem_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, count) == 24, "ph_stem_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, baseline) == 32, "ph_stem_desc.baseline offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, color) == 40, "ph_stem_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, width) == 44, "ph_stem_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, marker_size) == 48, "ph_stem_desc.marker_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, name) == 56, "ph_stem_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, y_axis) == 64, "ph_stem_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, render_type) == 72, "ph_stem_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_patch) == 40, "ph_patch size");
 PH_ASSERT_LAYOUT(_Alignof(ph_patch) == 8, "ph_patch alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_patch, x) == 0, "ph_patch.x offset");
@@ -226,7 +255,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 15);
+  printf("%d struct layouts match the generated bindings\n", 17);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

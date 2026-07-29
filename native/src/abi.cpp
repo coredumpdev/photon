@@ -604,6 +604,53 @@ extern "C" ph_result PH_CALL ph_plot_add_bar(ph_plot handle, const ph_bar_desc* 
                                                      "ph_bar_desc");
 }
 
+extern "C" void PH_CALL ph_pie_desc_init(ph_pie_desc* out) {
+  if (!out) return;
+  *out = ph_pie_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_pie_desc));
+  out->radius = 1.0;
+  out->render_type = PH_RENDER_STATIC;
+  // start_angle stays 0, which the layer reads as pi/2 — twelve o'clock, where
+  // a pie chart starts and where a zero-initialized struct has to land too.
+}
+
+extern "C" void PH_CALL ph_stem_desc_init(ph_stem_desc* out) {
+  if (!out) return;
+  *out = ph_stem_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_stem_desc));
+  out->width = 1.5f;
+  out->marker_size = 6.0f;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_pie(ph_plot handle, const ph_pie_desc* desc,
+                                             ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_pie_desc.struct_size is larger than this build's");
+  }
+  const ph_pie_desc normalized = normalize(desc, ph_pie_desc_init);
+  if (normalized.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (normalized.count > 0 && !normalized.values) {
+    return fail(PH_E_INVALID_ARGUMENT, "values must be non-null when count > 0");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::PieLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating pie layer");
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_stem(ph_plot handle, const ph_stem_desc* desc,
+                                              ph_layer* out) {
+  return add_xy_layer<ph_stem_desc, photon::StemLayer>(handle, desc, out, ph_stem_desc_init,
+                                                       "ph_stem_desc");
+}
+
 extern "C" ph_result PH_CALL ph_plot_add_patches(ph_plot handle, const ph_patches_desc* desc,
                                                  ph_layer* out) {
   clear_error();

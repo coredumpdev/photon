@@ -74,13 +74,17 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (12 remaining of 17)
+### Layers with their own shaders (10 remaining of 17)
 
 `box` `candlestick` `contour` `errorbar` `graph` `heatmap` `hexbin` `image`
-`ohlc` `pie` `quiver` `stem`
+`ohlc` `quiver`
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
-      under it. `pie` shares its fill program and is the next cheapest.
+      under it.
+- [x] ~~`pie`~~ — shares the patches fill program; wedges are fans, or quad
+      strips when there is an inner radius.
+- [x] ~~`stem`~~ — the line layer's segment quad plus the scatter layer's disc,
+      over the same points.
 - [x] ~~`area` and `bar`~~ — the two most-used types after line and scatter.
       Neither has `setData`, so neither can stream yet; see the note below.
 - [ ] Grouped and stacked bars are the caller's job in the web core too

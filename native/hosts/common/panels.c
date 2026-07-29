@@ -9,6 +9,8 @@
 #define MONTHS 12
 /* A funnel stage is a trapezoid: four corners, and five of them. */
 #define FUNNEL_STAGES 5
+#define SLICES 5
+#define IMPULSES 24
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -35,10 +37,14 @@ struct ph_panels {
   double funnel_x[FUNNEL_STAGES][4];
   double funnel_y[FUNNEL_STAGES][4];
   ph_patch funnel[FUNNEL_STAGES];
+
+  double slice[SLICES];
+  double impulse_x[IMPULSES];
+  double impulse_y[IMPULSES];
 };
 
-static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
-                                              "Streaming", "Revenue",  "Funnel"};
+static const char* kTitles[PH_PANEL_COUNT] = {"Waves",     "Log decay", "Scatter", "Streaming",
+                                              "Revenue",   "Funnel",    "Share",   "Impulse"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -133,6 +139,17 @@ ph_panels* ph_panels_create(void) {
   p->funnel[2].color = parse("#34d399");
   p->funnel[3].color = parse("#a3e635");
   p->funnel[4].color = parse("#facc15");
+
+  static const double slices[SLICES] = {38.0, 24.0, 18.0, 12.0, 8.0};
+  for (int i = 0; i < SLICES; i++) p->slice[i] = slices[i];
+
+  /* A decaying oscillation sampled coarsely — what a stem plot is for: the
+   * samples are the data, and joining them with a line would imply something
+   * about the space between them that is not there. */
+  for (int i = 0; i < IMPULSES; i++) {
+    p->impulse_x[i] = i;
+    p->impulse_y[i] = exp(-i * 0.12) * cos(i * 0.7);
+  }
 
   return p;
 }
@@ -287,6 +304,46 @@ static void build_funnel(ph_panels* p, ph_plot plot) {
   ph_plot_add_patches(plot, &desc, &layer);
 }
 
+/* Panel 6 — a donut, which is the pie layer with an inner radius. */
+static void build_share(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Share");
+  /* A pie has no axes worth reading, and the grid behind it is noise. */
+  ph_axis_config bare;
+  ph_axis_config_init(&bare);
+  bare.no_axis_line = 1;
+  bare.no_ticks = 1;
+  bare.no_grid = 1;
+  ph_plot_set_axis_config(plot, "x", &bare);
+  ph_plot_set_axis_config(plot, "y", &bare);
+
+  ph_pie_desc pie;
+  ph_pie_desc_init(&pie);
+  pie.values = p->slice;
+  pie.count = SLICES;
+  pie.radius = 1.0;
+  pie.inner_radius = 0.55;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_pie(plot, &pie, &layer);
+}
+
+/* Panel 7 — stems from zero, with a disc at each tip. */
+static void build_impulse(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Impulse");
+  style_axis(plot, "x", "n", 0);
+  style_axis(plot, "y", "h[n]", 0);
+
+  ph_stem_desc stem;
+  ph_stem_desc_init(&stem);
+  stem.x = p->impulse_x;
+  stem.y = p->impulse_y;
+  stem.count = IMPULSES;
+  stem.color = parse("#22d3ee");
+  stem.width = 2.0f;
+  stem.marker_size = 7.0f;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_stem(plot, &stem, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -296,7 +353,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 2: build_scatter(panels, plot); break;
     case 3: build_stream(panels, plot); break;
     case 4: build_revenue(panels, plot); break;
-    default: build_funnel(panels, plot); break;
+    case 5: build_funnel(panels, plot); break;
+    case 6: build_share(panels, plot); break;
+    default: build_impulse(panels, plot); break;
   }
 }
 

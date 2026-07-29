@@ -333,6 +333,72 @@ void main() {
   outColor = vec4(c.rgb * c.a * alpha, c.a * alpha);
 })";
 
+constexpr double kPi = 3.14159265358979323846;
+
+/// The core's ten-colour pie palette, from DEFAULT_COLORS in pie.ts.
+constexpr size_t kPiePaletteSize = 10;
+constexpr ph_color kPiePalette[kPiePaletteSize] = {
+    0x3b82f6ffu, 0xf472b6ffu, 0x22d3eeffu, 0xa3e635ffu, 0xfbbf24ffu,
+    0xa78bfaffu, 0x34d399ffu, 0xfb7185ffu, 0x60a5faffu, 0xf59e0bffu,
+};
+
+/// Stem: the line layer's segment quad, with one uniform colour and no dashes.
+const char* const kStemVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aSeg;
+uniform vec2 uResolution;
+uniform float uWidth;
+)";
+
+const char* const kStemVertMain = R"(
+void main() {
+  vec2 s0 = (dataToClip(aSeg.xy) * 0.5 + 0.5) * uResolution;
+  vec2 s1 = (dataToClip(aSeg.zw) * 0.5 + 0.5) * uResolution;
+  vec2 d = s1 - s0;
+  float len = length(d);
+  vec2 dir = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  vec2 pos = mix(s0, s1, aCorner.x) + nrm * (aCorner.y * uWidth * 0.5);
+  gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+const char* const kStemFrag = R"(#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 outColor;
+void main() { outColor = vec4(uColor.rgb * uColor.a, uColor.a); })";
+
+/// Stem tips: an instanced disc, the scatter marker with the shape fixed.
+const char* const kStemMarkerVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec2 aPoint;
+uniform vec2 uResolution;
+uniform float uSize;
+out vec2 vLocal;
+)";
+
+const char* const kStemMarkerVertMain = R"(
+void main() {
+  vec2 centre = (dataToClip(aPoint) * 0.5 + 0.5) * uResolution;
+  vLocal = aCorner;
+  vec2 pos = centre + aCorner * uSize;
+  gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+const char* const kStemMarkerFrag = R"(#version 300 es
+precision highp float;
+in vec2 vLocal;
+uniform vec4 uColor;
+out vec4 outColor;
+void main() {
+  float r = length(vLocal);
+  if (r > 1.0) discard;
+  float alpha = smoothstep(1.0, 1.0 - 0.15, r);
+  outColor = vec4(uColor.rgb * uColor.a * alpha, uColor.a * alpha);
+})";
+
 /// The core's default area fill, rgba(59,130,246,0.4) — translucent on purpose,
 /// because an area is drawn under something.
 constexpr ph_color kDefaultAreaColor = 0x3b82f666u;
@@ -1261,6 +1327,317 @@ void BarLayer::release_gl(Api& api) {
   api.DeleteBuffers(3, buffers);
   vao_ = 0;
   corner_buffer_ = rect_buffer_ = color_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- PieLayer ---------------------------------------------------------------
+
+PieLayer::PieLayer(const ph_pie_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  render_type_ = desc.render_type;
+  centre_x_ = desc.center_x;
+  centre_y_ = desc.center_y;
+  radius_ = desc.radius > 0.0 ? desc.radius : 1.0;
+  const double inner = std::max(0.0, desc.inner_radius);
+  // Zero means twelve o'clock rather than three, because that is where a pie
+  // chart starts and because it keeps the zero-initialized rule true.
+  const double start = desc.start_angle != 0.0 ? desc.start_angle : kPi / 2.0;
+
+  const int32_t n = desc.values ? std::max(0, desc.count) : 0;
+  double total = 0.0;
+  for (int32_t i = 0; i < n; ++i) total += std::max(0.0, desc.values[i]);
+  if (!(total > 0.0)) total = 1.0;
+
+  const auto push = [&](double x, double y, const Rgba& c) {
+    positions_.push_back(static_cast<float>(x - centre_x_));
+    positions_.push_back(static_cast<float>(y - centre_y_));
+    colors_.push_back(c.r);
+    colors_.push_back(c.g);
+    colors_.push_back(c.b);
+    colors_.push_back(c.a);
+  };
+
+  double a0 = start;
+  for (int32_t i = 0; i < n; ++i) {
+    const double span = std::max(0.0, desc.values[i]) / total * 2.0 * kPi;
+    if (span <= 0.0) continue;
+    const double a1 = a0 - span;  // clockwise
+    const Rgba colour = desc.colors ? unpack_color_exact(desc.colors[i])
+                                    : unpack_color_exact(kPiePalette[static_cast<size_t>(i) % kPiePaletteSize]);
+
+    // One segment per ~3 degrees, so even a thin slice has a straight edge and
+    // a fat one does not show its polygon.
+    const int segments = std::max(2, static_cast<int>(std::ceil(span / (kPi / 64.0))));
+    for (int s = 0; s < segments; ++s) {
+      const double t0 = a0 + (a1 - a0) * s / segments;
+      const double t1 = a0 + (a1 - a0) * (s + 1) / segments;
+      const double ox0 = centre_x_ + radius_ * std::cos(t0);
+      const double oy0 = centre_y_ + radius_ * std::sin(t0);
+      const double ox1 = centre_x_ + radius_ * std::cos(t1);
+      const double oy1 = centre_y_ + radius_ * std::sin(t1);
+      if (inner <= 0.0) {
+        push(centre_x_, centre_y_, colour);
+        push(ox0, oy0, colour);
+        push(ox1, oy1, colour);
+      } else {
+        const double ix0 = centre_x_ + inner * std::cos(t0);
+        const double iy0 = centre_y_ + inner * std::sin(t0);
+        const double ix1 = centre_x_ + inner * std::cos(t1);
+        const double iy1 = centre_y_ + inner * std::sin(t1);
+        push(ix0, iy0, colour);
+        push(ox0, oy0, colour);
+        push(ox1, oy1, colour);
+        push(ix0, iy0, colour);
+        push(ox1, oy1, colour);
+        push(ix1, iy1, colour);
+      }
+    }
+    a0 = a1;
+  }
+}
+
+bool PieLayer::bounds(ph_range& x, ph_range& y) const {
+  if (positions_.empty()) return false;
+  x = ph_range{centre_x_ - radius_, centre_x_ + radius_};
+  y = ph_range{centre_y_ - radius_, centre_y_ + radius_};
+  return true;
+}
+
+bool PieLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &position_buffer_);
+    api.GenBuffers(1, &color_buffer_);
+    if (vao_ == 0) {
+      error = "failed to create pie layer vertex array";
+      return false;
+    }
+    api.BindVertexArray(vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, position_buffer_);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.BindVertexArray(0);
+  }
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, position_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(positions_.size() * sizeof(float)),
+                   positions_.empty() ? nullptr : positions_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(colors_.size() * sizeof(float)),
+                   colors_.empty() ? nullptr : colors_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool PieLayer::draw(const DrawState& state, std::string& error) {
+  if (positions_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms = with_transform_uniforms({});
+  const Program* program = get_program(api, "fill", vertex_source(kFillVertBody, kFillVertMain),
+                                       kFillFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, centre_x_, centre_y_);
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(positions_.size() / 2));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void PieLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  const GLuint buffers[] = {position_buffer_, color_buffer_};
+  api.DeleteBuffers(2, buffers);
+  vao_ = 0;
+  position_buffer_ = color_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- StemLayer --------------------------------------------------------------
+
+StemLayer::StemLayer(const ph_stem_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  baseline_ = desc.baseline;
+  if (desc.width > 0.0f) width_ = desc.width;
+  // Negative hides the tip; zero is the default, which keeps a zero-initialized
+  // struct meaning "the core's defaults" rather than "no markers".
+  if (desc.marker_size != 0.0f) marker_size_ = std::max(0.0f, desc.marker_size);
+
+  if (desc.count > 0 && desc.x && desc.y) {
+    x_.assign(desc.x, desc.x + desc.count);
+    y_.assign(desc.y, desc.y + desc.count);
+  }
+  build();
+}
+
+void StemLayer::build() {
+  const size_t n = std::min(x_.size(), y_.size());
+  segments_.clear();
+  packed_.clear();
+  stem_bounds_ = false;
+  if (n == 0) {
+    dirty_ = true;
+    return;
+  }
+
+  x_ref_ = x_[0];
+  y_ref_ = y_[0];
+  segments_.resize(n * 4);
+  packed_.resize(n * 2);
+
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+
+  for (size_t i = 0; i < n; ++i) {
+    const float x = static_cast<float>(x_[i] - x_ref_);
+    segments_[i * 4] = x;
+    segments_[i * 4 + 1] = static_cast<float>(baseline_ - y_ref_);
+    segments_[i * 4 + 2] = x;
+    segments_[i * 4 + 3] = static_cast<float>(y_[i] - y_ref_);
+    packed_[i * 2] = x;
+    packed_[i * 2 + 1] = static_cast<float>(y_[i] - y_ref_);
+
+    if (!finite(x_[i]) || !finite(y_[i])) continue;
+    min_x = std::min(min_x, x_[i]);
+    max_x = std::max(max_x, x_[i]);
+    min_y = std::min({min_y, y_[i], baseline_});
+    max_y = std::max({max_y, y_[i], baseline_});
+    stem_bounds_ = true;
+  }
+  if (stem_bounds_) {
+    stem_x_ = ph_range{min_x, max_x};
+    stem_y_ = ph_range{min_y, max_y};
+  }
+  dirty_ = true;
+}
+
+bool StemLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!stem_bounds_) return false;
+  x = stem_x_;
+  y = stem_y_;
+  return true;
+}
+
+bool StemLayer::ensure_gl(Api& api, std::string& error) {
+  if (stem_vao_ == 0) {
+    api.GenVertexArrays(1, &stem_vao_);
+    api.GenVertexArrays(1, &marker_vao_);
+    api.GenBuffers(1, &corner_buffer_);
+    api.GenBuffers(1, &quad_buffer_);
+    api.GenBuffers(1, &segment_buffer_);
+    api.GenBuffers(1, &tip_buffer_);
+    if (stem_vao_ == 0 || marker_vao_ == 0) {
+      error = "failed to create stem layer vertex arrays";
+      return false;
+    }
+
+    api.BindVertexArray(stem_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, corner_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(kLineCorners)), kLineCorners,
+                   GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, segment_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+
+    api.BindVertexArray(marker_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, quad_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(kQuadCorners)), kQuadCorners,
+                   GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, tip_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 2, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+
+    api.BindVertexArray(0);
+  }
+
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, segment_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(segments_.size() * sizeof(float)),
+                   segments_.empty() ? nullptr : segments_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, tip_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(packed_.size() * sizeof(float)),
+                   packed_.empty() ? nullptr : packed_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool StemLayer::draw(const DrawState& state, std::string& error) {
+  if (segments_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  const Rgba colour = unpack_color(color_);
+  const GLsizei count = static_cast<GLsizei>(segments_.size() / 4);
+
+  static const std::vector<std::string> kStemUniforms =
+      with_transform_uniforms({"uColor", "uResolution", "uWidth"});
+  const Program* stem = get_program(api, "stem", vertex_source(kStemVertBody, kStemVertMain),
+                                    kStemFrag, kStemUniforms, state.gfx, error);
+  if (!stem) return false;
+  api.UseProgram(stem->id);
+  set_transform_uniforms(api, *stem, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(stem->uniform("uColor"), colour.r, colour.g, colour.b, colour.a);
+  api.Uniform2f(stem->uniform("uResolution"), static_cast<GLfloat>(state.pixel_width),
+                static_cast<GLfloat>(state.pixel_height));
+  api.Uniform1f(stem->uniform("uWidth"), width_ * state.dpr);
+  api.BindVertexArray(stem_vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+  api.BindVertexArray(0);
+
+  if (marker_size_ <= 0.0f) return true;
+
+  // The tips reuse the scatter program with a fixed circle marker: a disc at
+  // the end of a stalk is exactly a one-marker scatter, and a second shader
+  // would be the same arithmetic written twice.
+  static const std::vector<std::string> kMarkerUniforms = with_transform_uniforms(
+      {"uColor", "uResolution", "uSize", "uDpr", "uUseVertexColor", "uMarker"});
+  const Program* marker = get_program(api, "stem-marker",
+                                      vertex_source(kStemMarkerVertBody, kStemMarkerVertMain),
+                                      kStemMarkerFrag, kMarkerUniforms, state.gfx, error);
+  if (!marker) return false;
+  api.UseProgram(marker->id);
+  set_transform_uniforms(api, *marker, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(marker->uniform("uColor"), colour.r, colour.g, colour.b, colour.a);
+  api.Uniform2f(marker->uniform("uResolution"), static_cast<GLfloat>(state.pixel_width),
+                static_cast<GLfloat>(state.pixel_height));
+  api.Uniform1f(marker->uniform("uSize"), (marker_size_ / 2.0f) * state.dpr);
+  api.BindVertexArray(marker_vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+  api.BindVertexArray(0);
+  return true;
+}
+
+void StemLayer::release_gl(Api& api) {
+  if (stem_vao_ == 0) return;
+  const GLuint vaos[] = {stem_vao_, marker_vao_};
+  api.DeleteVertexArrays(2, vaos);
+  const GLuint buffers[] = {corner_buffer_, quad_buffer_, segment_buffer_, tip_buffer_};
+  api.DeleteBuffers(4, buffers);
+  stem_vao_ = marker_vao_ = 0;
+  corner_buffer_ = quad_buffer_ = segment_buffer_ = tip_buffer_ = 0;
   dirty_ = true;
 }
 

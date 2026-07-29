@@ -217,6 +217,72 @@ class BarLayer : public XYLayer {
   gl::GLuint color_buffer_ = 0;
 };
 
+/**
+ * A pie or donut, as a triangle soup sharing the patches fill program.
+ *
+ * Wedges are fans when solid and quad strips when there is an inner radius, at
+ * one segment per ~3 degrees. Not an XYLayer: the input is a list of magnitudes,
+ * not a pair of coordinate arrays.
+ */
+class PieLayer : public Layer {
+ public:
+  explicit PieLayer(const ph_pie_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<float> positions_;
+  std::vector<float> colors_;
+  double centre_x_ = 0.0;
+  double centre_y_ = 0.0;
+  double radius_ = 1.0;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint position_buffer_ = 0;
+  gl::GLuint color_buffer_ = 0;
+};
+
+/**
+ * Stems from a baseline to each sample, with a disc at the tip.
+ *
+ * Two draws over the same points: the line program's segment quad for the
+ * stalks, and the scatter program's disc for the tips. Both are pixel-width, so
+ * neither changes with the zoom.
+ */
+class StemLayer : public XYLayer {
+ public:
+  explicit StemLayer(const ph_stem_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+  void build();
+
+  double baseline_ = 0.0;
+  float width_ = 1.5f;
+  float marker_size_ = 6.0f;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  /// Four floats per stem: (x, baseline, x, y) in offset data space.
+  std::vector<float> segments_;
+  ph_range stem_x_{0.0, 0.0};
+  ph_range stem_y_{0.0, 0.0};
+  bool stem_bounds_ = false;
+
+  gl::GLuint stem_vao_ = 0;
+  gl::GLuint marker_vao_ = 0;
+  gl::GLuint corner_buffer_ = 0;
+  gl::GLuint quad_buffer_ = 0;
+  gl::GLuint segment_buffer_ = 0;
+  gl::GLuint tip_buffer_ = 0;
+};
+
 class PatchesLayer : public Layer {
  public:
   explicit PatchesLayer(const ph_patches_desc& desc);

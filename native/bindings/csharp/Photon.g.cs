@@ -418,6 +418,64 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_pie_desc — 96 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_pie_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 24</summary>
+        public IntPtr colors;
+        /// <summary>offset 32</summary>
+        public double center_x;
+        /// <summary>offset 40</summary>
+        public double center_y;
+        /// <summary>offset 48</summary>
+        public double radius;
+        /// <summary>offset 56</summary>
+        public double inner_radius;
+        /// <summary>offset 64</summary>
+        public double start_angle;
+        /// <summary>offset 72</summary>
+        public IntPtr name;
+        /// <summary>offset 80</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 88</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_stem_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_stem_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public int count;
+        /// <summary>offset 32</summary>
+        public double baseline;
+        /// <summary>offset 40</summary>
+        public uint color;
+        /// <summary>offset 44</summary>
+        public float width;
+        /// <summary>offset 48</summary>
+        public float marker_size;
+        /// <summary>offset 56</summary>
+        public IntPtr name;
+        /// <summary>offset 64</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 72</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_patch — 40 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_patch
@@ -505,6 +563,8 @@ public static partial class Ph
         "ph_patches_desc_init",
         "ph_area_desc_init",
         "ph_bar_desc_init",
+        "ph_pie_desc_init",
+        "ph_stem_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -526,6 +586,8 @@ public static partial class Ph
         "ph_plot_add_patches",
         "ph_plot_add_area",
         "ph_plot_add_bar",
+        "ph_plot_add_pie",
+        "ph_plot_add_stem",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -599,6 +661,12 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_bar_desc_init")]
     public static extern void ph_bar_desc_init(out ph_bar_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_pie_desc_init")]
+    public static extern void ph_pie_desc_init(out ph_pie_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stem_desc_init")]
+    public static extern void ph_stem_desc_init(out ph_stem_desc @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_create")]
     public static extern int ph_plot_create(IntPtr desc, out ulong @out);
@@ -692,6 +760,18 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_bar")]
     public static extern int ph_plot_add_bar(ulong plot, in ph_bar_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_pie")]
+    public static extern int ph_plot_add_pie(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_pie")]
+    public static extern int ph_plot_add_pie(ulong plot, in ph_pie_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stem")]
+    public static extern int ph_plot_add_stem(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stem")]
+    public static extern int ph_plot_add_stem(ulong plot, in ph_stem_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_xy")]
     public static extern int ph_layer_set_xy(ulong layer, double[] x, double[] y, int count);
