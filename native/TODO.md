@@ -193,9 +193,12 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       missing is a rounded panel primitive and multi-line layout. A host can
       already build its own from `PH_EVENT_POINT_PICKED`, which may be the
       better answer for Qt — the same argument as the toolbar.
-- [ ] **Legend** — `ph_plot_desc.legend` is accepted and ignored. Layer names are
-      already stored. Interactive legend entries toggle series visibility in the
-      web core, which means hit-testing, which means it wants pick first.
+- [x] ~~**Legend**~~ — drawn in the overlay rather than as a DOM box, with a
+      rounded panel primitive `fill_panel` the tooltip will share. Only *named*
+      layers appear, which is the web's rule too. Clicking an entry toggles its
+      series, re-fits the auto axes and emits PH_EVENT_LAYER_VISIBILITY; the
+      click is consumed, so it never also starts a pan. `ph_plot_set_legend`
+      takes the same four knobs the descriptor does.
 - [ ] **Annotations** — `Annotation` union, `addAnnotation`, `clearAnnotations`.
 - [ ] **Drawing tools** — trendline / hline / ray / fib / rect, plus hit-testing
       and handle dragging. Large; likely Faz 5.

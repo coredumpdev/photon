@@ -362,6 +362,13 @@ const char* ph_panels_title(int index) {
 /* Panel 0 — two series on a shared x axis, one of them dashed. */
 static void build_waves(ph_panels* p, ph_plot plot) {
   ph_plot_set_title(plot, "Waves");
+  /* Two named series, so this is the panel with something to legend. Click an
+   * entry to hide its series; the y axis re-fits to what is left. */
+  ph_legend_config legend;
+  ph_legend_config_init(&legend);
+  legend.enabled = 1;
+  legend.position = PH_LEGEND_BOTTOM_LEFT;
+  ph_plot_set_legend(plot, &legend);
   style_axis(plot, "x", "time (s)", 4);
   style_axis(plot, "y", "amplitude", 0);
 

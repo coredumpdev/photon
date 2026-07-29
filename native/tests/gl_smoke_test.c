@@ -1089,6 +1089,92 @@ int main(void) {
   CHECK(cleared == 1);
 
   CHECK_EQ(ph_plot_destroy(hover_plot), PH_OK);
+
+  /* ---- the legend: named series only, and a click that hides one ---- */
+
+  ph_plot legend_plot2 = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &legend_plot2), PH_OK);
+
+  const double flat_x[2] = {0.0, 10.0};
+  const double low_y[2] = {2.0, 2.0};
+  const double high_y[2] = {8.0, 8.0};
+  ph_line_desc named;
+  ph_line_desc_init(&named);
+  named.x = flat_x;
+  named.y = low_y;
+  named.count = 2;
+  named.width = 3.0f;
+  named.name = "low";
+  CHECK_EQ(ph_color_parse("#00ff00", &named.color), PH_OK);
+  ph_layer low_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_line(legend_plot2, &named, &low_layer) != PH_OK) {
+    printf("  FAIL legend line: %s\n", ph_last_error());
+    return 1;
+  }
+  named.y = high_y;
+  named.name = "high";
+  CHECK_EQ(ph_color_parse("#ff00ff", &named.color), PH_OK);
+  ph_layer high_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_line(legend_plot2, &named, &high_layer) != PH_OK) {
+    printf("  FAIL legend line 2: %s\n", ph_last_error());
+    return 1;
+  }
+  /* An unnamed third series must stay out of the legend: an unnamed layer is a
+   * builder's helper, and listing it would be clutter nobody asked for. */
+  named.name = NULL;
+  ph_layer anonymous = PH_NULL_HANDLE;
+  if (ph_plot_add_line(legend_plot2, &named, &anonymous) != PH_OK) {
+    printf("  FAIL legend line 3: %s\n", ph_last_error());
+    return 1;
+  }
+
+  ph_legend_config legend_cfg;
+  ph_legend_config_init(&legend_cfg);
+  legend_cfg.enabled = 1;
+  legend_cfg.position = PH_LEGEND_TOP_LEFT;
+  CHECK_EQ(ph_plot_set_legend(legend_plot2, &legend_cfg), PH_OK);
+
+  unsigned char* legend_px = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!legend_px) return 1;
+  if (ph_plot_render_pixels(legend_plot2, patch_w, patch_h, 1.0f, legend_px, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL legend render: %s\n", ph_last_error());
+    return 1;
+  }
+  /* Two swatches, 10x10 each, in the panel at the region's top-left corner
+   * (56 + 8 + 8 = 72 across, 16 + 8 + 6 = 30 down). Count them by colour. */
+  long swatch_green = 0, swatch_magenta = 0;
+  for (int row = 16; row < 80; row++) {
+    for (int col = 56; col < 130; col++) {
+      const unsigned char* p = legend_px + ((size_t)row * patch_w + col) * 4;
+      if (p[3] < 200) continue;
+      if (p[1] > 200 && p[0] < 40 && p[2] < 40) swatch_green++;
+      if (p[0] > 200 && p[1] < 40 && p[2] > 200) swatch_magenta++;
+    }
+  }
+  free(legend_px);
+  printf("  legend swatches: green=%ld magenta=%ld\n", swatch_green, swatch_magenta);
+  /* A 10x10 swatch plus its 1px outline, and nothing else that colour up there
+   * — the series themselves are flat lines at y = 2 and y = 8, well below. */
+  CHECK(swatch_green > 80 && swatch_green < 200);
+  CHECK(swatch_magenta > 80 && swatch_magenta < 200);
+
+  /* Clicking the first row hides its series and says so. */
+  CHECK_EQ(ph_plot_clear_events(legend_plot2), PH_OK);
+  ph_plot_pointer_down(legend_plot2, 78.0, 33.0, PH_BUTTON_LEFT, PH_MOD_NONE);
+  ph_plot_pointer_up(legend_plot2, 78.0, 33.0, PH_BUTTON_LEFT, PH_MOD_NONE);
+  int toggles = 0;
+  while (ph_plot_poll_event(legend_plot2, &ev) == PH_OK && ev.type != PH_EVENT_NONE) {
+    if (ev.type != PH_EVENT_LAYER_VISIBILITY) continue;
+    toggles++;
+    CHECK(ev.layer == low_layer);
+    CHECK(ev.visible == 0);
+  }
+  printf("  legend toggles=%d\n", toggles);
+  CHECK(toggles == 1);
+  CHECK(high_layer != PH_NULL_HANDLE && anonymous != PH_NULL_HANDLE);
+
+  CHECK_EQ(ph_plot_destroy(legend_plot2), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

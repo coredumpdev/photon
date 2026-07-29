@@ -502,6 +502,31 @@ extern "C" ph_result PH_CALL ph_plot_set_colorbar(ph_plot handle, ph_bool enable
   return PH_OK;
 }
 
+extern "C" void PH_CALL ph_legend_config_init(ph_legend_config* out) {
+  if (!out) return;
+  *out = ph_legend_config{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_legend_config));
+  // Everything else stays zero: off, top-right, vertical, clickable — which is
+  // what an omitted `legend` means in the TypeScript too.
+}
+
+extern "C" ph_result PH_CALL ph_plot_set_legend(ph_plot handle, const ph_legend_config* config) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (config && !desc_size_ok(config)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_legend_config.struct_size is larger than this build's");
+  }
+  const ph_legend_config normalized = normalize(config, ph_legend_config_init);
+  if (normalized.position < PH_LEGEND_TOP_RIGHT || normalized.position > PH_LEGEND_BOTTOM_RIGHT) {
+    return fail(PH_E_INVALID_ARGUMENT, "unknown legend position");
+  }
+  plot->set_legend(normalized.enabled != 0, normalized.position, normalized.horizontal != 0,
+                   normalized.no_toggle == 0);
+  return PH_OK;
+}
+
 extern "C" ph_result PH_CALL ph_plot_set_pick_mode(ph_plot handle, ph_pick_mode mode) {
   clear_error();
   Plot* plot = nullptr;

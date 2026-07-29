@@ -157,6 +157,13 @@ public final class PhotonGallery {
     private static long addLine(long plot, MemorySegment xs, MemorySegment ys, int count,
                                 String css, float width, MemorySegment dash, int dashCount,
                                 int join) {
+        return addLine(plot, xs, ys, count, css, width, dash, dashCount, join, null);
+    }
+
+    /** `name` is what puts a series in the legend; an unnamed one stays out. */
+    private static long addLine(long plot, MemorySegment xs, MemorySegment ys, int count,
+                                String css, float width, MemorySegment dash, int dashCount,
+                                int join, String name) {
         MemorySegment desc = ph_line_desc.allocate(ARENA);
         ph_line_desc_init(desc);
         desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_X, xs);
@@ -165,6 +172,9 @@ public final class PhotonGallery {
         desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_COLOR, color(css));
         desc.set(ValueLayout.JAVA_FLOAT, ph_line_desc.OFFSET_WIDTH, width);
         desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_JOIN, join);
+        if (name != null) {
+            desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_NAME, ARENA.allocateFrom(name));
+        }
         if (dash != null) {
             desc.set(ValueLayout.ADDRESS, ph_line_desc.OFFSET_DASH, dash);
             desc.set(ValueLayout.JAVA_INT, ph_line_desc.OFFSET_DASH_COUNT, dashCount);
@@ -188,14 +198,23 @@ public final class PhotonGallery {
                               Math.exp(-t * 0.12) * Math.cos(t * 1.6));
         }
         setTitle(plot, "Waves");
+        // Two named series, so this is the panel with something to legend.
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment legend = ph_legend_config.allocate(scratch);
+            ph_legend_config_init(legend);
+            legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_ENABLED, 1);
+            legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_POSITION,
+                       PH_LEGEND_BOTTOM_LEFT);
+            ph_plot_set_legend(plot, legend);
+        }
         styleAxis(plot, "x", "time (s)", 4);
         styleAxis(plot, "y", "amplitude", 0);
 
-        addLine(plot, xs, sine, SAMPLES, "#38bdf8", 2.0f, null, 0, PH_JOIN_ROUND);
+        addLine(plot, xs, sine, SAMPLES, "#38bdf8", 2.0f, null, 0, PH_JOIN_ROUND, "sin t");
         MemorySegment dash = ARENA.allocate(ValueLayout.JAVA_FLOAT, 2);
         dash.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 6.0f);
         dash.setAtIndex(ValueLayout.JAVA_FLOAT, 1, 4.0f);
-        addLine(plot, xs, damped, SAMPLES, "#f472b6", 2.0f, dash, 2, PH_JOIN_MITER);
+        addLine(plot, xs, damped, SAMPLES, "#f472b6", 2.0f, dash, 2, PH_JOIN_MITER, "damped");
     }
 
     private static void buildDecay(long plot) {

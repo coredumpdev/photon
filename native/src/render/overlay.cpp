@@ -314,6 +314,142 @@ void draw_marker(Painter& painter, double px, double py, Rgba color) {
   disc(kRadius - kRim / 2.0, color);
 }
 
+namespace {
+
+/// The legend's own numbers, from the DOM style in plot.ts: 6/8 px padding,
+/// a 6 px corner radius, a 10 px swatch and 6 px between it and the label.
+constexpr double kLegendPadX = 8.0;
+constexpr double kLegendPadY = 6.0;
+constexpr double kLegendRadius = 6.0;
+constexpr double kLegendSwatch = 10.0;
+constexpr double kLegendSwatchGap = 6.0;
+constexpr double kLegendRowGap = 3.0;
+constexpr double kLegendColumnGap = 12.0;
+constexpr double kLegendFontSize = 12.0;
+constexpr double kLegendLineHeight = 18.0;  // 12px * 1.5
+constexpr double kLegendInset = 8.0;
+/// A hidden series keeps its row but fades, as the web core's 0.45 opacity does.
+constexpr float kLegendDimmed = 0.45f;
+
+/// One row's full width: swatch, gap, label.
+double row_width(const LegendEntry& entry, const Painter& painter) {
+  return kLegendSwatch + kLegendSwatchGap + painter.measure(entry.label, kLegendFontSize);
+}
+
+}  // namespace
+
+void fill_panel(Painter& painter, const Rect& panel, double radius, Rgba fill, Rgba border) {
+  const double r = std::min(radius, std::min(panel.width, panel.height) / 2.0);
+  // The body, then the corners cut off it row by row. Four rows at a 6 px
+  // radius, which is why this is not worth a shader.
+  painter.fill(panel.left, panel.top + r, panel.width, panel.height - 2.0 * r, fill);
+  const int steps = std::max(1, static_cast<int>(std::ceil(r)));
+  for (int i = 0; i < steps; ++i) {
+    const double dy = r - (static_cast<double>(i) + 0.5) * (r / steps);
+    const double inset = r - std::sqrt(std::max(0.0, r * r - dy * dy));
+    const double h = r / steps + 0.5;
+    painter.fill(panel.left + inset, panel.top + r - dy - h / 2.0, panel.width - 2.0 * inset, h,
+                 fill);
+    painter.fill(panel.left + inset, panel.bottom() - r + dy - h / 2.0, panel.width - 2.0 * inset,
+                 h, fill);
+  }
+  // A square border on a rounded panel would show at the corners, so the edges
+  // stop short of them — which is all a 1 px rounded outline needs to read.
+  painter.hairline(true, crisp(panel.left), panel.top + r, panel.bottom() - r, 1.0, border);
+  painter.hairline(true, crisp(panel.right()), panel.top + r, panel.bottom() - r, 1.0, border);
+  painter.hairline(false, crisp(panel.top), panel.left + r, panel.right() - r, 1.0, border);
+  painter.hairline(false, crisp(panel.bottom()), panel.left + r, panel.right() - r, 1.0, border);
+}
+
+Rect legend_row_rect(const Rect& panel, size_t index, size_t count, bool horizontal,
+                     const std::vector<LegendEntry>& entries, const Painter& painter) {
+  (void)count;
+  Rect row;
+  row.height = kLegendLineHeight;
+  if (horizontal) {
+    double x = panel.left + kLegendPadX;
+    for (size_t i = 0; i < index && i < entries.size(); ++i) {
+      x += row_width(entries[i], painter) + kLegendColumnGap;
+    }
+    row.left = x;
+    row.top = panel.top + kLegendPadY;
+    row.width = index < entries.size() ? row_width(entries[index], painter) : 0.0;
+  } else {
+    row.left = panel.left + kLegendPadX;
+    row.top = panel.top + kLegendPadY +
+              static_cast<double>(index) * (kLegendLineHeight + kLegendRowGap);
+    row.width = panel.width - 2.0 * kLegendPadX;
+  }
+  return row;
+}
+
+Rect draw_legend(Painter& painter, const Rect& region, const std::vector<LegendEntry>& entries,
+                 ph_legend_position position, bool horizontal, ph_theme theme) {
+  Rect panel;
+  if (entries.empty()) return panel;
+
+  double content_w = 0.0;
+  double content_h = 0.0;
+  if (horizontal) {
+    for (size_t i = 0; i < entries.size(); ++i) {
+      content_w += row_width(entries[i], painter);
+      if (i + 1 < entries.size()) content_w += kLegendColumnGap;
+    }
+    content_h = kLegendLineHeight;
+  } else {
+    for (const LegendEntry& entry : entries) {
+      content_w = std::max(content_w, row_width(entry, painter));
+    }
+    content_h = static_cast<double>(entries.size()) * kLegendLineHeight +
+                static_cast<double>(entries.size() - 1) * kLegendRowGap;
+  }
+  panel.width = content_w + 2.0 * kLegendPadX;
+  panel.height = content_h + 2.0 * kLegendPadY;
+
+  const bool left = position == PH_LEGEND_TOP_LEFT || position == PH_LEGEND_BOTTOM_LEFT;
+  const bool top = position == PH_LEGEND_TOP_LEFT || position == PH_LEGEND_TOP_RIGHT;
+  panel.left = left ? region.left + kLegendInset
+                    : region.right() - panel.width - kLegendInset;
+  panel.top = top ? region.top + kLegendInset : region.bottom() - panel.height - kLegendInset;
+  panel.left = std::max(0.0, panel.left);
+  panel.top = std::max(0.0, panel.top);
+
+  const bool dark = theme == PH_THEME_DARK;
+  const Rgba fill = dark ? Rgba{15.0f / 255.0f, 23.0f / 255.0f, 42.0f / 255.0f, 0.85f}
+                         : Rgba{1.0f, 1.0f, 1.0f, 0.9f};
+  const Rgba border = dark
+                          ? Rgba{148.0f / 255.0f, 163.0f / 255.0f, 184.0f / 255.0f, 0.25f}
+                          : Rgba{100.0f / 255.0f, 116.0f / 255.0f, 139.0f / 255.0f, 0.2f};
+  const Rgba text = dark ? Rgba{226.0f / 255.0f, 232.0f / 255.0f, 240.0f / 255.0f, 1.0f}
+                         : Rgba{30.0f / 255.0f, 41.0f / 255.0f, 59.0f / 255.0f, 1.0f};
+  fill_panel(painter, panel, kLegendRadius, fill, border);
+
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const LegendEntry& entry = entries[i];
+    const Rect row = legend_row_rect(panel, i, entries.size(), horizontal, entries, painter);
+    const double mid = row.top + row.height / 2.0;
+    const double swatch_top = mid - kLegendSwatch / 2.0;
+    // A hidden series shows its outline but not its fill, so the legend says
+    // both what the series is and that it is off.
+    if (entry.visible) {
+      painter.fill(row.left, swatch_top, kLegendSwatch, kLegendSwatch, entry.color);
+    }
+    painter.hairline(true, crisp(row.left), swatch_top, swatch_top + kLegendSwatch, 1.0,
+                     entry.color);
+    painter.hairline(true, crisp(row.left + kLegendSwatch), swatch_top,
+                     swatch_top + kLegendSwatch, 1.0, entry.color);
+    painter.hairline(false, crisp(swatch_top), row.left, row.left + kLegendSwatch, 1.0,
+                     entry.color);
+    painter.hairline(false, crisp(swatch_top + kLegendSwatch), row.left,
+                     row.left + kLegendSwatch, 1.0, entry.color);
+
+    painter.label(entry.label, row.left + kLegendSwatch + kLegendSwatchGap, mid,
+                  text::Align::Left, text::Baseline::Middle,
+                  entry.visible ? text : with_alpha(text, kLegendDimmed), kLegendFontSize);
+  }
+  return panel;
+}
+
 void draw_selection(Painter& painter, const Rect& region, double x0, double y0, double x1,
                     double y1, bool lock_x, bool lock_y) {
   const auto clamp = [](double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); };

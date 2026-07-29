@@ -246,6 +246,17 @@ public final class PhotonSmokeTest {
         checkEq(ph_plot_set_pick_mode(plot, 99), PH_E_INVALID_ARGUMENT, "an unknown pick mode");
         checkEq(ph_plot_set_pick_mode(plot, PH_PICK_X), PH_OK, "back to the default");
 
+        MemorySegment legend = ph_legend_config.allocate(arena);
+        ph_legend_config_init(legend);
+        legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_ENABLED, 1);
+        legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_POSITION, PH_LEGEND_BOTTOM_LEFT);
+        checkEq(ph_plot_set_legend(plot, legend), PH_OK, "ph_plot_set_legend");
+        legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_POSITION, 42);
+        checkEq(ph_plot_set_legend(plot, legend), PH_E_INVALID_ARGUMENT,
+                "an unknown legend position");
+        checkEq(ph_plot_set_legend(plot, MemorySegment.NULL), PH_OK,
+                "a null config restores the defaults");
+
         MemorySegment margin = ph_margin.allocate(arena);
         margin.set(ValueLayout.JAVA_FLOAT, ph_margin.OFFSET_TOP, 20.0f);
         margin.set(ValueLayout.JAVA_FLOAT, ph_margin.OFFSET_RIGHT, 20.0f);
@@ -255,7 +266,7 @@ public final class PhotonSmokeTest {
 
         ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
             "ph_plot_set_title", "ph_plot_set_margin", "ph_plot_set_colorbar",
-            "ph_plot_set_pick_mode");
+            "ph_plot_set_pick_mode", "ph_legend_config_init", "ph_plot_set_legend");
         return plot;
     }
 

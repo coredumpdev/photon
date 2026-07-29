@@ -62,6 +62,10 @@ public static partial class Ph
     public const int PH_PICK_X = 0;
     public const int PH_PICK_Y = 1;
     public const int PH_PICK_XY = 2;
+    public const int PH_LEGEND_TOP_RIGHT = 0;
+    public const int PH_LEGEND_TOP_LEFT = 1;
+    public const int PH_LEGEND_BOTTOM_LEFT = 2;
+    public const int PH_LEGEND_BOTTOM_RIGHT = 3;
     public const int PH_THEME_DARK = 0;
     public const int PH_THEME_LIGHT = 1;
     public const int PH_GFX_GL33 = 0;
@@ -263,7 +267,7 @@ public static partial class Ph
         public int minor_ticks;
     }
 
-    /// <summary>ph_plot_desc — 200 bytes, alignment 8.</summary>
+    /// <summary>ph_plot_desc — 208 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_plot_desc
     {
@@ -305,6 +309,12 @@ public static partial class Ph
         public int bounded_pan;
         /// <summary>offset 192</summary>
         public int legend;
+        /// <summary>offset 196</summary>
+        public int legend_position;
+        /// <summary>offset 200</summary>
+        public int legend_horizontal;
+        /// <summary>offset 204</summary>
+        public int legend_static;
     }
 
     /// <summary>ph_line_desc — 96 bytes, alignment 8.</summary>
@@ -789,6 +799,22 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_legend_config — 20 bytes, alignment 4.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_legend_config
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 4</summary>
+        public int enabled;
+        /// <summary>offset 8</summary>
+        public int position;
+        /// <summary>offset 12</summary>
+        public int horizontal;
+        /// <summary>offset 16</summary>
+        public int no_toggle;
+    }
+
     /// <summary>ph_heatmap_desc — 112 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_heatmap_desc
@@ -958,6 +984,7 @@ public static partial class Ph
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_legend_config_init",
         "ph_contour_desc_init",
         "ph_graph_desc_init",
         "ph_hexbin_desc_init",
@@ -975,6 +1002,7 @@ public static partial class Ph
         "ph_plot_set_title",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
+        "ph_plot_set_legend",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
         "ph_plot_get_domain",
@@ -1120,6 +1148,9 @@ public static partial class Ph
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_box_desc_init")]
     public static extern void ph_box_desc_init(out ph_box_desc @out);
 
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_legend_config_init")]
+    public static extern void ph_legend_config_init(out ph_legend_config @out);
+
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_contour_desc_init")]
     public static extern void ph_contour_desc_init(out ph_contour_desc @out);
 
@@ -1176,6 +1207,12 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_pick_mode")]
     public static extern int ph_plot_set_pick_mode(ulong plot, int mode);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_legend")]
+    public static extern int ph_plot_set_legend(ulong plot, IntPtr config);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_legend")]
+    public static extern int ph_plot_set_legend(ulong plot, in ph_legend_config config);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_scale")]
     public static extern int ph_plot_set_scale(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string axis, IntPtr desc);

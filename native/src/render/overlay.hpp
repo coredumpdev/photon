@@ -132,6 +132,34 @@ void draw_crosshair(Painter& painter, const Rect& region, double px, ph_theme th
 /// The disc drawn on the picked point: filled in the series colour, white-rimmed.
 void draw_marker(Painter& painter, double px, double py, Rgba color);
 
+/**
+ * A filled panel with a 1 px border and rounded corners, for the legend and the
+ * tooltip. There is no rounded-rect primitive, so the corners are cut with a
+ * short stack of rows — six pixels of radius is four rows, which is cheaper
+ * than teaching the shader about radii for two call sites.
+ */
+void fill_panel(Painter& painter, const Rect& panel, double radius, Rgba fill, Rgba border);
+
+/// One legend row: a series name and the swatch that toggles it.
+struct LegendEntry {
+  std::string label;
+  Rgba color;
+  bool visible = true;
+};
+
+/**
+ * The legend panel, inset from a corner of the plot region.
+ *
+ * Returns the rectangle it occupied, so the plot can hit-test clicks against it
+ * without laying it out twice.
+ */
+Rect draw_legend(Painter& painter, const Rect& region, const std::vector<LegendEntry>& entries,
+                 ph_legend_position position, bool horizontal, ph_theme theme);
+
+/// Row `index`'s rectangle inside a legend panel laid out at `panel`.
+Rect legend_row_rect(const Rect& panel, size_t index, size_t count, bool horizontal,
+                     const std::vector<LegendEntry>& entries, const Painter& painter);
+
 /// The box-zoom rectangle. `lock_x`/`lock_y` follow the interaction mode: an
 /// axis that is not locked spans the whole region, as in drawSelection().
 void draw_selection(Painter& painter, const Rect& region, double x0, double y0, double x1,

@@ -85,6 +85,10 @@ public final class Photon {
     public static final int PH_PICK_X = 0;
     public static final int PH_PICK_Y = 1;
     public static final int PH_PICK_XY = 2;
+    public static final int PH_LEGEND_TOP_RIGHT = 0;
+    public static final int PH_LEGEND_TOP_LEFT = 1;
+    public static final int PH_LEGEND_BOTTOM_LEFT = 2;
+    public static final int PH_LEGEND_BOTTOM_RIGHT = 3;
     public static final int PH_THEME_DARK = 0;
     public static final int PH_THEME_LIGHT = 1;
     public static final int PH_GFX_GL33 = 0;
@@ -368,7 +372,7 @@ public final class Photon {
         }
     }
 
-    /** ph_plot_desc — 200 bytes, alignment 8. */
+    /** ph_plot_desc — 208 bytes, alignment 8. */
     public static final class ph_plot_desc {
         private ph_plot_desc() {}
 
@@ -392,7 +396,9 @@ public final class Photon {
             ValueLayout.JAVA_INT.withName("equal_aspect"),
             ValueLayout.JAVA_INT.withName("bounded_pan"),
             ValueLayout.JAVA_INT.withName("legend"),
-            MemoryLayout.paddingLayout(4)
+            ValueLayout.JAVA_INT.withName("legend_position"),
+            ValueLayout.JAVA_INT.withName("legend_horizontal"),
+            ValueLayout.JAVA_INT.withName("legend_static")
         ).withName("ph_plot_desc");
 
         public static final long SIZE = LAYOUT.byteSize();
@@ -416,6 +422,9 @@ public final class Photon {
         public static final long OFFSET_EQUAL_ASPECT = 184L;
         public static final long OFFSET_BOUNDED_PAN = 188L;
         public static final long OFFSET_LEGEND = 192L;
+        public static final long OFFSET_LEGEND_POSITION = 196L;
+        public static final long OFFSET_LEGEND_HORIZONTAL = 200L;
+        public static final long OFFSET_LEGEND_STATIC = 204L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1113,6 +1122,32 @@ public final class Photon {
         }
     }
 
+    /** ph_legend_config — 20 bytes, alignment 4. */
+    public static final class ph_legend_config {
+        private ph_legend_config() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            ValueLayout.JAVA_INT.withName("enabled"),
+            ValueLayout.JAVA_INT.withName("position"),
+            ValueLayout.JAVA_INT.withName("horizontal"),
+            ValueLayout.JAVA_INT.withName("no_toggle")
+        ).withName("ph_legend_config");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_ENABLED = 4L;
+        public static final long OFFSET_POSITION = 8L;
+        public static final long OFFSET_HORIZONTAL = 12L;
+        public static final long OFFSET_NO_TOGGLE = 16L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_heatmap_desc — 112 bytes, alignment 8. */
     public static final class ph_heatmap_desc {
         private ph_heatmap_desc() {}
@@ -1347,6 +1382,7 @@ public final class Photon {
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_legend_config_init",
         "ph_contour_desc_init",
         "ph_graph_desc_init",
         "ph_hexbin_desc_init",
@@ -1364,6 +1400,7 @@ public final class Photon {
         "ph_plot_set_title",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
+        "ph_plot_set_legend",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
         "ph_plot_get_domain",
@@ -1443,6 +1480,7 @@ public final class Photon {
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LEGEND_CONFIG_INIT = handle("ph_legend_config_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_CONTOUR_DESC_INIT = handle("ph_contour_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_GRAPH_DESC_INIT = handle("ph_graph_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_HEXBIN_DESC_INIT = handle("ph_hexbin_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
@@ -1460,6 +1498,7 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_SET_TITLE = handle("ph_plot_set_title", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_COLORBAR = handle("ph_plot_set_colorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_PICK_MODE = handle("ph_plot_set_pick_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT_SET_LEGEND = handle("ph_plot_set_legend", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_SCALE = handle("ph_plot_set_scale", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_DOMAIN = handle("ph_plot_set_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ph_range.LAYOUT));
     private static final MethodHandle PH_PLOT_GET_DOMAIN = handle("ph_plot_get_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -1748,6 +1787,14 @@ public final class Photon {
         }
     }
 
+    public static void ph_legend_config_init(MemorySegment out) {
+        try {
+            PH_LEGEND_CONFIG_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_legend_config_init failed", photonFailure);
+        }
+    }
+
     public static void ph_contour_desc_init(MemorySegment out) {
         try {
             PH_CONTOUR_DESC_INIT.invokeExact(out);
@@ -1881,6 +1928,14 @@ public final class Photon {
             return (int) PH_PLOT_SET_PICK_MODE.invokeExact(plot, mode);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_set_pick_mode failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_set_legend(long plot, MemorySegment config) {
+        try {
+            return (int) PH_PLOT_SET_LEGEND.invokeExact(plot, config);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_legend failed", photonFailure);
         }
     }
 

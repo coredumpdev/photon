@@ -61,6 +61,8 @@ class Plot {
   ph_margin compute_margin() const;
   /// Re-run the hover pick and emit PH_EVENT_POINT_PICKED when it changed.
   void update_pick();
+  /// True when the click landed on a legend row and toggled its series.
+  bool legend_click(double px, double py);
   /// The colour scales the visible layers report, in draw order.
   std::vector<render::ColorbarEntry> color_scales() const;
   /// Where each y axis line sits, parallel to the axis list.
@@ -98,11 +100,22 @@ class Plot {
   /// Every visible layer's nearest point to the hover cursor, in draw order.
   std::vector<Hit> hover_hits() const;
 
+  /// The layers that belong in the legend: the ones the caller named.
+  std::vector<Layer*> legend_layers() const;
+
   /// Turn the colorbar stack off. On by default, as in the web core.
   void set_colorbar(bool on) { colorbar_ = on; }
   bool colorbar() const { return colorbar_; }
 
   void set_pick_mode(ph_pick_mode mode) { pick_ = mode; }
+
+  void set_legend(bool on, ph_legend_position position, bool horizontal, bool interactive) {
+    legend_ = on;
+    legend_position_ = position;
+    legend_horizontal_ = horizontal;
+    legend_interactive_ = interactive;
+    request_render();
+  }
 
   /// Handles minted for this plot's layers, so teardown can invalidate them.
   std::vector<uint64_t> layer_handles;
@@ -226,6 +239,13 @@ class Plot {
   int32_t picked_index_ = -1;
   bool crosshair_ = true;
   bool colorbar_ = true;
+  bool legend_ = false;
+  ph_legend_position legend_position_ = PH_LEGEND_TOP_RIGHT;
+  bool legend_horizontal_ = false;
+  bool legend_interactive_ = true;
+  /// Where the legend last drew, so a click can be tested against it without
+  /// laying it out a second time.
+  render::Rect legend_panel_{};
   bool equal_aspect_ = false;
   bool bounded_pan_ = false;
 

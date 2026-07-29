@@ -128,6 +128,11 @@ Plot::Plot(const ph_plot_desc& desc) {
   interactive_ = desc.no_interaction == 0;
   hover_enabled_ = desc.no_hover == 0;
   crosshair_ = desc.no_crosshair == 0;
+  colorbar_ = desc.no_colorbar == 0;
+  legend_ = desc.legend != 0;
+  legend_position_ = desc.legend_position;
+  legend_horizontal_ = desc.legend_horizontal != 0;
+  legend_interactive_ = desc.legend_static == 0;
 }
 
 // -- geometry ---------------------------------------------------------------
@@ -146,6 +151,18 @@ void Plot::set_margin(const ph_margin& margin) {
 void Plot::set_title(const char* title) {
   title_ = title ? title : "";
   request_render();
+}
+
+std::vector<Layer*> Plot::legend_layers() const {
+  std::vector<Layer*> out;
+  if (!legend_) return out;
+  // Only layers the caller named: an unnamed one is a builder's helper — a
+  // fill under a line, a raw series behind a smoothed one — and listing it
+  // would be clutter the caller never asked for.
+  for (const std::unique_ptr<Layer>& layer : layers_) {
+    if (layer && !layer->name().empty()) out.push_back(layer.get());
+  }
+  return out;
 }
 
 std::vector<render::ColorbarEntry> Plot::color_scales() const {
@@ -558,7 +575,49 @@ void Plot::wheel(double px, double py, double delta_y, ph_modifiers) {
   zoom_around(nx, ny, std::exp(delta_y * 0.001));
 }
 
+bool Plot::legend_click(double px, double py) {
+  if (!legend_ || !legend_interactive_) return false;
+  if (px < legend_panel_.left || px > legend_panel_.right()) return false;
+  if (py < legend_panel_.top || py > legend_panel_.bottom()) return false;
+
+  const std::vector<Layer*> layers = legend_layers();
+  if (layers.empty()) return false;
+  std::vector<render::LegendEntry> entries;
+  for (const Layer* layer : layers) {
+    entries.push_back(
+        render::LegendEntry{layer->name(), unpack_color(layer->color()), layer->visible()});
+  }
+  // The panel was laid out against the same measurements last frame, so
+  // measuring the rows again reproduces it — the alternative is caching a
+  // rectangle per row, which is more state to keep honest for no benefit. The
+  // painter here draws nothing; it is only asked for text widths.
+  render::Primitives shapes;
+  text::Batch labels;
+  render::Painter painter(shapes, labels, 1.0f);
+  for (size_t i = 0; i < layers.size(); ++i) {
+    const render::Rect row = render::legend_row_rect(legend_panel_, i, layers.size(),
+                                                     legend_horizontal_, entries, painter);
+    if (px < row.left || px > row.left + row.width) continue;
+    if (py < row.top || py > row.top + row.height) continue;
+    layers[i]->set_visible(!layers[i]->visible());
+    // The axes re-fit to what is left, which is what the web core does and what
+    // makes hiding the tall series useful rather than merely tidy.
+    autoscale();
+    ph_event ev{};
+    ev.struct_size = static_cast<uint32_t>(sizeof(ph_event));
+    ev.type = PH_EVENT_LAYER_VISIBILITY;
+    ev.layer = layers[i]->handle;
+    ev.visible = layers[i]->visible() ? 1 : 0;
+    push_event(ev);
+    request_render();
+    return true;
+  }
+  // Inside the panel but between rows: still the legend's click, not the plot's.
+  return true;
+}
+
 void Plot::pointer_down(double px, double py, ph_button button, ph_modifiers) {
+  if (button == PH_BUTTON_LEFT && legend_click(px, py)) return;
   if (!interactive_ || button != PH_BUTTON_LEFT) return;
   last_px_ = px;
   last_py_ = py;
@@ -965,6 +1024,17 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
     if (axis.side != 0) ++right_axes;
   }
   render::draw_colorbars(painter, rect, color_scales(), right_axes, theme_);
+
+  legend_panel_ = render::Rect{};
+  if (legend_) {
+    std::vector<render::LegendEntry> entries;
+    for (const Layer* layer : legend_layers()) {
+      entries.push_back(
+          render::LegendEntry{layer->name(), unpack_color(layer->color()), layer->visible()});
+    }
+    legend_panel_ =
+        render::draw_legend(painter, rect, entries, legend_position_, legend_horizontal_, theme_);
+  }
 
   render::draw_title(painter, rect, title_, theme_);
 

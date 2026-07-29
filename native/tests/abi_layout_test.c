@@ -111,7 +111,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_axis_config, grid_dash) == 88, "ph_axis_config.grid
 PH_ASSERT_LAYOUT(offsetof(ph_axis_config, grid_dash_count) == 96, "ph_axis_config.grid_dash_count offset");
 PH_ASSERT_LAYOUT(offsetof(ph_axis_config, minor_ticks) == 100, "ph_axis_config.minor_ticks offset");
 
-PH_ASSERT_LAYOUT(sizeof(ph_plot_desc) == 200, "ph_plot_desc size");
+PH_ASSERT_LAYOUT(sizeof(ph_plot_desc) == 208, "ph_plot_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_plot_desc) == 8, "ph_plot_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, struct_size) == 0, "ph_plot_desc.struct_size offset");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, width) == 4, "ph_plot_desc.width offset");
@@ -132,6 +132,9 @@ PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, no_colorbar) == 180, "ph_plot_desc.no_co
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, equal_aspect) == 184, "ph_plot_desc.equal_aspect offset");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, bounded_pan) == 188, "ph_plot_desc.bounded_pan offset");
 PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend) == 192, "ph_plot_desc.legend offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_position) == 196, "ph_plot_desc.legend_position offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_horizontal) == 200, "ph_plot_desc.legend_horizontal offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot_desc, legend_static) == 204, "ph_plot_desc.legend_static offset");
 
 PH_ASSERT_LAYOUT(sizeof(ph_line_desc) == 96, "ph_line_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_line_desc) == 8, "ph_line_desc alignment");
@@ -374,6 +377,14 @@ PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, name) == 80, "ph_ohlc_desc.name offset")
 PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, y_axis) == 88, "ph_ohlc_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, render_type) == 96, "ph_ohlc_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_legend_config) == 20, "ph_legend_config size");
+PH_ASSERT_LAYOUT(_Alignof(ph_legend_config) == 4, "ph_legend_config alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_legend_config, struct_size) == 0, "ph_legend_config.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_legend_config, enabled) == 4, "ph_legend_config.enabled offset");
+PH_ASSERT_LAYOUT(offsetof(ph_legend_config, position) == 8, "ph_legend_config.position offset");
+PH_ASSERT_LAYOUT(offsetof(ph_legend_config, horizontal) == 12, "ph_legend_config.horizontal offset");
+PH_ASSERT_LAYOUT(offsetof(ph_legend_config, no_toggle) == 16, "ph_legend_config.no_toggle offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_heatmap_desc) == 112, "ph_heatmap_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_heatmap_desc) == 8, "ph_heatmap_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, struct_size) == 0, "ph_heatmap_desc.struct_size offset");
@@ -445,7 +456,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid o
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 30);
+  printf("%d struct layouts match the generated bindings\n", 31);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

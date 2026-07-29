@@ -183,6 +183,16 @@ internal static class PhotonSmokeTest
         CheckEq(ph_plot_set_pick_mode(plot, PH_PICK_XY), PH_OK, "ph_plot_set_pick_mode");
         CheckEq(ph_plot_set_pick_mode(plot, 99), PH_E_INVALID_ARGUMENT, "an unknown pick mode");
         CheckEq(ph_plot_set_pick_mode(plot, PH_PICK_X), PH_OK, "back to the default");
+
+        ph_legend_config_init(out var legend);
+        legend.enabled = 1;
+        legend.position = PH_LEGEND_BOTTOM_LEFT;
+        CheckEq(ph_plot_set_legend(plot, in legend), PH_OK, "ph_plot_set_legend");
+        legend.position = 42;
+        CheckEq(ph_plot_set_legend(plot, in legend), PH_E_INVALID_ARGUMENT,
+            "an unknown legend position");
+        CheckEq(ph_plot_set_legend(plot, IntPtr.Zero), PH_OK,
+            "a null config restores the defaults");
         // Non-ASCII, so the UTF-8 marshalling is exercised rather than assumed.
         CheckEq(ph_plot_set_title(plot, "Portföy · σ"), PH_OK, "ph_plot_set_title");
         CheckEq(ph_plot_set_title(plot, null!), PH_OK, "ph_plot_set_title(null)");
@@ -192,6 +202,7 @@ internal static class PhotonSmokeTest
 
         Ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
             "ph_plot_set_colorbar", "ph_plot_set_pick_mode",
+            "ph_legend_config_init", "ph_plot_set_legend",
             "ph_plot_set_title", "ph_plot_set_margin");
         return plot;
     }

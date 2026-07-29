@@ -199,6 +199,15 @@ enum {
   PH_PICK_XY = 2
 };
 
+/** Which corner of the plot region the legend sits in. */
+typedef int32_t ph_legend_position;
+enum {
+  PH_LEGEND_TOP_RIGHT    = 0,
+  PH_LEGEND_TOP_LEFT     = 1,
+  PH_LEGEND_BOTTOM_LEFT  = 2,
+  PH_LEGEND_BOTTOM_RIGHT = 3
+};
+
 typedef int32_t ph_theme;
 enum {
   PH_THEME_DARK  = 0,
@@ -477,6 +486,12 @@ typedef struct ph_plot_desc {
   ph_bool      equal_aspect;
   ph_bool      bounded_pan;
   ph_bool      legend;
+  /** Where the legend goes. Ignored unless `legend` is set. */
+  ph_legend_position legend_position;
+  /** Lay the entries out in a row instead of a column. */
+  ph_bool      legend_horizontal;
+  /** Clicking an entry no longer toggles its series. On in the core. */
+  ph_bool      legend_static;
 } ph_plot_desc;
 
 /**
@@ -895,6 +910,22 @@ typedef struct ph_ohlc_desc {
 } ph_ohlc_desc;
 
 /**
+ * Mirrors core `LegendOptions`, plus the on/off the descriptor also carries.
+ *
+ * The same four knobs as `ph_plot_desc`'s legend fields, so a caller can set
+ * them at creation or change them later without learning two vocabularies.
+ */
+typedef struct ph_legend_config {
+  uint32_t           struct_size;
+  ph_bool            enabled;
+  ph_legend_position position;
+  /** Lay the entries out in a row instead of a column. */
+  ph_bool            horizontal;
+  /** Clicking an entry no longer toggles its series. On in the core. */
+  ph_bool            no_toggle;
+} ph_legend_config;
+
+/**
  * Mirrors core `HeatmapOptions`.
  *
  * A regular grid coloured through a colormap and drawn as one textured quad —
@@ -1123,6 +1154,7 @@ PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
 PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
+PH_API void PH_CALL ph_legend_config_init(ph_legend_config* out);
 PH_API void PH_CALL ph_contour_desc_init(ph_contour_desc* out);
 PH_API void PH_CALL ph_graph_desc_init(ph_graph_desc* out);
 PH_API void PH_CALL ph_hexbin_desc_init(ph_hexbin_desc* out);
@@ -1171,6 +1203,15 @@ PH_API ph_result PH_CALL ph_plot_set_colorbar(ph_plot plot, ph_bool enabled);
  * x-only match highlights something the cursor is nowhere near.
  */
 PH_API ph_result PH_CALL ph_plot_set_pick_mode(ph_plot plot, ph_pick_mode mode);
+
+/**
+ * Show, place and configure the legend.
+ *
+ * Only layers the caller *named* appear: an unnamed layer is a builder's helper
+ * — a fill under a line, a raw series behind a smoothed one — and listing it
+ * would be clutter nobody asked for. A NULL config restores the defaults.
+ */
+PH_API ph_result PH_CALL ph_plot_set_legend(ph_plot plot, const ph_legend_config* config);
 
 /* ------------------------------------------------------------------------ */
 /* Axes and view                                                              */

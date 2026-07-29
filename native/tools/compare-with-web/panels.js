@@ -55,6 +55,8 @@ function waves(container) {
     ...common,
     title: "Waves",
     axes: { x: { title: "time (s)", minorTicks: 4 }, y: { title: "amplitude" } },
+    // Two named series, so this is the panel with something to legend.
+    legend: { position: "bottom-left" },
   });
   plot.addLine({ x: xs, y: sine, color: "#38bdf8", width: 2, name: "sin t" });
   plot.addLine({
