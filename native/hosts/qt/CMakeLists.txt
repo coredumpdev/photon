@@ -26,6 +26,10 @@ qt_add_qml_module(photon_qt_quick
   URI Photon
   VERSION 1.0
   STATIC
+  # Pinned, because the default moved: Qt 6.5 put QML resources under
+  # /qt/qml/ where earlier versions used /. Saying it outright means the URL in
+  # gallery_quick.cpp is the same on both.
+  RESOURCE_PREFIX "/"
   SOURCES
     photonplotitem.h
     photonplotitem.cpp

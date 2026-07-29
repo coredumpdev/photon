@@ -12,6 +12,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlApplicationEngine>
+#include <QUrl>
 #include <QQuickWindow>
 #include <QSurfaceFormat>
 #include <QTimer>
@@ -32,7 +33,11 @@ int main(int argc, char** argv) {
   app.setApplicationName("Photon Qt gallery");
 
   QQmlApplicationEngine engine;
-  engine.loadFromModule("Photon", "Main");
+  // load(QUrl) rather than loadFromModule, which is nicer and is 6.5+. Ubuntu's
+  // current LTS ships 6.4, and nothing else here needs anything newer, so the
+  // older spelling is what keeps the floor where the code actually is. The
+  // prefix is pinned in CMakeLists.txt because its default moved in 6.5.
+  engine.load(QUrl(QStringLiteral("qrc:/Photon/Main.qml")));
   if (engine.rootObjects().isEmpty()) return 1;
 
   // `--grab <file.png>` renders a few frames, writes the window to disk and
