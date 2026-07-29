@@ -146,6 +146,24 @@ public static partial class Ph
         public int flip_y;
     }
 
+    /// <summary>ph_colormap_spec — 40 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_colormap_spec
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr name;
+        /// <summary>offset 16</summary>
+        public IntPtr stops;
+        /// <summary>offset 24</summary>
+        public int stop_count;
+        /// <summary>offset 28</summary>
+        public int reverse;
+        /// <summary>offset 32</summary>
+        public int discrete_steps;
+    }
+
     /// <summary>ph_margin — 16 bytes, alignment 4.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_margin
@@ -560,6 +578,66 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_heatmap_desc — 112 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_heatmap_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range y;
+        /// <summary>offset 56</summary>
+        public IntPtr colormap;
+        /// <summary>offset 64</summary>
+        public ph_range domain;
+        /// <summary>offset 80</summary>
+        public int no_smooth;
+        /// <summary>offset 88</summary>
+        public IntPtr name;
+        /// <summary>offset 96</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 104</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_image_desc — 96 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_image_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr pixels;
+        /// <summary>offset 16</summary>
+        public int width;
+        /// <summary>offset 20</summary>
+        public int height;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range y;
+        /// <summary>offset 56</summary>
+        public int bottom_up;
+        /// <summary>offset 60</summary>
+        public int no_smooth;
+        /// <summary>offset 64</summary>
+        public float opacity;
+        /// <summary>offset 72</summary>
+        public IntPtr name;
+        /// <summary>offset 80</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 88</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_patch — 40 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_patch
@@ -631,6 +709,16 @@ public static partial class Ph
     ///   assert it exercised all of them rather than merely intending to.
     /// </summary>
     public static readonly string[] EntryPoints = {
+        "ph_colormap_spec_init",
+        "ph_colormap_register",
+        "ph_colormap_sample",
+        "ph_colormap_count",
+        "ph_colormap_name",
+        "ph_symmetric_domain",
+        "ph_palette_register",
+        "ph_palette_count",
+        "ph_palette_name",
+        "ph_palette_color",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -651,6 +739,8 @@ public static partial class Ph
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_heatmap_desc_init",
+        "ph_image_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -676,6 +766,8 @@ public static partial class Ph
         "ph_plot_add_stem",
         "ph_plot_add_errorbar",
         "ph_plot_add_box",
+        "ph_plot_add_heatmap",
+        "ph_plot_add_image",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -698,6 +790,39 @@ public static partial class Ph
         "ph_plot_poll_event",
         "ph_plot_clear_events",
     };
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_colormap_spec_init")]
+    public static extern void ph_colormap_spec_init(out ph_colormap_spec @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_colormap_register")]
+    public static extern int ph_colormap_register([MarshalAs(UnmanagedType.LPUTF8Str)] string name, uint[] stops, int stop_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_colormap_sample")]
+    public static extern int ph_colormap_sample(IntPtr spec, double t, out uint @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_colormap_sample")]
+    public static extern int ph_colormap_sample(in ph_colormap_spec spec, double t, out uint @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_colormap_count")]
+    public static extern int ph_colormap_count();
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_colormap_name")]
+    public static extern IntPtr ph_colormap_name(int index);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_symmetric_domain")]
+    public static extern int ph_symmetric_domain(double[] values, int count, double center, out ph_range @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_palette_register")]
+    public static extern int ph_palette_register([MarshalAs(UnmanagedType.LPUTF8Str)] string name, uint[] colors, int count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_palette_count")]
+    public static extern int ph_palette_count();
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_palette_name")]
+    public static extern IntPtr ph_palette_name(int index);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_palette_color")]
+    public static extern uint ph_palette_color([MarshalAs(UnmanagedType.LPUTF8Str)] string name, int index);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_abi_version")]
     public static extern uint ph_abi_version();
@@ -761,6 +886,12 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_box_desc_init")]
     public static extern void ph_box_desc_init(out ph_box_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_heatmap_desc_init")]
+    public static extern void ph_heatmap_desc_init(out ph_heatmap_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_image_desc_init")]
+    public static extern void ph_image_desc_init(out ph_image_desc @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_create")]
     public static extern int ph_plot_create(IntPtr desc, out ulong @out);
@@ -878,6 +1009,18 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_box")]
     public static extern int ph_plot_add_box(ulong plot, in ph_box_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_heatmap")]
+    public static extern int ph_plot_add_heatmap(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_heatmap")]
+    public static extern int ph_plot_add_heatmap(ulong plot, in ph_heatmap_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_image")]
+    public static extern int ph_plot_add_image(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_image")]
+    public static extern int ph_plot_add_image(ulong plot, in ph_image_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_xy")]
     public static extern int ph_layer_set_xy(ulong layer, double[] x, double[] y, int count);

@@ -53,6 +53,15 @@ PH_ASSERT_LAYOUT(offsetof(ph_frame_target, height) == 20, "ph_frame_target.heigh
 PH_ASSERT_LAYOUT(offsetof(ph_frame_target, dpr) == 24, "ph_frame_target.dpr offset");
 PH_ASSERT_LAYOUT(offsetof(ph_frame_target, flip_y) == 28, "ph_frame_target.flip_y offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_colormap_spec) == 40, "ph_colormap_spec size");
+PH_ASSERT_LAYOUT(_Alignof(ph_colormap_spec) == 8, "ph_colormap_spec alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, struct_size) == 0, "ph_colormap_spec.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, name) == 8, "ph_colormap_spec.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, stops) == 16, "ph_colormap_spec.stops offset");
+PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, stop_count) == 24, "ph_colormap_spec.stop_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, reverse) == 28, "ph_colormap_spec.reverse offset");
+PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, discrete_steps) == 32, "ph_colormap_spec.discrete_steps offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_margin) == 16, "ph_margin size");
 PH_ASSERT_LAYOUT(_Alignof(ph_margin) == 4, "ph_margin alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_margin, top) == 0, "ph_margin.top offset");
@@ -260,6 +269,36 @@ PH_ASSERT_LAYOUT(offsetof(ph_box_desc, name) == 40, "ph_box_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, y_axis) == 48, "ph_box_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, render_type) == 56, "ph_box_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_heatmap_desc) == 112, "ph_heatmap_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_heatmap_desc) == 8, "ph_heatmap_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, struct_size) == 0, "ph_heatmap_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, values) == 8, "ph_heatmap_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, cols) == 16, "ph_heatmap_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, rows) == 20, "ph_heatmap_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, x) == 24, "ph_heatmap_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, y) == 40, "ph_heatmap_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, colormap) == 56, "ph_heatmap_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, domain) == 64, "ph_heatmap_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, no_smooth) == 80, "ph_heatmap_desc.no_smooth offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, name) == 88, "ph_heatmap_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, y_axis) == 96, "ph_heatmap_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, render_type) == 104, "ph_heatmap_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_image_desc) == 96, "ph_image_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_image_desc) == 8, "ph_image_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, struct_size) == 0, "ph_image_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, pixels) == 8, "ph_image_desc.pixels offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, width) == 16, "ph_image_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, height) == 20, "ph_image_desc.height offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, x) == 24, "ph_image_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, y) == 40, "ph_image_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, bottom_up) == 56, "ph_image_desc.bottom_up offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, no_smooth) == 60, "ph_image_desc.no_smooth offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, opacity) == 64, "ph_image_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, name) == 72, "ph_image_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, y_axis) == 80, "ph_image_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_image_desc, render_type) == 88, "ph_image_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_patch) == 40, "ph_patch size");
 PH_ASSERT_LAYOUT(_Alignof(ph_patch) == 8, "ph_patch alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_patch, x) == 0, "ph_patch.x offset");
@@ -297,7 +336,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 20);
+  printf("%d struct layouts match the generated bindings\n", 23);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

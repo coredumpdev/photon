@@ -26,6 +26,12 @@ Not a pixel diff, because two things differ by design and always will:
 - **Antialiasing.** Different GL implementations round edge coverage
   differently, and headless Chromium runs on SwiftShader.
 
+One thing is switched off rather than compared: the **colorbar**. The web draws
+one beside every colormapped layer and reserves right-margin space for it; the
+native core has no colorbar yet, so the Field panel passes `colorbar: false`.
+Left on, every number in that panel would differ by the width of a widget that
+does not exist yet, and a real drift would hide behind it.
+
 What must match is the geometry, because that is what the port reproduces number
 for number. `compare.mjs` extracts the plot region and every grid line from both
 images and compares them position by position. One pixel of drift is a failure.

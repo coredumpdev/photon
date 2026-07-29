@@ -195,6 +195,36 @@ public final class Photon {
         }
     }
 
+    /** ph_colormap_spec — 40 bytes, alignment 8. */
+    public static final class ph_colormap_spec {
+        private ph_colormap_spec() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("stops"),
+            ValueLayout.JAVA_INT.withName("stop_count"),
+            ValueLayout.JAVA_INT.withName("reverse"),
+            ValueLayout.JAVA_INT.withName("discrete_steps"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_colormap_spec");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_NAME = 8L;
+        public static final long OFFSET_STOPS = 16L;
+        public static final long OFFSET_STOP_COUNT = 24L;
+        public static final long OFFSET_REVERSE = 28L;
+        public static final long OFFSET_DISCRETE_STEPS = 32L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_margin — 16 bytes, alignment 4. */
     public static final class ph_margin {
         private ph_margin() {}
@@ -782,6 +812,92 @@ public final class Photon {
         }
     }
 
+    /** ph_heatmap_desc — 112 bytes, alignment 8. */
+    public static final class ph_heatmap_desc {
+        private ph_heatmap_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.JAVA_INT.withName("no_smooth"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_heatmap_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Y = 40L;
+        public static final long OFFSET_COLORMAP = 56L;
+        public static final long OFFSET_DOMAIN = 64L;
+        public static final long OFFSET_NO_SMOOTH = 80L;
+        public static final long OFFSET_NAME = 88L;
+        public static final long OFFSET_Y_AXIS = 96L;
+        public static final long OFFSET_RENDER_TYPE = 104L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_image_desc — 96 bytes, alignment 8. */
+    public static final class ph_image_desc {
+        private ph_image_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("pixels"),
+            ValueLayout.JAVA_INT.withName("width"),
+            ValueLayout.JAVA_INT.withName("height"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y"),
+            ValueLayout.JAVA_INT.withName("bottom_up"),
+            ValueLayout.JAVA_INT.withName("no_smooth"),
+            ValueLayout.JAVA_FLOAT.withName("opacity"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_image_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_PIXELS = 8L;
+        public static final long OFFSET_WIDTH = 16L;
+        public static final long OFFSET_HEIGHT = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Y = 40L;
+        public static final long OFFSET_BOTTOM_UP = 56L;
+        public static final long OFFSET_NO_SMOOTH = 60L;
+        public static final long OFFSET_OPACITY = 64L;
+        public static final long OFFSET_NAME = 72L;
+        public static final long OFFSET_Y_AXIS = 80L;
+        public static final long OFFSET_RENDER_TYPE = 88L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_patch — 40 bytes, alignment 8. */
     public static final class ph_patch {
         private ph_patch() {}
@@ -892,6 +1008,16 @@ public final class Photon {
      * rather than merely intending to.
      */
     public static final String[] ENTRY_POINTS = {
+        "ph_colormap_spec_init",
+        "ph_colormap_register",
+        "ph_colormap_sample",
+        "ph_colormap_count",
+        "ph_colormap_name",
+        "ph_symmetric_domain",
+        "ph_palette_register",
+        "ph_palette_count",
+        "ph_palette_name",
+        "ph_palette_color",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -912,6 +1038,8 @@ public final class Photon {
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_heatmap_desc_init",
+        "ph_image_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -937,6 +1065,8 @@ public final class Photon {
         "ph_plot_add_stem",
         "ph_plot_add_errorbar",
         "ph_plot_add_box",
+        "ph_plot_add_heatmap",
+        "ph_plot_add_image",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -960,6 +1090,16 @@ public final class Photon {
         "ph_plot_clear_events",
     };
 
+    private static final MethodHandle PH_COLORMAP_SPEC_INIT = handle("ph_colormap_spec_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_COLORMAP_REGISTER = handle("ph_colormap_register", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_COLORMAP_SAMPLE = handle("ph_colormap_sample", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_COLORMAP_COUNT = handle("ph_colormap_count", FunctionDescriptor.of(ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_COLORMAP_NAME = handle("ph_colormap_name", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_SYMMETRIC_DOMAIN = handle("ph_symmetric_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PALETTE_REGISTER = handle("ph_palette_register", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PALETTE_COUNT = handle("ph_palette_count", FunctionDescriptor.of(ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PALETTE_NAME = handle("ph_palette_name", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PALETTE_COLOR = handle("ph_palette_color", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_ABI_VERSION = handle("ph_abi_version", FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle PH_VERSION = handle("ph_version", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_INIT = handle("ph_init", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
@@ -980,6 +1120,8 @@ public final class Photon {
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_HEATMAP_DESC_INIT = handle("ph_heatmap_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_IMAGE_DESC_INIT = handle("ph_image_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_CREATE = handle("ph_plot_create", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_DESTROY = handle("ph_plot_destroy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_PLOT_VALID = handle("ph_plot_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
@@ -1005,6 +1147,8 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_STEM = handle("ph_plot_add_stem", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_ERRORBAR = handle("ph_plot_add_errorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_BOX = handle("ph_plot_add_box", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_HEATMAP = handle("ph_plot_add_heatmap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_IMAGE = handle("ph_plot_add_image", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_XY = handle("ph_layer_set_xy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_SET_VISIBLE = handle("ph_layer_set_visible", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_VALID = handle("ph_layer_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
@@ -1027,532 +1171,650 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_POLL_EVENT = handle("ph_plot_poll_event", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_CLEAR_EVENTS = handle("ph_plot_clear_events", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
 
+    public static void ph_colormap_spec_init(MemorySegment out) {
+        try {
+            PH_COLORMAP_SPEC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_colormap_spec_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_colormap_register(MemorySegment name, MemorySegment stops, int stop_count) {
+        try {
+            return (int) PH_COLORMAP_REGISTER.invokeExact(name, stops, stop_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_colormap_register failed", photonFailure);
+        }
+    }
+
+    public static int ph_colormap_sample(MemorySegment spec, double t, MemorySegment out) {
+        try {
+            return (int) PH_COLORMAP_SAMPLE.invokeExact(spec, t, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_colormap_sample failed", photonFailure);
+        }
+    }
+
+    public static int ph_colormap_count() {
+        try {
+            return (int) PH_COLORMAP_COUNT.invokeExact();
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_colormap_count failed", photonFailure);
+        }
+    }
+
+    public static MemorySegment ph_colormap_name(int index) {
+        try {
+            return (MemorySegment) PH_COLORMAP_NAME.invokeExact(index);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_colormap_name failed", photonFailure);
+        }
+    }
+
+    public static int ph_symmetric_domain(MemorySegment values, int count, double center, MemorySegment out) {
+        try {
+            return (int) PH_SYMMETRIC_DOMAIN.invokeExact(values, count, center, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_symmetric_domain failed", photonFailure);
+        }
+    }
+
+    public static int ph_palette_register(MemorySegment name, MemorySegment colors, int count) {
+        try {
+            return (int) PH_PALETTE_REGISTER.invokeExact(name, colors, count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_palette_register failed", photonFailure);
+        }
+    }
+
+    public static int ph_palette_count() {
+        try {
+            return (int) PH_PALETTE_COUNT.invokeExact();
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_palette_count failed", photonFailure);
+        }
+    }
+
+    public static MemorySegment ph_palette_name(int index) {
+        try {
+            return (MemorySegment) PH_PALETTE_NAME.invokeExact(index);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_palette_name failed", photonFailure);
+        }
+    }
+
+    public static int ph_palette_color(MemorySegment name, int index) {
+        try {
+            return (int) PH_PALETTE_COLOR.invokeExact(name, index);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_palette_color failed", photonFailure);
+        }
+    }
+
     public static int ph_abi_version() {
         try {
             return (int) PH_ABI_VERSION.invokeExact();
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_abi_version failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_abi_version failed", photonFailure);
         }
     }
 
     public static void ph_version(MemorySegment major, MemorySegment minor, MemorySegment patch) {
         try {
             PH_VERSION.invokeExact(major, minor, patch);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_version failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_version failed", photonFailure);
         }
     }
 
     public static int ph_init(int abi_version, MemorySegment desc) {
         try {
             return (int) PH_INIT.invokeExact(abi_version, desc);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_init failed", photonFailure);
         }
     }
 
     public static void ph_shutdown() {
         try {
             PH_SHUTDOWN.invokeExact();
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_shutdown failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_shutdown failed", photonFailure);
         }
     }
 
     public static MemorySegment ph_last_error() {
         try {
             return (MemorySegment) PH_LAST_ERROR.invokeExact();
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_last_error failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_last_error failed", photonFailure);
         }
     }
 
     public static int ph_color_parse(MemorySegment css, MemorySegment out) {
         try {
             return (int) PH_COLOR_PARSE.invokeExact(css, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_color_parse failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_color_parse failed", photonFailure);
         }
     }
 
     public static void ph_host_desc_init(MemorySegment out) {
         try {
             PH_HOST_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_host_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_host_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_frame_target_init(MemorySegment out) {
         try {
             PH_FRAME_TARGET_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_frame_target_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_frame_target_init failed", photonFailure);
         }
     }
 
     public static void ph_plot_desc_init(MemorySegment out) {
         try {
             PH_PLOT_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_axis_desc_init(MemorySegment out) {
         try {
             PH_AXIS_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_axis_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_axis_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_axis_config_init(MemorySegment out) {
         try {
             PH_AXIS_CONFIG_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_axis_config_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_axis_config_init failed", photonFailure);
         }
     }
 
     public static void ph_line_desc_init(MemorySegment out) {
         try {
             PH_LINE_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_line_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_line_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_scatter_desc_init(MemorySegment out) {
         try {
             PH_SCATTER_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_scatter_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_scatter_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_patches_desc_init(MemorySegment out) {
         try {
             PH_PATCHES_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_patches_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_patches_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_area_desc_init(MemorySegment out) {
         try {
             PH_AREA_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_area_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_area_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_bar_desc_init(MemorySegment out) {
         try {
             PH_BAR_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_bar_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_bar_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_pie_desc_init(MemorySegment out) {
         try {
             PH_PIE_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_pie_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_pie_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_stem_desc_init(MemorySegment out) {
         try {
             PH_STEM_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_stem_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stem_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_errorbar_desc_init(MemorySegment out) {
         try {
             PH_ERRORBAR_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_errorbar_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_errorbar_desc_init failed", photonFailure);
         }
     }
 
     public static void ph_box_desc_init(MemorySegment out) {
         try {
             PH_BOX_DESC_INIT.invokeExact(out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_box_desc_init failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_box_desc_init failed", photonFailure);
+        }
+    }
+
+    public static void ph_heatmap_desc_init(MemorySegment out) {
+        try {
+            PH_HEATMAP_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_heatmap_desc_init failed", photonFailure);
+        }
+    }
+
+    public static void ph_image_desc_init(MemorySegment out) {
+        try {
+            PH_IMAGE_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_image_desc_init failed", photonFailure);
         }
     }
 
     public static int ph_plot_create(MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_CREATE.invokeExact(desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_create failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_create failed", photonFailure);
         }
     }
 
     public static int ph_plot_destroy(long plot) {
         try {
             return (int) PH_PLOT_DESTROY.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_destroy failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_destroy failed", photonFailure);
         }
     }
 
     public static int ph_plot_valid(long plot) {
         try {
             return (int) PH_PLOT_VALID.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_valid failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_valid failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_size(long plot, int width, int height) {
         try {
             return (int) PH_PLOT_SET_SIZE.invokeExact(plot, width, height);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_size failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_size failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_margin(long plot, MemorySegment margin) {
         try {
             return (int) PH_PLOT_SET_MARGIN.invokeExact(plot, margin);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_margin failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_margin failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_theme(long plot, int theme) {
         try {
             return (int) PH_PLOT_SET_THEME.invokeExact(plot, theme);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_theme failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_theme failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_title(long plot, MemorySegment title) {
         try {
             return (int) PH_PLOT_SET_TITLE.invokeExact(plot, title);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_title failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_title failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_scale(long plot, MemorySegment axis, MemorySegment desc) {
         try {
             return (int) PH_PLOT_SET_SCALE.invokeExact(plot, axis, desc);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_scale failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_scale failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_domain(long plot, MemorySegment axis, MemorySegment domain) {
         try {
             return (int) PH_PLOT_SET_DOMAIN.invokeExact(plot, axis, domain);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_domain failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_domain failed", photonFailure);
         }
     }
 
     public static int ph_plot_get_domain(long plot, MemorySegment axis, MemorySegment out) {
         try {
             return (int) PH_PLOT_GET_DOMAIN.invokeExact(plot, axis, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_get_domain failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_get_domain failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_y_axis(long plot, MemorySegment id, MemorySegment desc, int side) {
         try {
             return (int) PH_PLOT_ADD_Y_AXIS.invokeExact(plot, id, desc, side);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_y_axis failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_y_axis failed", photonFailure);
         }
     }
 
     public static int ph_plot_remove_y_axis(long plot, MemorySegment id) {
         try {
             return (int) PH_PLOT_REMOVE_Y_AXIS.invokeExact(plot, id);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_remove_y_axis failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_remove_y_axis failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_axis_config(long plot, MemorySegment axis, MemorySegment desc) {
         try {
             return (int) PH_PLOT_SET_AXIS_CONFIG.invokeExact(plot, axis, desc);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_axis_config failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_axis_config failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_axis_ticks(long plot, MemorySegment axis, MemorySegment ticks, int count) {
         try {
             return (int) PH_PLOT_SET_AXIS_TICKS.invokeExact(plot, axis, ticks, count);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_axis_ticks failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_axis_ticks failed", photonFailure);
         }
     }
 
     public static int ph_plot_autoscale(long plot) {
         try {
             return (int) PH_PLOT_AUTOSCALE.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_autoscale failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_autoscale failed", photonFailure);
         }
     }
 
     public static int ph_plot_reset_view(long plot) {
         try {
             return (int) PH_PLOT_RESET_VIEW.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_reset_view failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_reset_view failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_line(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_LINE.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_line failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_line failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_scatter(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_SCATTER.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_scatter failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_scatter failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_patches(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_PATCHES.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_patches failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_patches failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_area(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_AREA.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_area failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_area failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_bar(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_BAR.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_bar failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_bar failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_pie(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_PIE.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_pie failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_pie failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_stem(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_STEM.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_stem failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_stem failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_errorbar(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_ERRORBAR.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_errorbar failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_errorbar failed", photonFailure);
         }
     }
 
     public static int ph_plot_add_box(long plot, MemorySegment desc, MemorySegment out) {
         try {
             return (int) PH_PLOT_ADD_BOX.invokeExact(plot, desc, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_add_box failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_box failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_heatmap(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_HEATMAP.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_heatmap failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_image(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_IMAGE.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_image failed", photonFailure);
         }
     }
 
     public static int ph_layer_set_xy(long layer, MemorySegment x, MemorySegment y, int count) {
         try {
             return (int) PH_LAYER_SET_XY.invokeExact(layer, x, y, count);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_layer_set_xy failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_xy failed", photonFailure);
         }
     }
 
     public static int ph_layer_set_visible(long layer, int visible) {
         try {
             return (int) PH_LAYER_SET_VISIBLE.invokeExact(layer, visible);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_layer_set_visible failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_visible failed", photonFailure);
         }
     }
 
     public static int ph_layer_valid(long layer) {
         try {
             return (int) PH_LAYER_VALID.invokeExact(layer);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_layer_valid failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_valid failed", photonFailure);
         }
     }
 
     public static int ph_layer_bounds(long layer, MemorySegment x, MemorySegment y) {
         try {
             return (int) PH_LAYER_BOUNDS.invokeExact(layer, x, y);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_layer_bounds failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_bounds failed", photonFailure);
         }
     }
 
     public static int ph_layer_destroy(long layer) {
         try {
             return (int) PH_LAYER_DESTROY.invokeExact(layer);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_layer_destroy failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_destroy failed", photonFailure);
         }
     }
 
     public static int ph_plot_set_mode(long plot, int mode) {
         try {
             return (int) PH_PLOT_SET_MODE.invokeExact(plot, mode);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_set_mode failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_mode failed", photonFailure);
         }
     }
 
     public static int ph_plot_get_mode(long plot, MemorySegment out) {
         try {
             return (int) PH_PLOT_GET_MODE.invokeExact(plot, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_get_mode failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_get_mode failed", photonFailure);
         }
     }
 
     public static int ph_plot_pointer_down(long plot, double px, double py, int button, int mods) {
         try {
             return (int) PH_PLOT_POINTER_DOWN.invokeExact(plot, px, py, button, mods);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_pointer_down failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_pointer_down failed", photonFailure);
         }
     }
 
     public static int ph_plot_pointer_move(long plot, double px, double py, int mods) {
         try {
             return (int) PH_PLOT_POINTER_MOVE.invokeExact(plot, px, py, mods);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_pointer_move failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_pointer_move failed", photonFailure);
         }
     }
 
     public static int ph_plot_pointer_up(long plot, double px, double py, int button, int mods) {
         try {
             return (int) PH_PLOT_POINTER_UP.invokeExact(plot, px, py, button, mods);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_pointer_up failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_pointer_up failed", photonFailure);
         }
     }
 
     public static int ph_plot_pointer_leave(long plot) {
         try {
             return (int) PH_PLOT_POINTER_LEAVE.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_pointer_leave failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_pointer_leave failed", photonFailure);
         }
     }
 
     public static int ph_plot_wheel(long plot, double px, double py, double delta_y, int mods) {
         try {
             return (int) PH_PLOT_WHEEL.invokeExact(plot, px, py, delta_y, mods);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_wheel failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_wheel failed", photonFailure);
         }
     }
 
     public static int ph_plot_pan_pixels(long plot, double dx, double dy) {
         try {
             return (int) PH_PLOT_PAN_PIXELS.invokeExact(plot, dx, dy);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_pan_pixels failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_pan_pixels failed", photonFailure);
         }
     }
 
     public static int ph_plot_zoom_around(long plot, double nx, double ny, double factor) {
         try {
             return (int) PH_PLOT_ZOOM_AROUND.invokeExact(plot, nx, ny, factor);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_zoom_around failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_zoom_around failed", photonFailure);
         }
     }
 
     public static int ph_plot_data_at_pixel(long plot, double px, double py, MemorySegment out_x, MemorySegment out_y) {
         try {
             return (int) PH_PLOT_DATA_AT_PIXEL.invokeExact(plot, px, py, out_x, out_y);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_data_at_pixel failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_data_at_pixel failed", photonFailure);
         }
     }
 
     public static int ph_plot_pixel_at_data(long plot, double x, double y, MemorySegment out_px, MemorySegment out_py) {
         try {
             return (int) PH_PLOT_PIXEL_AT_DATA.invokeExact(plot, x, y, out_px, out_py);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_pixel_at_data failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_pixel_at_data failed", photonFailure);
         }
     }
 
     public static int ph_plot_render(long plot, MemorySegment target) {
         try {
             return (int) PH_PLOT_RENDER.invokeExact(plot, target);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_render failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_render failed", photonFailure);
         }
     }
 
     public static int ph_plot_render_pixels(long plot, int width, int height, float dpr, MemorySegment out_rgba, int stride_bytes) {
         try {
             return (int) PH_PLOT_RENDER_PIXELS.invokeExact(plot, width, height, dpr, out_rgba, stride_bytes);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_render_pixels failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_render_pixels failed", photonFailure);
         }
     }
 
     public static int ph_plot_needs_redraw(long plot) {
         try {
             return (int) PH_PLOT_NEEDS_REDRAW.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_needs_redraw failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_needs_redraw failed", photonFailure);
         }
     }
 
     public static int ph_plot_poll_event(long plot, MemorySegment out) {
         try {
             return (int) PH_PLOT_POLL_EVENT.invokeExact(plot, out);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_poll_event failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_poll_event failed", photonFailure);
         }
     }
 
     public static int ph_plot_clear_events(long plot) {
         try {
             return (int) PH_PLOT_CLEAR_EVENTS.invokeExact(plot);
-        } catch (Throwable t) {
-            throw new AssertionError("photon: ph_plot_clear_events failed", t);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_clear_events failed", photonFailure);
         }
+    }
+
+    /** A `const char*` the ABI returned, or null for NULL. */
+    public static String string(MemorySegment text) {
+        if (text == null || text.equals(MemorySegment.NULL)) return null;
+        return text.reinterpret(Long.MAX_VALUE).getString(0);
     }
 
     /** The last error on this thread, or an empty string. */

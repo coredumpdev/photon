@@ -74,9 +74,9 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (8 remaining of 17)
+### Layers with their own shaders (6 remaining of 17)
 
-`candlestick` `contour` `graph` `heatmap` `hexbin` `image` `ohlc` `quiver`
+`candlestick` `contour` `graph` `hexbin` `ohlc` `quiver`
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
       under it.
@@ -96,8 +96,11 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       (`addGroupedBars` passes an `offset`, `addStackedBars` a cumulative
       `base`), and both fields are in `ph_bar_desc`. What is missing is the
       convenience wrapper, which belongs above the ABI.
-- [ ] `heatmap`, `hexbin`, `contour` need `color/colormap.ts` (272 lines) and
-      `color/palettes.ts` ported first.
+- [x] ~~`heatmap` and `image`~~ — one textured-quad program between them. The
+      heatmap bakes its colours on the CPU at build time, so it costs one draw
+      call at any resolution; `image` takes RGBA8 the caller already has,
+      because fetching and decoding belongs to the host.
+- [ ] `hexbin` and `contour` still want the colormaps, which are now ported.
 - [ ] `candlestick` + `ohlc` need the ordinal-time axis, which is already done.
 - [ ] Patches has no choropleth: the web colours a patch by a per-patch `value`
       through a colormap, and those fields are absent from `ph_patches_desc`
@@ -110,9 +113,13 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 
 ### Colour and the colorbar
 
-- [ ] `color/colormap.ts` + `color/palettes.ts` → `src/color/`. Also unblocks
-      `ph_scatter_desc.color_by`, which currently returns `PH_E_UNSUPPORTED`
-      rather than silently drawing one colour.
+- [x] ~~`color/colormap.ts` + `color/palettes.ts`~~ → `src/color/colormap.cpp`,
+      with both registries, `reverse`/`discrete` folded into one spec, and
+      `tests/colormap_test.cpp` checking every sample against numbers printed
+      by the TypeScript.
+- [ ] `ph_scatter_desc.color_by` still returns `PH_E_UNSUPPORTED`. The
+      colormaps it was waiting on are there now; what is left is threading a
+      `ph_colormap_spec` through the scatter descriptor.
 - [ ] `render/colorbar.ts` — the `ColorInfo` hook is already in the layer
       contract as a comment; add the virtual. `Plot::compute_margin` reserves
       nothing for it yet, and the web's `COLORBAR_GAP` is the number to match.

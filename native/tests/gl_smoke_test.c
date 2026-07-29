@@ -515,6 +515,100 @@ int main(void) {
   CHECK(disc >= 8);
 
   CHECK_EQ(ph_plot_destroy(box_plot), PH_OK);
+
+  /* ---- heatmap and image: four quadrants, so the orientation is checkable ---- */
+
+  ph_plot grid_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &grid_plot), PH_OK);
+
+  /* A 2x2 grid over the left half of a 10x10 view, coloured through a
+   * two-stop black-to-white ramp. Row 0 is the bottom, so the bright cell is
+   * bottom-right — which is what distinguishes a correct upload from one that
+   * is upside down or mirrored, and neither of those is an error. */
+  const double grid[4] = {0.0, 1.0, 0.0, 0.0};
+  const ph_color ramp[2] = {0x000000ffu, 0xffffffffu};
+  ph_colormap_spec cmap;
+  ph_colormap_spec_init(&cmap);
+  cmap.stops = ramp;
+  cmap.stop_count = 2;
+
+  ph_heatmap_desc heat;
+  ph_heatmap_desc_init(&heat);
+  heat.values = grid;
+  heat.cols = 2;
+  heat.rows = 2;
+  heat.x.lo = 0.0;
+  heat.x.hi = 5.0;
+  heat.y.lo = 0.0;
+  heat.y.hi = 10.0;
+  heat.colormap = &cmap;
+  heat.no_smooth = 1;
+  ph_layer heat_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_heatmap(grid_plot, &heat, &heat_layer) != PH_OK) {
+    printf("  FAIL add_heatmap: %s\n", ph_last_error());
+    return 1;
+  }
+
+  /* An opaque red 1x1 image over the top-right quadrant. */
+  const unsigned char red[4] = {255, 0, 0, 255};
+  ph_image_desc bitmap;
+  ph_image_desc_init(&bitmap);
+  bitmap.pixels = red;
+  bitmap.width = 1;
+  bitmap.height = 1;
+  bitmap.x.lo = 5.0;
+  bitmap.x.hi = 10.0;
+  bitmap.y.lo = 5.0;
+  bitmap.y.hi = 10.0;
+  bitmap.opacity = 0.5f;
+  ph_layer image_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_image(grid_plot, &bitmap, &image_layer) != PH_OK) {
+    printf("  FAIL add_image: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* grid_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!grid_pixels) return 1;
+  if (ph_plot_render_pixels(grid_plot, patch_w, patch_h, 1.0f, grid_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL grid render: %s\n", ph_last_error());
+    return 1;
+  }
+
+  /* The region is x 56..184, y 16..160. The heatmap's bright cell is the
+   * bottom-right of its half: x 88..120, y 88..160. Sample the middle of each
+   * of the four heatmap cells and check only one of them is white. */
+  long bright = 0;
+  int bright_row = -1, bright_col = -1;
+  for (int cell_row = 0; cell_row < 2; cell_row++) {
+    for (int cell_col = 0; cell_col < 2; cell_col++) {
+      const int col = 56 + 16 + cell_col * 32;
+      const int row = 16 + 36 + cell_row * 72;
+      const unsigned char* p = grid_pixels + ((size_t)row * patch_w + col) * 4;
+      if (p[0] > 200 && p[1] > 200 && p[2] > 200) {
+        bright++;
+        bright_row = cell_row;
+        bright_col = cell_col;
+      }
+    }
+  }
+  printf("  heatmap bright cell at row %d col %d (of %ld)\n", bright_row, bright_col, bright);
+  CHECK(bright == 1);
+  /* Rows come back top-first, so the bottom row of the grid is the bottom row
+   * of the bitmap: cell_row 1. */
+  CHECK(bright_row == 1);
+  CHECK(bright_col == 1);
+
+  /* The image is red at half opacity over a transparent background, so it
+   * arrives premultiplied at about 128. */
+  const unsigned char* mid = grid_pixels + ((size_t)50 * patch_w + 150) * 4;
+  printf("  image pixel %d %d %d %d\n", mid[0], mid[1], mid[2], mid[3]);
+  CHECK(mid[3] > 120 && mid[3] < 136);
+  CHECK(mid[0] > 120 && mid[0] < 136);
+  CHECK(mid[1] < 10 && mid[2] < 10);
+  free(grid_pixels);
+
+  CHECK_EQ(ph_plot_destroy(grid_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

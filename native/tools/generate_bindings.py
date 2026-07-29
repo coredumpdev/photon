@@ -641,12 +641,23 @@ def emit_java(api: Api) -> str:
             w(f"            {upper}.invokeExact({call_args});")
         else:
             w(f"            return ({ret}) {upper}.invokeExact({call_args});")
-        w("        } catch (Throwable t) {")
-        w(f'            throw new AssertionError("photon: {func.name} failed", t);')
+        # Not `t`: a C parameter may well be called that, and then the catch
+        # variable shadows it and the whole binding stops compiling.
+        w("        } catch (Throwable photonFailure) {")
+        w(f'            throw new AssertionError("photon: {func.name} failed", photonFailure);')
         w("        }")
         w("    }")
         w("")
 
+    # Every `const char*` the ABI returns arrives as a zero-length segment,
+    # because the JVM cannot know how long it is; reinterpret first or getString
+    # refuses to read a byte.
+    w("    /** A `const char*` the ABI returned, or null for NULL. */")
+    w("    public static String string(MemorySegment text) {")
+    w("        if (text == null || text.equals(MemorySegment.NULL)) return null;")
+    w("        return text.reinterpret(Long.MAX_VALUE).getString(0);")
+    w("    }")
+    w("")
     w("    /** The last error on this thread, or an empty string. */")
     w("    public static String lastError() {")
     w("        MemorySegment message = ph_last_error();")

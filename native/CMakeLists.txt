@@ -80,6 +80,7 @@ set(PHOTON_SOURCES
   src/axes/axis.cpp
   src/axes/ticks.cpp
   src/geo/earcut.cpp
+  src/color/colormap.cpp
   src/stats/stats.cpp
   src/gl/gl.cpp
   src/gl/program.cpp

@@ -136,6 +136,91 @@ public final class PhotonSmokeTest {
         ran("ph_color_parse");
     }
 
+    /** The colormap and palette registries, and the maths over them. */
+    static void colormaps(Arena arena) {
+        MemorySegment spec = ph_colormap_spec.allocate(arena);
+        ph_colormap_spec_init(spec);
+        MemorySegment out = arena.allocate(ValueLayout.JAVA_INT);
+
+        // A NULL name is viridis, whose ends are the dark purple and the yellow
+        // every plot of it opens and closes on.
+        checkEq(ph_colormap_sample(spec, 0.0, out), PH_OK, "ph_colormap_sample");
+        long low = out.get(ValueLayout.JAVA_INT, 0) & 0xFFFFFFFFL;
+        checkEq(ph_colormap_sample(spec, 1.0, out), PH_OK, "ph_colormap_sample(1)");
+        long high = out.get(ValueLayout.JAVA_INT, 0) & 0xFFFFFFFFL;
+        check(low == 0x440154ffL, "viridis starts dark purple");
+        check(high == 0xfde725ffL, "viridis ends yellow");
+
+        // Reversing swaps the ends, which is the whole of what it promises.
+        spec.set(ValueLayout.JAVA_INT, ph_colormap_spec.OFFSET_REVERSE, 1);
+        checkEq(ph_colormap_sample(spec, 0.0, out), PH_OK, "reversed sample");
+        check((out.get(ValueLayout.JAVA_INT, 0) & 0xFFFFFFFFL) == high, "reverse swaps the ends");
+        spec.set(ValueLayout.JAVA_INT, ph_colormap_spec.OFFSET_REVERSE, 0);
+
+        // Two inline stops: black to white, so the midpoint is grey and the
+        // arithmetic is checkable by eye as well as by assertion.
+        MemorySegment stops = arena.allocate(ValueLayout.JAVA_INT, 2);
+        stops.setAtIndex(ValueLayout.JAVA_INT, 0, 0x000000FF);
+        stops.setAtIndex(ValueLayout.JAVA_INT, 1, 0xFFFFFFFF);
+        spec.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_STOPS, stops);
+        spec.set(ValueLayout.JAVA_INT, ph_colormap_spec.OFFSET_STOP_COUNT, 2);
+        checkEq(ph_colormap_sample(spec, 0.5, out), PH_OK, "inline stops");
+        int grey = (out.get(ValueLayout.JAVA_INT, 0) >>> 24) & 0xFF;
+        check(grey >= 126 && grey <= 129, "the midpoint of black..white is grey");
+
+        checkEq(ph_colormap_register(utf8(arena, "smoke"), stops, 2), PH_OK,
+                "ph_colormap_register");
+        checkEq(ph_colormap_register(utf8(arena, "too-short"), stops, 1), PH_E_INVALID_ARGUMENT,
+                "one stop is not a colormap");
+
+        int count = ph_colormap_count();
+        check(count >= 13, "twelve built-ins plus the registered one");
+        check(Photon.string(ph_colormap_name(0)).equals("viridis"), "viridis is first");
+        check(ph_colormap_name(count).equals(MemorySegment.NULL), "out of range gives null");
+        boolean found = false;
+        for (int i = 0; i < count; i++) {
+            if (Photon.string(ph_colormap_name(i)).equals("smoke")) found = true;
+        }
+        check(found, "a registered colormap is listed");
+
+        // A symmetric domain has to reach the furthest value on either side, or
+        // a diverging map's neutral midpoint drifts off the reference.
+        MemorySegment values = arena.allocate(ValueLayout.JAVA_DOUBLE, 3);
+        values.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, -2.0);
+        values.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, 1.0);
+        values.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, 7.0);
+        MemorySegment range = ph_range.allocate(arena);
+        checkEq(ph_symmetric_domain(values, 3, 0.0, range), PH_OK, "ph_symmetric_domain");
+        check(range.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -7.0, "domain lo");
+        check(range.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 7.0, "domain hi");
+
+        check(ph_palette_count() >= 4, "four built-in palettes");
+        check(Photon.string(ph_palette_name(0)).equals("tableau10"), "tableau10 is first");
+        check(ph_palette_name(-1).equals(MemorySegment.NULL), "a negative index gives null");
+        long first = ph_palette_color(utf8(arena, "tableau10"), 0) & 0xFFFFFFFFL;
+        check(first == 0x4e79a7ffL, "tableau10 starts blue");
+        // Cycling, not clamping: the eleventh colour of a ten-colour palette is
+        // the first one again.
+        check((ph_palette_color(utf8(arena, "tableau10"), 10) & 0xFFFFFFFFL) == first,
+              "a palette cycles");
+        check((ph_palette_color(utf8(arena, "tableau10"), -1) & 0xFFFFFFFFL)
+              == (ph_palette_color(utf8(arena, "tableau10"), 9) & 0xFFFFFFFFL),
+              "and cycles backwards too");
+        check((ph_palette_color(MemorySegment.NULL, 0) & 0xFFFFFFFFL) == first,
+              "a null name is tableau10");
+
+        MemorySegment colors = arena.allocate(ValueLayout.JAVA_INT, 1);
+        colors.setAtIndex(ValueLayout.JAVA_INT, 0, 0x123456FF);
+        checkEq(ph_palette_register(utf8(arena, "smoke"), colors, 1), PH_OK,
+                "ph_palette_register");
+        check((ph_palette_color(utf8(arena, "smoke"), 3) & 0xFFFFFFFFL) == 0x123456ffL,
+              "a one-colour palette gives that colour for every index");
+
+        ran("ph_colormap_spec_init", "ph_colormap_register", "ph_colormap_sample",
+            "ph_colormap_count", "ph_colormap_name", "ph_symmetric_domain",
+            "ph_palette_register", "ph_palette_count", "ph_palette_name", "ph_palette_color");
+    }
+
     /** A plot, a line, a scatter, and every axis and view call over them. */
     static long buildPlot(Arena arena) {
         MemorySegment desc = ph_plot_desc.allocate(arena);
@@ -453,6 +538,70 @@ public final class PhotonSmokeTest {
             "ph_plot_add_box");
     }
 
+    /** The two textured-quad layers: a colormapped grid and raw RGBA pixels. */
+    static void grids(Arena arena, long plot) {
+        MemorySegment values = arena.allocate(ValueLayout.JAVA_DOUBLE, 6);
+        for (int i = 0; i < 6; i++) values.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+
+        MemorySegment heat = ph_heatmap_desc.allocate(arena);
+        ph_heatmap_desc_init(heat);
+        heat.set(ValueLayout.ADDRESS, ph_heatmap_desc.OFFSET_VALUES, values);
+        heat.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_COLS, 3);
+        heat.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_ROWS, 2);
+        heat.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_X + ph_range.OFFSET_LO, -1.0);
+        heat.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_X + ph_range.OFFSET_HI, 2.0);
+        heat.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_Y + ph_range.OFFSET_LO, 0.0);
+        heat.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_Y + ph_range.OFFSET_HI, 4.0);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_heatmap(plot, heat, handle), PH_OK, "ph_plot_add_heatmap");
+        long heatLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(heatLayer, bx, by), PH_OK, "heatmap bounds");
+        // The bounds are the extent, not the cell count — a grid says where it
+        // is, and its resolution is nobody else's business.
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -1.0, "heatmap x lo");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 4.0, "heatmap y hi");
+
+        // An empty grid is not an error, but it has no bounds to report.
+        MemorySegment bare = ph_heatmap_desc.allocate(arena);
+        ph_heatmap_desc_init(bare);
+        checkEq(ph_plot_add_heatmap(plot, bare, handle), PH_OK, "an empty heatmap is allowed");
+        long emptyLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(emptyLayer, bx, by), PH_E_UNSUPPORTED, "and has no bounds");
+        checkEq(ph_layer_destroy(emptyLayer), PH_OK, "the empty heatmap is destroyed");
+
+        // Two by two RGBA pixels. The values are never read back, so what is
+        // checked is that the layer accepted them and knows where it sits.
+        MemorySegment pixels = arena.allocate(ValueLayout.JAVA_BYTE, 16);
+        for (int i = 0; i < 16; i++) pixels.setAtIndex(ValueLayout.JAVA_BYTE, i, (byte) (i * 16));
+        MemorySegment image = ph_image_desc.allocate(arena);
+        ph_image_desc_init(image);
+        image.set(ValueLayout.ADDRESS, ph_image_desc.OFFSET_PIXELS, pixels);
+        image.set(ValueLayout.JAVA_INT, ph_image_desc.OFFSET_WIDTH, 2);
+        image.set(ValueLayout.JAVA_INT, ph_image_desc.OFFSET_HEIGHT, 2);
+        image.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_X + ph_range.OFFSET_LO, 5.0);
+        image.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_X + ph_range.OFFSET_HI, 9.0);
+        image.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_Y + ph_range.OFFSET_LO, 5.0);
+        image.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_Y + ph_range.OFFSET_HI, 6.0);
+        checkEq(ph_plot_add_image(plot, image, handle), PH_OK, "ph_plot_add_image");
+        long imageLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(imageLayer, bx, by), PH_OK, "image bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 9.0, "image x hi");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 5.0, "image y lo");
+
+        // Pixels without dimensions is a caller mistake worth naming.
+        image.set(ValueLayout.ADDRESS, ph_image_desc.OFFSET_PIXELS, MemorySegment.NULL);
+        checkEq(ph_plot_add_image(plot, image, handle), PH_E_INVALID_ARGUMENT,
+                "a sized image needs pixels");
+
+        checkEq(ph_layer_destroy(heatLayer), PH_OK, "the heatmap layer is destroyed");
+        checkEq(ph_layer_destroy(imageLayer), PH_OK, "the image layer is destroyed");
+        ran("ph_heatmap_desc_init", "ph_image_desc_init", "ph_plot_add_heatmap",
+            "ph_plot_add_image");
+    }
+
     /** Filled polygons, including the hole path through the triangulator. */
     static void patches(Arena arena, long plot) {
         // A 10x10 square with a 4x4 hole: eight vertices, the hole starting at
@@ -607,6 +756,8 @@ public final class PhotonSmokeTest {
             descriptorDefaults(arena);
             step("colors");
             colors(arena);
+            step("colormaps");
+            colormaps(arena);
             step("buildPlot");
             long plot = buildPlot(arena);
             step("axes");
@@ -619,6 +770,8 @@ public final class PhotonSmokeTest {
             pieAndStem(arena, plot);
             step("errorBarsAndBoxes");
             errorBarsAndBoxes(arena, plot);
+            step("grids");
+            grids(arena, plot);
             step("patches");
             patches(arena, plot);
             step("interaction");

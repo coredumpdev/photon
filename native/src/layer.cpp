@@ -1,10 +1,12 @@
 #include "layer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 
+#include "color/colormap.hpp"
 #include "geo/earcut.hpp"
 #include "stats/stats.hpp"
 #include "gl/program.hpp"
@@ -2143,5 +2145,268 @@ void BoxLayer::release_gl(Api& api) {
   dirty_ = true;
 }
 
+
+// -- textured quads (heatmap, image) ----------------------------------------
+
+namespace {
+
+/// The six vertices of the extent quad: (x, y, u, v), with v following the
+/// texture's row order. `flip_v` puts the first row at the top instead.
+std::array<float, 24> extent_quad(const ph_range& x, const ph_range& y, double x_ref,
+                                  double y_ref, bool flip_v) {
+  const float x0 = static_cast<float>(x.lo - x_ref);
+  const float x1 = static_cast<float>(x.hi - x_ref);
+  const float y0 = static_cast<float>(y.lo - y_ref);
+  const float y1 = static_cast<float>(y.hi - y_ref);
+  const float v0 = flip_v ? 1.0f : 0.0f;
+  const float v1 = flip_v ? 0.0f : 1.0f;
+  return {x0, y0, 0.0f, v0, x1, y0, 1.0f, v0, x1, y1, 1.0f, v1,
+          x0, y0, 0.0f, v0, x1, y1, 1.0f, v1, x0, y1, 0.0f, v1};
+}
+
+/// The textured-quad program, shared by both layers. The fragment shader
+/// premultiplies, because that is the blend mode the whole renderer is in.
+const char* const kTexVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+out vec2 vUV;
+)";
+
+const char* const kTexVertMain = R"(
+void main() {
+  vUV = aUV;
+  gl_Position = vec4(dataToClip(aPos), 0.0, 1.0);
+})";
+
+const char* const kTexFrag = R"(#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform float uOpacity;
+out vec4 outColor;
+void main() {
+  vec4 c = texture(uTex, vUV);
+  float a = c.a * uOpacity;
+  outColor = vec4(c.rgb * a, a);
+})";
+
+/// Create the VAO, buffer and texture a quad layer needs. Shared because the
+/// two layers differ in what they put in the texture, not in how they bind it.
+bool make_quad(Api& api, const std::array<float, 24>& quad, const std::vector<uint8_t>& texels,
+               int32_t width, int32_t height, bool smooth, GLuint& vao, GLuint& buffer,
+               GLuint& texture, std::string& error) {
+  api.GenVertexArrays(1, &vao);
+  api.GenBuffers(1, &buffer);
+  api.GenTextures(1, &texture);
+  if (vao == 0 || texture == 0) {
+    error = "failed to create texture layer resources";
+    return false;
+  }
+
+  api.BindVertexArray(vao);
+  api.BindBuffer(GL_ARRAY_BUFFER, buffer);
+  api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(quad.size() * sizeof(float)),
+                 quad.data(), GL_STATIC_DRAW);
+  const GLsizei stride = 4 * static_cast<GLsizei>(sizeof(float));
+  api.EnableVertexAttribArray(0);
+  api.VertexAttribPointer(0, 2, GL_FLOAT, 0, stride, nullptr);
+  api.EnableVertexAttribArray(1);
+  api.VertexAttribPointer(1, 2, GL_FLOAT, 0, stride,
+                          reinterpret_cast<const void*>(2 * sizeof(float)));
+  api.BindVertexArray(0);
+
+  const GLint filter = smooth ? GL_LINEAR : GL_NEAREST;
+  api.BindTexture(GL_TEXTURE_2D, texture);
+  // Rows are tightly packed and a grid is rarely a multiple of four wide, so
+  // the default four-byte row alignment would shear the picture.
+  api.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  api.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 texels.empty() ? nullptr : texels.data());
+  api.BindTexture(GL_TEXTURE_2D, 0);
+  return true;
+}
+
+/// Bind the shared program and draw the quad. `opacity` is the only thing the
+/// two layers disagree about at draw time.
+bool draw_quad(const DrawState& state, GLuint vao, GLuint texture, double x_ref, double y_ref,
+               float opacity, std::string& error) {
+  Api& api = *state.api;
+  static const std::vector<std::string> kUniforms =
+      with_transform_uniforms({"uTex", "uOpacity"});
+  const Program* program = get_program(api, "textured-quad",
+                                       vertex_source(kTexVertBody, kTexVertMain), kTexFrag,
+                                       kUniforms, state.gfx, error);
+  if (!program) return false;
+
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref, y_ref);
+  api.ActiveTexture(GL_TEXTURE0);
+  api.BindTexture(GL_TEXTURE_2D, texture);
+  api.Uniform1i(program->uniform("uTex"), 0);
+  api.Uniform1f(program->uniform("uOpacity"), opacity);
+  api.BindVertexArray(vao);
+  api.DrawArrays(GL_TRIANGLES, 0, 6);
+  api.BindVertexArray(0);
+  api.BindTexture(GL_TEXTURE_2D, 0);
+  return true;
+}
+
+}  // namespace
+
+// -- HeatmapLayer -----------------------------------------------------------
+
+HeatmapLayer::HeatmapLayer(const ph_heatmap_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  smooth_ = desc.no_smooth == 0;
+  cols_ = std::max(0, desc.cols);
+  rows_ = std::max(0, desc.rows);
+  extent_x_ = desc.x;
+  extent_y_ = desc.y;
+  // An all-zero extent is not a rectangle, so fall back to the unit square
+  // rather than drawing a quad of zero area and looking like nothing happened.
+  if (!(extent_x_.hi > extent_x_.lo)) extent_x_ = ph_range{0.0, static_cast<double>(cols_)};
+  if (!(extent_y_.hi > extent_y_.lo)) extent_y_ = ph_range{0.0, static_cast<double>(rows_)};
+  x_ref_ = extent_x_.lo;
+  y_ref_ = extent_y_.lo;
+
+  const size_t count = static_cast<size_t>(cols_) * static_cast<size_t>(rows_);
+  if (count == 0 || !desc.values) {
+    cols_ = rows_ = 0;
+    return;
+  }
+
+  photon::color::Spec spec;
+  if (desc.colormap) {
+    if (desc.colormap->name) spec.name = desc.colormap->name;
+    if (desc.colormap->stops && desc.colormap->stop_count > 0) {
+      spec.stops.reserve(static_cast<size_t>(desc.colormap->stop_count));
+      for (int32_t i = 0; i < desc.colormap->stop_count; ++i) {
+        spec.stops.push_back(photon::color::to_rgb(desc.colormap->stops[i]));
+      }
+    }
+    spec.reverse = desc.colormap->reverse != 0;
+    spec.discrete_steps = desc.colormap->discrete_steps;
+  }
+  const photon::color::Lut& table = photon::color::lut(spec);
+
+  double lo = desc.domain.lo;
+  double hi = desc.domain.hi;
+  if (!(hi > lo)) {
+    lo = std::numeric_limits<double>::infinity();
+    hi = -lo;
+    for (size_t i = 0; i < count; ++i) {
+      const double v = desc.values[i];
+      if (!finite(v)) continue;
+      lo = std::min(lo, v);
+      hi = std::max(hi, v);
+    }
+    if (!finite(lo) || !finite(hi)) {
+      lo = 0.0;
+      hi = 1.0;
+    }
+  }
+  value_domain_ = ph_range{lo, hi};
+  const double span = (hi - lo) != 0.0 ? (hi - lo) : 1.0;
+
+  texels_.resize(count * 4);
+  for (size_t i = 0; i < count; ++i) {
+    const photon::color::Rgb c = photon::color::sample(table, (desc.values[i] - lo) / span);
+    texels_[i * 4] = static_cast<uint8_t>(c.r * 255.0f + 0.5f);
+    texels_[i * 4 + 1] = static_cast<uint8_t>(c.g * 255.0f + 0.5f);
+    texels_[i * 4 + 2] = static_cast<uint8_t>(c.b * 255.0f + 0.5f);
+    texels_[i * 4 + 3] = 255;
+  }
+
+  // Row 0 is the bottom of the extent, which is also GL's texture row order —
+  // so no flip.
+  quad_ = extent_quad(extent_x_, extent_y_, x_ref_, y_ref_, false);
+}
+
+bool HeatmapLayer::bounds(ph_range& x, ph_range& y) const {
+  if (cols_ == 0 || rows_ == 0) return false;
+  x = extent_x_;
+  y = extent_y_;
+  return true;
+}
+
+bool HeatmapLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ != 0) return true;
+  return make_quad(api, quad_, texels_, cols_, rows_, smooth_, vao_, buffer_, texture_, error);
+}
+
+bool HeatmapLayer::draw(const DrawState& state, std::string& error) {
+  if (texels_.empty() || !state.api) return true;
+  if (!ensure_gl(*state.api, error)) return false;
+  return draw_quad(state, vao_, texture_, x_ref_, y_ref_, 1.0f, error);
+}
+
+void HeatmapLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  api.DeleteTextures(1, &texture_);
+  vao_ = buffer_ = texture_ = 0;
+}
+
+// -- ImageLayer -------------------------------------------------------------
+
+ImageLayer::ImageLayer(const ph_image_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  smooth_ = desc.no_smooth == 0;
+  opacity_ = desc.opacity > 0.0f ? std::min(desc.opacity, 1.0f) : 1.0f;
+  width_ = std::max(0, desc.width);
+  height_ = std::max(0, desc.height);
+  extent_x_ = desc.x;
+  extent_y_ = desc.y;
+  if (!(extent_x_.hi > extent_x_.lo)) extent_x_ = ph_range{0.0, static_cast<double>(width_)};
+  if (!(extent_y_.hi > extent_y_.lo)) extent_y_ = ph_range{0.0, static_cast<double>(height_)};
+  x_ref_ = extent_x_.lo;
+  y_ref_ = extent_y_.lo;
+
+  const size_t count = static_cast<size_t>(width_) * static_cast<size_t>(height_);
+  if (count == 0 || !desc.pixels) {
+    width_ = height_ = 0;
+    return;
+  }
+  texels_.assign(desc.pixels, desc.pixels + count * 4);
+
+  // Desktop GL has no UNPACK_FLIP_Y, so the flip the web core does on upload
+  // happens in the texture coordinates instead — free, and it leaves the
+  // caller's buffer untouched.
+  quad_ = extent_quad(extent_x_, extent_y_, x_ref_, y_ref_, desc.bottom_up == 0);
+}
+
+bool ImageLayer::bounds(ph_range& x, ph_range& y) const {
+  if (width_ == 0 || height_ == 0) return false;
+  x = extent_x_;
+  y = extent_y_;
+  return true;
+}
+
+bool ImageLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ != 0) return true;
+  return make_quad(api, quad_, texels_, width_, height_, smooth_, vao_, buffer_, texture_, error);
+}
+
+bool ImageLayer::draw(const DrawState& state, std::string& error) {
+  if (texels_.empty() || !state.api) return true;
+  if (!ensure_gl(*state.api, error)) return false;
+  return draw_quad(state, vao_, texture_, x_ref_, y_ref_, opacity_, error);
+}
+
+void ImageLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  api.DeleteTextures(1, &texture_);
+  vao_ = buffer_ = texture_ = 0;
+}
 
 }  // namespace photon

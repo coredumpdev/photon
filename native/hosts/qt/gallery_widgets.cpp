@@ -1,5 +1,5 @@
 /*
- * The Qt Widgets gallery — the same ten charts, in QOpenGLWidgets.
+ * The Qt Widgets gallery — the same twelve charts, in QOpenGLWidgets.
  *
  * Shorter than the Quick one by roughly the size of a thread boundary.
  */
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
   for (int i = 0; i < PH_PANEL_COUNT; ++i) {
     auto* plot = new PhotonPlotWidget(i);
     plots.append(plot);
-    grid->addWidget(plot, i / 5, i % 5);
+    grid->addWidget(plot, i / 4, i % 4);
   }
   window.setCentralWidget(central);
 

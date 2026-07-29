@@ -15,7 +15,9 @@
 
 #include <photon/photon.h>
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -365,6 +367,74 @@ class BoxLayer : public Layer {
 
   gl::GLuint vao_ = 0;
   gl::GLuint buffer_ = 0;
+};
+
+/**
+ * A regular grid coloured through a colormap, drawn as one textured quad.
+ *
+ * The colouring happens once, on the CPU, when the layer is built: the values
+ * are baked into an RGBA texture. That is why a heatmap costs one draw call
+ * whatever its resolution, and why re-colouring means re-uploading.
+ */
+class HeatmapLayer : public Layer {
+ public:
+  explicit HeatmapLayer(const ph_heatmap_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  /// The baked RGBA8 texels, cols * rows * 4.
+  std::vector<uint8_t> texels_;
+  int32_t cols_ = 0;
+  int32_t rows_ = 0;
+  ph_range extent_x_{0.0, 1.0};
+  ph_range extent_y_{0.0, 1.0};
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  bool smooth_ = true;
+  /// The value range the colours span, after any auto-fit — what a colorbar needs.
+  ph_range value_domain_{0.0, 1.0};
+  std::array<float, 24> quad_{};
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+  gl::GLuint texture_ = 0;
+};
+
+/**
+ * RGBA8 pixels over a data-space rectangle.
+ *
+ * The same textured quad as the heatmap with the colouring left out, because
+ * the caller has already done it. A URL source is deliberately absent: fetching
+ * and decoding belongs to the host.
+ */
+class ImageLayer : public Layer {
+ public:
+  explicit ImageLayer(const ph_image_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<uint8_t> texels_;
+  int32_t width_ = 0;
+  int32_t height_ = 0;
+  ph_range extent_x_{0.0, 1.0};
+  ph_range extent_y_{0.0, 1.0};
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  bool smooth_ = true;
+  float opacity_ = 1.0f;
+  std::array<float, 24> quad_{};
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+  gl::GLuint texture_ = 0;
 };
 
 class PatchesLayer : public Layer {

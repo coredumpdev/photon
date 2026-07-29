@@ -276,6 +276,82 @@ typedef struct ph_frame_target {
 } ph_frame_target;
 
 /* ------------------------------------------------------------------------ */
+/* Colormaps and palettes                                                     */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * How a layer asks for a continuous colormap.
+ *
+ * `name` is a built-in ("viridis", "plasma", "inferno", "magma", "cividis",
+ * "turbo", "grayscale", "coolwarm", "RdBu", "BrBG", "spectral", "twilight") or
+ * anything passed to ph_colormap_register. Unknown names — and NULL — resolve to
+ * viridis rather than failing, because a chart that draws in the wrong colours
+ * is easier to notice than one that does not draw.
+ *
+ * `stops` overrides the name with anchors given inline, spaced evenly and
+ * interpolated linearly. Their alpha is ignored; a colormap carries no opacity.
+ */
+typedef struct ph_colormap_spec {
+  uint32_t        struct_size;
+  const char*     name;
+  const ph_color* stops;
+  int32_t         stop_count;
+  /** High values take the low end's colour. */
+  ph_bool         reverse;
+  /** 0 is continuous; otherwise the ramp is flattened into this many bands. */
+  int32_t         discrete_steps;
+} ph_colormap_spec;
+
+PH_API void PH_CALL ph_colormap_spec_init(ph_colormap_spec* out);
+
+/**
+ * Register anchors under `name`, usable anywhere a colormap name is. Replaces
+ * any existing entry. Needs at least two stops.
+ */
+PH_API ph_result PH_CALL ph_colormap_register(const char* name, const ph_color* stops,
+                                              int32_t stop_count);
+
+/** The colour at `t` (clamped to 0..1) — for a host drawing its own legend. */
+PH_API ph_result PH_CALL ph_colormap_sample(const ph_colormap_spec* spec, double t,
+                                            ph_color* out);
+
+/** How many colormaps exist: built-ins first, then whatever was registered. */
+PH_API int32_t PH_CALL ph_colormap_count(void);
+
+/**
+ * The `index`-th colormap name, or NULL when out of range. The pointer stays
+ * valid for the life of the process — names are never unregistered.
+ */
+PH_API const char* PH_CALL ph_colormap_name(int32_t index);
+
+/**
+ * A domain centred on `center` that covers `values`, so a diverging colormap's
+ * neutral midpoint lands on the reference value instead of drifting with the
+ * data. Never returns an empty range: all-equal input gives center +/- 1.
+ */
+PH_API ph_result PH_CALL ph_symmetric_domain(const double* values, int32_t count,
+                                             double center, ph_range* out);
+
+/**
+ * Register a categorical palette under `name` — the discrete counterpart to a
+ * colormap, used for series and class colours. Needs at least one colour.
+ */
+PH_API ph_result PH_CALL ph_palette_register(const char* name, const ph_color* colors,
+                                             int32_t count);
+
+/** How many palettes exist. Built-ins: tableau10, okabe-ito, set2, bright. */
+PH_API int32_t PH_CALL ph_palette_count(void);
+
+/** The `index`-th palette name, or NULL when out of range. Valid for the process. */
+PH_API const char* PH_CALL ph_palette_name(int32_t index);
+
+/**
+ * The `index`-th colour of a palette, cycling once it is exhausted. A NULL or
+ * unknown name gives tableau10.
+ */
+PH_API ph_color PH_CALL ph_palette_color(const char* name, int32_t index);
+
+/* ------------------------------------------------------------------------ */
 /* Descriptors                                                                */
 /* ------------------------------------------------------------------------ */
 
@@ -632,6 +708,68 @@ typedef struct ph_box_desc {
 } ph_box_desc;
 
 /**
+ * Mirrors core `HeatmapOptions`.
+ *
+ * A regular grid coloured through a colormap and drawn as one textured quad —
+ * so a 2000x2000 field costs one draw call, not four million. `values` is
+ * row-major with row 0 at the *bottom*, the orientation a scientific grid is
+ * usually built in.
+ */
+typedef struct ph_heatmap_desc {
+  uint32_t                struct_size;
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  /** The data-space rectangle the grid spans. */
+  ph_range                x;
+  ph_range                y;
+  /** NULL is viridis, the core's default. */
+  const ph_colormap_spec* colormap;
+  /**
+   * The value range mapped across the colormap. An empty range (lo == hi, so
+   * also all-zero) means fit to the data.
+   */
+  ph_range                domain;
+  /** Draw hard cells instead of bilinear-filtering between them. */
+  ph_bool                 no_smooth;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_heatmap_desc;
+
+/**
+ * Mirrors core `ImageOptions`, minus the URL.
+ *
+ * The web layer accepts anything `texImage2D` does, including a URL it fetches.
+ * Here the source is always decoded RGBA8 the caller already has — loading and
+ * decoding an image is the host's job, not a chart library's, and it is the one
+ * place where pretending otherwise would drag in a network stack.
+ */
+typedef struct ph_image_desc {
+  uint32_t       struct_size;
+  /** width * height * 4 bytes, RGBA8, not premultiplied. */
+  const uint8_t* pixels;
+  int32_t        width;
+  int32_t        height;
+  /** The data-space rectangle the image spans. */
+  ph_range       x;
+  ph_range       y;
+  /**
+   * The first row of `pixels` is the bottom of the extent. Off by default,
+   * because a decoded image's first row is its top — which is what the web core
+   * assumes when it flips on upload.
+   */
+  ph_bool        bottom_up;
+  /** Draw hard pixels instead of bilinear-filtering between them. */
+  ph_bool        no_smooth;
+  /** Overall opacity. 0 = 1.0, so a zeroed struct is a visible image. */
+  float          opacity;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_image_desc;
+
+/**
  * One filled polygon: a ring of x/y, with optional holes.
  *
  * `holes[k]` is the *vertex* index where hole ring k begins — the same
@@ -784,6 +922,8 @@ PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
 PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
+PH_API void PH_CALL ph_heatmap_desc_init(ph_heatmap_desc* out);
+PH_API void PH_CALL ph_image_desc_init(ph_image_desc* out);
 
 /* ------------------------------------------------------------------------ */
 /* Plot lifecycle                                                             */
@@ -869,6 +1009,8 @@ PH_API ph_result PH_CALL ph_plot_add_pie(ph_plot plot, const ph_pie_desc* desc, 
 PH_API ph_result PH_CALL ph_plot_add_stem(ph_plot plot, const ph_stem_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_errorbar(ph_plot plot, const ph_errorbar_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_box(ph_plot plot, const ph_box_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_heatmap(ph_plot plot, const ph_heatmap_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_image(ph_plot plot, const ph_image_desc* desc, ph_layer* out);
 
 /*
  * The remaining layer types (heatmap, hexbin, contour, quiver, candlestick,

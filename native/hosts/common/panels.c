@@ -15,6 +15,11 @@
 /* Five latency buckets of sixty samples each. */
 #define BOXES 5
 #define BOX_SAMPLES 60
+/* A field big enough to look like data and small enough to read in the source. */
+#define FIELD_COLS 96
+#define FIELD_ROWS 72
+/* The sprite is drawn by hand below, so its size is deliberately tiny. */
+#define SPRITE 16
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -52,11 +57,14 @@ struct ph_panels {
 
   double latency[BOXES][BOX_SAMPLES];
   ph_box_group boxes[BOXES];
+
+  double field[FIELD_COLS * FIELD_ROWS];
+  unsigned char sprite[SPRITE * SPRITE * 4];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatter", "Streaming",
                                               "Revenue", "Funnel",       "Share",   "Impulse",
-                                              "Yield",   "Latency"};
+                                              "Yield",   "Latency",      "Field",   "Sprite"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -197,6 +205,36 @@ ph_panels* ph_panels_create(void) {
   p->boxes[2].color = parse("#34d399");
   p->boxes[3].color = parse("#facc15");
   p->boxes[4].color = parse("#f472b6");
+
+  /* Two interfering circular waves — a field whose structure survives being
+   * squeezed into a small cell, which is what makes it worth colouring. */
+  for (int row = 0; row < FIELD_ROWS; row++) {
+    for (int col = 0; col < FIELD_COLS; col++) {
+      const double x = (col - FIELD_COLS * 0.5) * 0.12;
+      const double y = (row - FIELD_ROWS * 0.5) * 0.12;
+      const double r1 = sqrt((x + 2.0) * (x + 2.0) + y * y);
+      const double r2 = sqrt((x - 2.0) * (x - 2.0) + y * y);
+      p->field[row * FIELD_COLS + col] = sin(r1 * 3.0) + sin(r2 * 3.0);
+    }
+  }
+
+  /* A 16x16 RGBA sprite: a soft disc with a hard ring, written top row first
+   * the way a decoded image arrives, so the layer's default orientation is the
+   * one being exercised. */
+  for (int row = 0; row < SPRITE; row++) {
+    for (int col = 0; col < SPRITE; col++) {
+      const double dx = col - (SPRITE - 1) / 2.0;
+      const double dy = row - (SPRITE - 1) / 2.0;
+      const double d = sqrt(dx * dx + dy * dy) / (SPRITE / 2.0);
+      unsigned char* px = &p->sprite[(row * SPRITE + col) * 4];
+      const double ring = d > 0.78 && d < 0.98 ? 1.0 : 0.0;
+      const double disc = d < 0.62 ? 1.0 - d : 0.0;
+      px[0] = (unsigned char)(255.0 * (ring + disc * 0.2));
+      px[1] = (unsigned char)(255.0 * disc * 0.9);
+      px[2] = (unsigned char)(255.0 * (ring * 0.3 + disc));
+      px[3] = (unsigned char)(255.0 * (ring > 0.0 || disc > 0.0 ? 1.0 : 0.0));
+    }
+  }
 
   return p;
 }
@@ -446,6 +484,68 @@ static void build_latency(ph_panels* p, ph_plot plot) {
   ph_plot_add_box(plot, &box, &layer);
 }
 
+/* Panel 10 — a scalar field, coloured by the core rather than by the caller. */
+static void build_field(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Field");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_colormap_spec cmap;
+  ph_colormap_spec_init(&cmap);
+  /* Diverging, because the field is signed and its zero means something —
+   * paired with a domain centred on it, which is what symmetric_domain is for. */
+  cmap.name = "RdBu";
+  ph_range domain;
+  ph_symmetric_domain(p->field, FIELD_COLS * FIELD_ROWS, 0.0, &domain);
+
+  ph_heatmap_desc heat;
+  ph_heatmap_desc_init(&heat);
+  heat.values = p->field;
+  heat.cols = FIELD_COLS;
+  heat.rows = FIELD_ROWS;
+  heat.x.lo = -6.0;
+  heat.x.hi = 6.0;
+  heat.y.lo = -4.5;
+  heat.y.hi = 4.5;
+  heat.colormap = &cmap;
+  heat.domain = domain;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_heatmap(plot, &heat, &layer);
+}
+
+/* Panel 11 — RGBA pixels placed in data space, with a line for scale. */
+static void build_sprite(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Sprite");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_layer layer = PH_NULL_HANDLE;
+
+  /* Nearest filtering, because at this size the point is the pixels: a smooth
+   * one would only prove the sampler works. */
+  ph_image_desc image;
+  ph_image_desc_init(&image);
+  image.pixels = p->sprite;
+  image.width = SPRITE;
+  image.height = SPRITE;
+  image.x.lo = 0.0;
+  image.x.hi = 4.0;
+  image.y.lo = 0.0;
+  image.y.hi = 4.0;
+  image.no_smooth = 1;
+  ph_plot_add_image(plot, &image, &layer);
+
+  /* The same sprite again, smoothed, half-transparent and overlapping — so the
+   * two filters and the opacity are all visible in one cell. */
+  image.x.lo = 2.5;
+  image.x.hi = 6.5;
+  image.y.lo = 1.5;
+  image.y.hi = 5.5;
+  image.no_smooth = 0;
+  image.opacity = 0.65f;
+  ph_plot_add_image(plot, &image, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -459,7 +559,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 6: build_share(panels, plot); break;
     case 7: build_impulse(panels, plot); break;
     case 8: build_yield(panels, plot); break;
-    default: build_latency(panels, plot); break;
+    case 9: build_latency(panels, plot); break;
+    case 10: build_field(panels, plot); break;
+    default: build_sprite(panels, plot); break;
   }
 }
 

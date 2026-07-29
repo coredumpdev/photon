@@ -20,7 +20,9 @@
 #include <new>
 #include <string>
 #include <thread>
+#include <vector>
 
+#include "color/colormap.hpp"
 #include "error.hpp"
 #include "layer.hpp"
 #include "plot.hpp"
@@ -207,6 +209,131 @@ extern "C" ph_result PH_CALL ph_color_parse(const char* css, ph_color* out) {
   }
   *out = (r << 24) | (g << 16) | (b << 8) | a;
   return PH_OK;
+}
+
+// ---------------------------------------------------------------------------
+// Colormaps and palettes
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Turn a descriptor into the internal spec. A NULL name is not an error — it
+/// means viridis, the same as an unknown one.
+photon::color::Spec to_spec(const ph_colormap_spec& desc) {
+  photon::color::Spec spec;
+  if (desc.name) spec.name = desc.name;
+  if (desc.stops && desc.stop_count > 0) {
+    spec.stops.reserve(static_cast<size_t>(desc.stop_count));
+    for (int32_t i = 0; i < desc.stop_count; ++i) {
+      spec.stops.push_back(photon::color::to_rgb(desc.stops[i]));
+    }
+  }
+  spec.reverse = desc.reverse != 0;
+  spec.discrete_steps = desc.discrete_steps;
+  return spec;
+}
+
+/// The name lists, kept alive for the process because the ABI hands out char*.
+/// Rebuilt on each count/name call, which is cheap and happens off the frame
+/// path — but the strings themselves come from registries that never erase.
+const std::vector<std::string>& colormap_name_list() {
+  static std::vector<std::string> names;
+  names = photon::color::colormap_names();
+  return names;
+}
+
+const std::vector<std::string>& palette_name_list() {
+  static std::vector<std::string> names;
+  names = photon::color::palette_names();
+  return names;
+}
+
+}  // namespace
+
+extern "C" void PH_CALL ph_colormap_spec_init(ph_colormap_spec* out) {
+  if (!out) return;
+  *out = ph_colormap_spec{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_colormap_spec));
+  // name stays NULL, which resolves to viridis — the core's default too.
+}
+
+extern "C" ph_result PH_CALL ph_colormap_register(const char* name, const ph_color* stops,
+                                                  int32_t stop_count) {
+  clear_error();
+  if (!name || !stops) return fail(PH_E_INVALID_ARGUMENT, "name and stops must be non-null");
+  if (stop_count < 2) return fail(PH_E_INVALID_ARGUMENT, "a colormap needs at least 2 stops");
+  std::vector<photon::color::Rgb> anchors;
+  anchors.reserve(static_cast<size_t>(stop_count));
+  for (int32_t i = 0; i < stop_count; ++i) anchors.push_back(photon::color::to_rgb(stops[i]));
+  if (!photon::color::register_colormap(name, anchors)) {
+    return fail(PH_E_INVALID_ARGUMENT, "colormap name must be non-empty");
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_colormap_sample(const ph_colormap_spec* spec, double t,
+                                                ph_color* out) {
+  clear_error();
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (spec && !desc_size_ok(spec)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_colormap_spec.struct_size is larger than this build's");
+  }
+  const ph_colormap_spec normalized = normalize(spec, ph_colormap_spec_init);
+  const photon::color::Rgb c = photon::color::sample(to_spec(normalized), t);
+  const auto byte = [](float v) {
+    const float clamped = v <= 0.0f ? 0.0f : (v >= 1.0f ? 1.0f : v);
+    return static_cast<uint32_t>(clamped * 255.0f + 0.5f);
+  };
+  *out = (byte(c.r) << 24) | (byte(c.g) << 16) | (byte(c.b) << 8) | 0xFFu;
+  return PH_OK;
+}
+
+extern "C" int32_t PH_CALL ph_colormap_count(void) {
+  return static_cast<int32_t>(colormap_name_list().size());
+}
+
+extern "C" const char* PH_CALL ph_colormap_name(int32_t index) {
+  const std::vector<std::string>& names = colormap_name_list();
+  if (index < 0 || static_cast<size_t>(index) >= names.size()) return nullptr;
+  return names[static_cast<size_t>(index)].c_str();
+}
+
+extern "C" ph_result PH_CALL ph_symmetric_domain(const double* values, int32_t count,
+                                                 double center, ph_range* out) {
+  clear_error();
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (count > 0 && !values) {
+    return fail(PH_E_INVALID_ARGUMENT, "values must be non-null when count > 0");
+  }
+  *out = photon::color::symmetric_domain(values, static_cast<size_t>(count), center);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_palette_register(const char* name, const ph_color* colors,
+                                                 int32_t count) {
+  clear_error();
+  if (!name || !colors) return fail(PH_E_INVALID_ARGUMENT, "name and colors must be non-null");
+  if (count < 1) return fail(PH_E_INVALID_ARGUMENT, "a palette needs at least one colour");
+  const std::vector<ph_color> list(colors, colors + count);
+  if (!photon::color::register_palette(name, list)) {
+    return fail(PH_E_INVALID_ARGUMENT, "palette name must be non-empty");
+  }
+  return PH_OK;
+}
+
+extern "C" int32_t PH_CALL ph_palette_count(void) {
+  return static_cast<int32_t>(palette_name_list().size());
+}
+
+extern "C" const char* PH_CALL ph_palette_name(int32_t index) {
+  const std::vector<std::string>& names = palette_name_list();
+  if (index < 0 || static_cast<size_t>(index) >= names.size()) return nullptr;
+  return names[static_cast<size_t>(index)].c_str();
+}
+
+extern "C" ph_color PH_CALL ph_palette_color(const char* name, int32_t index) {
+  return photon::color::palette_color(name ? name : "tableau10", index);
 }
 
 // ---------------------------------------------------------------------------
@@ -667,6 +794,74 @@ extern "C" ph_result PH_CALL ph_plot_add_stem(ph_plot handle, const ph_stem_desc
                                               ph_layer* out) {
   return add_xy_layer<ph_stem_desc, photon::StemLayer>(handle, desc, out, ph_stem_desc_init,
                                                        "ph_stem_desc");
+}
+
+extern "C" void PH_CALL ph_heatmap_desc_init(ph_heatmap_desc* out) {
+  if (!out) return;
+  *out = ph_heatmap_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_heatmap_desc));
+  out->render_type = PH_RENDER_STATIC;
+  // extent and domain stay empty, which the layer reads as "fit to the data" —
+  // the same thing an omitted `domain` means in the TypeScript.
+}
+
+extern "C" void PH_CALL ph_image_desc_init(ph_image_desc* out) {
+  if (!out) return;
+  *out = ph_image_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_image_desc));
+  out->opacity = 1.0f;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_heatmap(ph_plot handle, const ph_heatmap_desc* desc,
+                                                 ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_heatmap_desc.struct_size is larger than this build's");
+  }
+  const ph_heatmap_desc normalized = normalize(desc, ph_heatmap_desc_init);
+  if (normalized.cols < 0 || normalized.rows < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "cols and rows must be non-negative");
+  }
+  if (normalized.cols > 0 && normalized.rows > 0 && !normalized.values) {
+    return fail(PH_E_INVALID_ARGUMENT, "values must be non-null when cols and rows are > 0");
+  }
+  if (normalized.colormap && !desc_size_ok(normalized.colormap)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_colormap_spec.struct_size is larger than this build's");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::HeatmapLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating heatmap layer");
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_image(ph_plot handle, const ph_image_desc* desc,
+                                               ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_image_desc.struct_size is larger than this build's");
+  }
+  const ph_image_desc normalized = normalize(desc, ph_image_desc_init);
+  if (normalized.width < 0 || normalized.height < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "width and height must be non-negative");
+  }
+  if (normalized.width > 0 && normalized.height > 0 && !normalized.pixels) {
+    return fail(PH_E_INVALID_ARGUMENT, "pixels must be non-null when width and height are > 0");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::ImageLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating image layer");
+  }
 }
 
 extern "C" ph_result PH_CALL ph_plot_add_errorbar(ph_plot handle, const ph_errorbar_desc* desc,

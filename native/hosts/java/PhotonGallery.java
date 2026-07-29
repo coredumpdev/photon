@@ -1,4 +1,4 @@
-// The Java gallery: the same ten charts as the GLFW and Qt ones, in a window.
+// The Java gallery: the same twelve charts as the GLFW and Qt ones, in a window.
 //
 // This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
 // that. What it adds is the part of the ABI a headless test cannot reach: a
@@ -40,8 +40,8 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 10;
-    private static final int COLUMNS = 5;
+    private static final int PANELS = 12;
+    private static final int COLUMNS = 4;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
     private static final int FUNNEL_STAGES = 5;
@@ -52,6 +52,9 @@ public final class PhotonGallery {
     private static final int TRIALS = 14;
     private static final int BOXES = 5;
     private static final int BOX_SAMPLES = 60;
+    private static final int FIELD_COLS = 96;
+    private static final int FIELD_ROWS = 72;
+    private static final int SPRITE = 16;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -97,7 +100,7 @@ public final class PhotonGallery {
     }
 
     // -----------------------------------------------------------------------
-    // The charts — the same ten as hosts/common/panels.c, through the binding
+    // The charts — the same twelve as hosts/common/panels.c, through the binding
     // -----------------------------------------------------------------------
 
     private static MemorySegment doubles(int count) {
@@ -530,6 +533,100 @@ public final class PhotonGallery {
         }
     }
 
+    /** Panel 10 — a scalar field, coloured by the core rather than by the caller. */
+    private static void buildField(long plot) {
+        MemorySegment values = doubles(FIELD_COLS * FIELD_ROWS);
+        for (int row = 0; row < FIELD_ROWS; row++) {
+            for (int col = 0; col < FIELD_COLS; col++) {
+                double x = (col - FIELD_COLS * 0.5) * 0.12;
+                double y = (row - FIELD_ROWS * 0.5) * 0.12;
+                double r1 = Math.sqrt((x + 2.0) * (x + 2.0) + y * y);
+                double r2 = Math.sqrt((x - 2.0) * (x - 2.0) + y * y);
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, row * FIELD_COLS + col,
+                                  Math.sin(r1 * 3.0) + Math.sin(r2 * 3.0));
+            }
+        }
+
+        setTitle(plot, "Field");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment cmap = ph_colormap_spec.allocate(ARENA);
+        ph_colormap_spec_init(cmap);
+        // Diverging, because the field is signed and its zero means something —
+        // paired with a domain centred on it.
+        cmap.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_NAME, ARENA.allocateFrom("RdBu"));
+
+        MemorySegment desc = ph_heatmap_desc.allocate(ARENA);
+        ph_heatmap_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_heatmap_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_COLS, FIELD_COLS);
+        desc.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_ROWS, FIELD_ROWS);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_X + ph_range.OFFSET_LO, -6.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_X + ph_range.OFFSET_HI, 6.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_Y + ph_range.OFFSET_LO, -4.5);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_Y + ph_range.OFFSET_HI, 4.5);
+        desc.set(ValueLayout.ADDRESS, ph_heatmap_desc.OFFSET_COLORMAP, cmap);
+
+        MemorySegment domain = ph_range.allocate(ARENA);
+        ph_symmetric_domain(values, FIELD_COLS * FIELD_ROWS, 0.0, domain);
+        MemorySegment.copy(domain, 0, desc, ph_heatmap_desc.OFFSET_DOMAIN, ph_range.SIZE);
+
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_heatmap(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 11 — RGBA pixels placed in data space, at two filters. */
+    private static void buildSprite(long plot) {
+        MemorySegment pixels = ARENA.allocate(ValueLayout.JAVA_BYTE, (long) SPRITE * SPRITE * 4);
+        for (int row = 0; row < SPRITE; row++) {
+            for (int col = 0; col < SPRITE; col++) {
+                double dx = col - (SPRITE - 1) / 2.0;
+                double dy = row - (SPRITE - 1) / 2.0;
+                double d = Math.sqrt(dx * dx + dy * dy) / (SPRITE / 2.0);
+                double ring = d > 0.78 && d < 0.98 ? 1.0 : 0.0;
+                double disc = d < 0.62 ? 1.0 - d : 0.0;
+                long base = ((long) row * SPRITE + col) * 4;
+                pixels.set(ValueLayout.JAVA_BYTE, base, (byte) (255.0 * (ring + disc * 0.2)));
+                pixels.set(ValueLayout.JAVA_BYTE, base + 1, (byte) (255.0 * disc * 0.9));
+                pixels.set(ValueLayout.JAVA_BYTE, base + 2, (byte) (255.0 * (ring * 0.3 + disc)));
+                pixels.set(ValueLayout.JAVA_BYTE, base + 3,
+                           (byte) (255.0 * (ring > 0.0 || disc > 0.0 ? 1.0 : 0.0)));
+            }
+        }
+
+        setTitle(plot, "Sprite");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment desc = ph_image_desc.allocate(ARENA);
+        ph_image_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_image_desc.OFFSET_PIXELS, pixels);
+        desc.set(ValueLayout.JAVA_INT, ph_image_desc.OFFSET_WIDTH, SPRITE);
+        desc.set(ValueLayout.JAVA_INT, ph_image_desc.OFFSET_HEIGHT, SPRITE);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_X + ph_range.OFFSET_LO, 0.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_X + ph_range.OFFSET_HI, 4.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_Y + ph_range.OFFSET_LO, 0.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_Y + ph_range.OFFSET_HI, 4.0);
+        desc.set(ValueLayout.JAVA_INT, ph_image_desc.OFFSET_NO_SMOOTH, 1);
+        if (ph_plot_add_image(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_X + ph_range.OFFSET_LO, 2.5);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_X + ph_range.OFFSET_HI, 6.5);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_Y + ph_range.OFFSET_LO, 1.5);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_image_desc.OFFSET_Y + ph_range.OFFSET_HI, 5.5);
+        desc.set(ValueLayout.JAVA_INT, ph_image_desc.OFFSET_NO_SMOOTH, 0);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_image_desc.OFFSET_OPACITY, 0.65f);
+        if (ph_plot_add_image(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         for (int i = 0; i < STREAM_POINTS; i++) {
             double phase = seconds * 2.0 + i * 0.035;
@@ -749,6 +846,8 @@ public final class PhotonGallery {
         buildImpulse(plots[7]);
         buildYield(plots[8]);
         buildLatency(plots[9]);
+        buildField(plots[10]);
+        buildSprite(plots[11]);
 
         installCallbacks();
 

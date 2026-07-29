@@ -112,6 +112,59 @@ internal static class PhotonSmokeTest
         Ran("ph_color_parse");
     }
 
+    /// The colormap and palette registries, and the maths over them.
+    private static void Colormaps()
+    {
+        ph_colormap_spec_init(out var spec);
+
+        // A null name is viridis, whose ends are the dark purple and the yellow
+        // every plot of it opens and closes on.
+        CheckEq(ph_colormap_sample(in spec, 0.0, out var low), PH_OK, "ph_colormap_sample");
+        CheckEq(ph_colormap_sample(in spec, 1.0, out var high), PH_OK, "ph_colormap_sample(1)");
+        CheckEq(low, 0x440154ffu, "viridis starts dark purple");
+        CheckEq(high, 0xfde725ffu, "viridis ends yellow");
+
+        // Reversing swaps the ends, which is the whole of what it promises.
+        spec.reverse = 1;
+        CheckEq(ph_colormap_sample(in spec, 0.0, out var reversed), PH_OK, "reversed sample");
+        CheckEq(reversed, high, "reverse swaps the ends");
+        spec.reverse = 0;
+
+        CheckEq(ph_colormap_register("smoke", new uint[] { 0x000000FF, 0xFFFFFFFF }, 2), PH_OK,
+                "ph_colormap_register");
+        CheckEq(ph_colormap_register("too-short", new uint[] { 0x000000FF }, 1),
+                PH_E_INVALID_ARGUMENT, "one stop is not a colormap");
+
+        int count = ph_colormap_count();
+        Check(count >= 13, "twelve built-ins plus the registered one");
+        Check(Marshal.PtrToStringUTF8(ph_colormap_name(0)) == "viridis", "viridis is first");
+        Check(ph_colormap_name(count) == IntPtr.Zero, "out of range gives null");
+
+        // A symmetric domain has to reach the furthest value on either side, or
+        // a diverging map's neutral midpoint drifts off the reference.
+        CheckEq(ph_symmetric_domain(new double[] { -2.0, 1.0, 7.0 }, 3, 0.0, out var domain),
+                PH_OK, "ph_symmetric_domain");
+        Check(domain.lo == -7.0 && domain.hi == 7.0, "the domain reaches the furthest value");
+
+        Check(ph_palette_count() >= 4, "four built-in palettes");
+        Check(Marshal.PtrToStringUTF8(ph_palette_name(0)) == "tableau10", "tableau10 is first");
+        Check(ph_palette_name(-1) == IntPtr.Zero, "a negative index gives null");
+        CheckEq(ph_palette_color("tableau10", 0), 0x4e79a7ffu, "tableau10 starts blue");
+        // Cycling, not clamping: the eleventh colour of a ten-colour palette is
+        // the first one again.
+        CheckEq(ph_palette_color("tableau10", 10), 0x4e79a7ffu, "a palette cycles");
+        CheckEq(ph_palette_color(null, 0), 0x4e79a7ffu, "a null name is tableau10");
+
+        CheckEq(ph_palette_register("smoke", new uint[] { 0x123456FF }, 1), PH_OK,
+                "ph_palette_register");
+        CheckEq(ph_palette_color("smoke", 3), 0x123456ffu,
+                "a one-colour palette gives that colour for every index");
+
+        Ran("ph_colormap_spec_init", "ph_colormap_register", "ph_colormap_sample",
+            "ph_colormap_count", "ph_colormap_name", "ph_symmetric_domain",
+            "ph_palette_register", "ph_palette_count", "ph_palette_name", "ph_palette_color");
+    }
+
     private static ulong BuildPlot()
     {
         ph_plot_desc_init(out var desc);
@@ -417,6 +470,68 @@ internal static class PhotonSmokeTest
             "ph_plot_add_box");
     }
 
+    /// The two textured-quad layers: a colormapped grid and raw RGBA pixels.
+    private static void Grids(ulong plot)
+    {
+        var values = new double[] { 0, 1, 2, 3, 4, 5 };
+        var valuesHandle = GCHandle.Alloc(values, GCHandleType.Pinned);
+        var pixels = new byte[16];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = (byte)(i * 16);
+        var pixelsHandle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        try
+        {
+            ph_heatmap_desc_init(out var heat);
+            heat.values = valuesHandle.AddrOfPinnedObject();
+            heat.cols = 3;
+            heat.rows = 2;
+            heat.x = new ph_range { lo = -1.0, hi = 2.0 };
+            heat.y = new ph_range { lo = 0.0, hi = 4.0 };
+            CheckEq(ph_plot_add_heatmap(plot, in heat, out var heatLayer), PH_OK,
+                "ph_plot_add_heatmap");
+            CheckEq(ph_layer_bounds(heatLayer, out var heatX, out var heatY), PH_OK,
+                "heatmap bounds");
+            // The bounds are the extent, not the cell count — a grid says where
+            // it is, and its resolution is nobody else's business.
+            Check(heatX.lo == -1.0 && heatX.hi == 2.0, "the heatmap bounds are its extent");
+            Check(heatY.hi == 4.0, "in both axes");
+            CheckEq(ph_layer_destroy(heatLayer), PH_OK, "the heatmap layer is destroyed");
+
+            // An empty grid is not an error, but it has no bounds to report.
+            ph_heatmap_desc_init(out var bare);
+            CheckEq(ph_plot_add_heatmap(plot, in bare, out var emptyLayer), PH_OK,
+                "an empty heatmap is allowed");
+            CheckEq(ph_layer_bounds(emptyLayer, out _, out _), PH_E_UNSUPPORTED,
+                "and has no bounds");
+            CheckEq(ph_layer_destroy(emptyLayer), PH_OK, "the empty heatmap is destroyed");
+
+            ph_image_desc_init(out var image);
+            image.pixels = pixelsHandle.AddrOfPinnedObject();
+            image.width = 2;
+            image.height = 2;
+            image.x = new ph_range { lo = 5.0, hi = 9.0 };
+            image.y = new ph_range { lo = 5.0, hi = 6.0 };
+            CheckEq(ph_plot_add_image(plot, in image, out var imageLayer), PH_OK,
+                "ph_plot_add_image");
+            CheckEq(ph_layer_bounds(imageLayer, out var imageX, out var imageY), PH_OK,
+                "image bounds");
+            Check(imageX.hi == 9.0 && imageY.lo == 5.0, "the image bounds are its extent");
+            CheckEq(ph_layer_destroy(imageLayer), PH_OK, "the image layer is destroyed");
+
+            // Pixels without dimensions is a caller mistake worth naming.
+            image.pixels = IntPtr.Zero;
+            CheckEq(ph_plot_add_image(plot, in image, out _), PH_E_INVALID_ARGUMENT,
+                "a sized image needs pixels");
+        }
+        finally
+        {
+            valuesHandle.Free();
+            pixelsHandle.Free();
+        }
+
+        Ran("ph_heatmap_desc_init", "ph_image_desc_init", "ph_plot_add_heatmap",
+            "ph_plot_add_image");
+    }
+
     /// Filled polygons, including the hole path through the triangulator.
     private static void Patches(ulong plot)
     {
@@ -564,6 +679,7 @@ internal static class PhotonSmokeTest
         DescriptorDefaults();
         Console.WriteLine("Colors");
         Colors();
+        Colormaps();
 
         Console.WriteLine("plot, axes, layers, interaction");
         var plot = BuildPlot();
@@ -572,6 +688,7 @@ internal static class PhotonSmokeTest
         AreaAndBars(plot);
         PieAndStem(plot);
         ErrorBarsAndBoxes(plot);
+        Grids(plot);
         Patches(plot);
         Interaction(plot);
         Events(plot);

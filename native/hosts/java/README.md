@@ -1,6 +1,6 @@
 # The Java host
 
-The same ten charts as the GLFW and Qt galleries, in a window, driven from Java
+The same twelve charts as the GLFW and Qt galleries, in a window, driven from Java
 through the generated Panama binding.
 
 ```bash

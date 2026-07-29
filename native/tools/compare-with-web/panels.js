@@ -1,5 +1,5 @@
 /**
- * The ten demo charts, built with @photonviz/core.
+ * The twelve demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -7,7 +7,7 @@
  * if one changes, both must.
  */
 
-import { Plot } from "@photonviz/core";
+import { Plot, symmetricDomain } from "@photonviz/core";
 
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
@@ -17,6 +17,9 @@ const IMPULSES = 24;
 const TRIALS = 14;
 const BOXES = 5;
 const BOX_SAMPLES = 60;
+const FIELD_COLS = 96;
+const FIELD_ROWS = 72;
+const SPRITE = 16;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -270,5 +273,66 @@ function latency(container) {
   return plot;
 }
 
+function field(container) {
+  const values = new Float64Array(FIELD_COLS * FIELD_ROWS);
+  for (let row = 0; row < FIELD_ROWS; row++) {
+    for (let col = 0; col < FIELD_COLS; col++) {
+      const x = (col - FIELD_COLS * 0.5) * 0.12;
+      const y = (row - FIELD_ROWS * 0.5) * 0.12;
+      const r1 = Math.sqrt((x + 2) * (x + 2) + y * y);
+      const r2 = Math.sqrt((x - 2) * (x - 2) + y * y);
+      values[row * FIELD_COLS + col] = Math.sin(r1 * 3) + Math.sin(r2 * 3);
+    }
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Field",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+    // The native core has no colorbar yet — it is the next gap after the
+    // layers. Left on, the web reserves right-margin space for it and the two
+    // plot regions genuinely differ, which would mask any real drift here
+    // behind a difference already written down in native/TODO.md.
+    colorbar: false,
+  });
+  // Diverging, because the field is signed and its zero means something —
+  // paired with a domain centred on it.
+  plot.addHeatmap({
+    values, cols: FIELD_COLS, rows: FIELD_ROWS,
+    extent: { x: [-6, 6], y: [-4.5, 4.5] },
+    colormap: "RdBu",
+    domain: symmetricDomain(values, 0),
+  });
+  return plot;
+}
+
+function sprite(container) {
+  const pixels = new Uint8ClampedArray(SPRITE * SPRITE * 4);
+  for (let row = 0; row < SPRITE; row++) {
+    for (let col = 0; col < SPRITE; col++) {
+      const dx = col - (SPRITE - 1) / 2;
+      const dy = row - (SPRITE - 1) / 2;
+      const d = Math.sqrt(dx * dx + dy * dy) / (SPRITE / 2);
+      const ring = d > 0.78 && d < 0.98 ? 1 : 0;
+      const disc = d < 0.62 ? 1 - d : 0;
+      const base = (row * SPRITE + col) * 4;
+      pixels[base] = 255 * (ring + disc * 0.2);
+      pixels[base + 1] = 255 * disc * 0.9;
+      pixels[base + 2] = 255 * (ring * 0.3 + disc);
+      pixels[base + 3] = ring > 0 || disc > 0 ? 255 : 0;
+    }
+  }
+  const source = new ImageData(pixels, SPRITE, SPRITE);
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Sprite",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+  });
+  plot.addImage({ source, extent: { x: [0, 4], y: [0, 4] }, smooth: false });
+  plot.addImage({ source, extent: { x: [2.5, 6.5], y: [1.5, 5.5] }, opacity: 0.65 });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
-                       share, impulse, yieldCurve, latency];
+                       share, impulse, yieldCurve, latency, field, sprite];
