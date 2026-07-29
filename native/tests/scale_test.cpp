@@ -12,6 +12,7 @@
  */
 
 #include <clocale>
+#include <cmath>
 #include <cstdio>
 #include <string>
 

@@ -21,7 +21,9 @@ how the Qt output gets compared against `examples/vanilla` as an image rather
 than by eye.
 
 Qt is `find_package`d, not fetched — anyone targeting Qt already has it, and it
-is far too large to pull into a build. Requires Qt 6.5+.
+is far too large to pull into a build. Requires Qt 6.4+, which is what Ubuntu's
+current LTS ships; the floor started at 6.5 for no better reason than the
+version on the machine it was written on, and CI said so.
 
 ## Why this host exists
 

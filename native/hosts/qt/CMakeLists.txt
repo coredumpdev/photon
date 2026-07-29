@@ -6,9 +6,13 @@
 # REQUIRED, so turning PHOTON_BUILD_QT_HOST on without Qt 6 fails at configure
 # time with Qt's own message rather than a link error later.
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick Qml Widgets OpenGLWidgets)
+# 6.4 rather than 6.5, which is what the first CI run cost: Ubuntu's current
+# LTS ships Qt 6.4.2, and nothing in this host actually needs anything newer.
+# Requiring a version because it happened to be the one on the author's machine
+# is how a dependency floor ends up higher than the code's.
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick Qml Widgets OpenGLWidgets)
 
-qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup()
 
 # ---------------------------------------------------------------------------
 # The QML item, as a proper QML module
