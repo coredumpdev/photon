@@ -11,6 +11,8 @@
  * tick helpers are internal, and the .so exports only ph_*.
  */
 
+#include <clocale>
+#include <cstdio>
 #include <string>
 
 #include "axes/ticks.hpp"
@@ -299,12 +301,55 @@ void test_ordinal_time_zoomed_into_one_period() {
 
 }  // namespace
 
+/**
+ * The same labels, under a locale whose decimal separator is a comma.
+ *
+ * Not hypothetical: Qt calls setlocale(LC_ALL, "") before main() runs, so on a
+ * Turkish or German desktop this is the locale every Qt-hosted chart formats
+ * its ticks in. printf-family formatting would silently start writing "0,5"
+ * while the web core, which has no locale to consult, keeps writing "0.5".
+ */
+void test_labels_ignore_the_c_locale() {
+  static const char* const kCandidates[] = {"tr_TR.UTF-8", "tr_TR.utf8", "de_DE.UTF-8",
+                                            "de_DE.utf8",  "fr_FR.UTF-8", "fr_FR.utf8"};
+  const char* previous = std::setlocale(LC_NUMERIC, nullptr);
+  const std::string saved = previous ? previous : "C";
+
+  const char* applied = nullptr;
+  for (const char* candidate : kCandidates) {
+    if (std::setlocale(LC_NUMERIC, candidate)) {
+      applied = candidate;
+      break;
+    }
+  }
+  if (!applied) {
+    // Nothing to prove on a machine with no comma-decimal locale installed, and
+    // failing there would be a test about the machine, not about the code.
+    std::printf("  (skipped: no comma-decimal locale installed)\n");
+    return;
+  }
+
+  CHECK_STR(default_format(1234.5), "1234.5");
+  CHECK_STR(default_format(0.5), "0.5");
+  CHECK_STR(default_format(-0.125), "-0.125");
+  CHECK_STR(default_format(1e7), "1.0e+7");
+  CHECK_STR(default_format(1e-5), "1.0e-5");
+
+  Scale log;
+  log.type = PH_SCALE_LOG;
+  log.set_domain(0.001, 1000.0);
+  CHECK_STR(log.format_tick(0.01), "0.01");
+
+  std::setlocale(LC_NUMERIC, saved.c_str());
+}
+
 int main() {
   RUN(test_auto_ticks_produces_nice_round_values);
   RUN(test_auto_ticks_handles_negatives_and_snaps_zero);
   RUN(test_auto_ticks_rejects_degenerate_ranges);
   RUN(test_with_minor_ticks);
   RUN(test_default_format);
+  RUN(test_labels_ignore_the_c_locale);
   RUN(test_linear_scale);
   RUN(test_log_scale_maps_decades_linearly);
   RUN(test_log_scale_ticks);

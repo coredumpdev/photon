@@ -25,14 +25,17 @@ const std::vector<std::string>& transform_uniforms();
  * Grid lines, ticks and labels are laid out in pixels measured from the frame
  * target's top-left, the way every 2D toolkit measures them — and the way the
  * web core's Canvas2D overlay does, so the two layouts can be compared number
- * for number. This folds the y flip into the projection, which is also where
- * `ph_frame_target.flip_y` gets handled for everything but the layers.
+ * for number.
+ *
+ * The target is always an ordinary bottom-left-origin GL framebuffer here.
+ * `ph_frame_target.flip_y` is not this function's problem: it is handled once,
+ * for the whole frame, in Plot::render — see the comment there.
  */
 struct PixelTransform {
   float sx = 0.0f, sy = 0.0f, ox = 0.0f, oy = 0.0f;
 
   /// `width`/`height` are the target rectangle in device pixels.
-  static PixelTransform of(int width, int height, bool flip_y);
+  static PixelTransform of(int width, int height);
 };
 
 /// Per-axis view state handed to a layer each frame. lo/hi are raw data space.

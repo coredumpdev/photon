@@ -1,10 +1,30 @@
 #include "axes/ticks.hpp"
 
+#include <charconv>
 #include <cmath>
-#include <cstdio>
+#include <system_error>
 
 namespace photon {
 namespace {
+
+/**
+ * printf-style formatting that the C locale cannot reach.
+ *
+ * This is not a stylistic preference. `snprintf("%g")` writes whatever decimal
+ * separator LC_NUMERIC names, and a Qt application calls `setlocale(LC_ALL, "")`
+ * before main() gets going — so on a Turkish or German desktop the very same
+ * build that prints `0.5` under GLFW prints `0,5` under Qt. The web core prints
+ * `0.5` everywhere, because JavaScript's number formatting has no locale to
+ * consult. `std::to_chars` is specified to behave as printf does *in the C
+ * locale*, which is the only way to get that guarantee back.
+ */
+std::string format_c(double value, std::chars_format format, int precision) {
+  char buffer[64];
+  const std::to_chars_result result =
+      std::to_chars(buffer, buffer + sizeof(buffer), value, format, precision);
+  if (result.ec != std::errc{}) return {};
+  return std::string(buffer, result.ptr);
+}
 
 /**
  * `%.1e` with the exponent normalized to JavaScript's shape.
@@ -15,9 +35,7 @@ namespace {
  * would be a visible divergence.
  */
 std::string exponential_1(double value) {
-  char buffer[64];
-  std::snprintf(buffer, sizeof(buffer), "%.1e", value);
-  std::string out(buffer);
+  std::string out = format_c(value, std::chars_format::scientific, 1);
 
   const size_t e = out.find('e');
   if (e == std::string::npos) return out;
@@ -94,9 +112,7 @@ std::string default_format(double value) {
   // digits, trailing zeros trimmed. `%.6g` is the same thing — and within the
   // range left after the guard above it never flips to scientific notation,
   // because %g only does so below 1e-4 or at/above 1e6.
-  char buffer[64];
-  std::snprintf(buffer, sizeof(buffer), "%.6g", value);
-  return std::string(buffer);
+  return format_c(value, std::chars_format::general, 6);
 }
 
 }  // namespace photon

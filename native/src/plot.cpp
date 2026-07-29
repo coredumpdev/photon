@@ -625,7 +625,55 @@ void Plot::apply_bounds_clamp() {
 
 // -- frames and events ------------------------------------------------------
 
+/**
+ * The whole of `ph_frame_target.flip_y`, in one place.
+ *
+ * Faz 0 assumed Qt would need this, and split the handling across the plot
+ * region's placement and the overlay's pixel transform. Faz 2 proved the
+ * assumption wrong twice over: Qt's FBOs are ordinary bottom-left-origin GL
+ * framebuffers (what it needs is `QQuickFramebufferObject::setMirrorVertically`,
+ * its own knob), and the split handling was *incorrect* anyway — it flipped the
+ * axes and labels while the layers went on drawing upright, which would have
+ * produced right-way-up axes over upside-down data.
+ *
+ * So the frame is drawn upright into a private target and blitted out flipped.
+ * One GL call, no shader knows about it, and no layer added in Faz 4 can forget
+ * to honour it. The blit overwrites rather than blends, which is right for the
+ * only case that asks for a flip: a framebuffer the host handed us outright.
+ */
 bool Plot::render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, std::string& error) {
+  using namespace photon::gl;
+
+  if (!target.flip_y) return render_upright(api, gfx, target, error);
+  if (target.width <= 0 || target.height <= 0) return true;
+
+  if (!ensure_offscreen(api, target.width, target.height, error)) return false;
+
+  ph_frame_target upright = target;
+  upright.framebuffer = offscreen_fbo_;
+  upright.x = 0;
+  upright.y = 0;
+  upright.flip_y = 0;
+
+  api.BindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
+  api.Disable(GL_SCISSOR_TEST);
+  api.Viewport(0, 0, target.width, target.height);
+  api.ClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+  api.Clear(GL_COLOR_BUFFER_BIT);
+  if (!render_upright(api, gfx, upright, error)) return false;
+
+  // Reading the source bottom-to-top is what performs the flip.
+  api.BindFramebuffer(GL_READ_FRAMEBUFFER, offscreen_fbo_);
+  api.BindFramebuffer(GL_DRAW_FRAMEBUFFER, target.framebuffer);
+  api.BlitFramebuffer(0, target.height, target.width, 0, target.x, target.y,
+                      target.x + target.width, target.y + target.height, GL_COLOR_BUFFER_BIT,
+                      GL_NEAREST);
+  api.BindFramebuffer(GL_FRAMEBUFFER, target.framebuffer);
+  return true;
+}
+
+bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target,
+                          std::string& error) {
   using namespace photon::gl;
 
   const float dpr = target.dpr > 0.0f ? target.dpr : 1.0f;
@@ -663,7 +711,7 @@ bool Plot::render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, s
   const render::AxisStyle style_y = render::resolve_axis_style(primary.axis.config, theme_);
 
   const render::Rect rect{r.left, r.top, r.width, r.height};
-  const PixelTransform pixels = PixelTransform::of(vw, vh, target.flip_y != 0);
+  const PixelTransform pixels = PixelTransform::of(vw, vh);
   render::Painter painter(shapes_, labels_, dpr);
 
   // 1. Behind the data: the two fills and the grid.
@@ -683,10 +731,8 @@ bool Plot::render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, s
   const int rx = vx + static_cast<int>(std::lround(r.left * dpr));
   const int rw = static_cast<int>(std::lround(r.width * dpr));
   const int rh = static_cast<int>(std::lround(r.height * dpr));
-  // flip_y hosts (Qt's FBOs) measure from the top, GL from the bottom.
-  const int ry = target.flip_y
-                     ? vy + static_cast<int>(std::lround(r.top * dpr))
-                     : vy + vh - static_cast<int>(std::lround((r.top + r.height) * dpr));
+  // The layout measures from the top, GL's viewport from the bottom.
+  const int ry = vy + vh - static_cast<int>(std::lround((r.top + r.height) * dpr));
   bool ok = true;
   if (rw > 0 && rh > 0) {
     // Layers draw in normalized device coords over the plot region only; the
@@ -756,11 +802,9 @@ bool Plot::render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, s
   return true;
 }
 
-bool Plot::render_pixels(gl::Api& api, ph_gfx_api gfx, int32_t width, int32_t height, float dpr,
-                         uint8_t* out_rgba, int32_t stride_bytes, std::string& error) {
+bool Plot::ensure_offscreen(gl::Api& api, int32_t width, int32_t height, std::string& error) {
   using namespace photon::gl;
 
-  const float scale = dpr > 0.0f ? dpr : 1.0f;
   if (offscreen_fbo_ == 0) {
     api.GenFramebuffers(1, &offscreen_fbo_);
     api.GenTextures(1, &offscreen_texture_);
@@ -769,29 +813,46 @@ bool Plot::render_pixels(gl::Api& api, ph_gfx_api gfx, int32_t width, int32_t he
       return false;
     }
   }
+  if (width == offscreen_width_ && height == offscreen_height_) return true;
 
-  if (width != offscreen_width_ || height != offscreen_height_) {
-    api.BindTexture(GL_TEXTURE_2D, offscreen_texture_);
-    api.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA8), width, height, 0, GL_RGBA,
-                   GL_UNSIGNED_BYTE, nullptr);
-    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_NEAREST));
-    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_NEAREST));
-    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
-    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(GL_CLAMP_TO_EDGE));
-    api.BindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
-    api.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                             offscreen_texture_, 0);
-    // No depth or stencil: the 2D path disables the depth test, and a renderbuffer
-    // nobody reads is a few megabytes of nothing at 4K.
-    if (api.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-      api.BindFramebuffer(GL_FRAMEBUFFER, 0);
-      offscreen_width_ = offscreen_height_ = 0;
-      error = "the offscreen framebuffer is incomplete — RGBA8 render targets may be unsupported";
-      return false;
-    }
-    offscreen_width_ = width;
-    offscreen_height_ = height;
+  api.BindTexture(GL_TEXTURE_2D, offscreen_texture_);
+  api.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA8), width, height, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, nullptr);
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_NEAREST));
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_NEAREST));
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+  api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+  api.BindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
+  api.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, offscreen_texture_,
+                           0);
+  // No depth or stencil: the 2D path disables the depth test, and a renderbuffer
+  // nobody reads is a few megabytes of nothing at 4K.
+  if (api.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    api.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    offscreen_width_ = offscreen_height_ = 0;
+    error = "the offscreen framebuffer is incomplete — RGBA8 render targets may be unsupported";
+    return false;
   }
+  offscreen_width_ = width;
+  offscreen_height_ = height;
+  return true;
+}
+
+void Plot::release_offscreen(gl::Api& api) {
+  if (offscreen_fbo_ == 0) return;
+  api.DeleteFramebuffers(1, &offscreen_fbo_);
+  api.DeleteTextures(1, &offscreen_texture_);
+  offscreen_fbo_ = 0;
+  offscreen_texture_ = 0;
+  offscreen_width_ = offscreen_height_ = 0;
+}
+
+bool Plot::render_pixels(gl::Api& api, ph_gfx_api gfx, int32_t width, int32_t height, float dpr,
+                         uint8_t* out_rgba, int32_t stride_bytes, std::string& error) {
+  using namespace photon::gl;
+
+  const float scale = dpr > 0.0f ? dpr : 1.0f;
+  if (!ensure_offscreen(api, width, height, error)) return false;
 
   // The layout runs at the logical size the caller implied, then is restored:
   // asking for an image must not resize the plot the host is interacting with.
@@ -841,13 +902,7 @@ void Plot::release_gl(gl::Api& api) {
   for (auto& layer : layers_) layer->release_gl(api);
   shapes_.release_gl(api);
   labels_.release_gl(api);
-  if (offscreen_fbo_ != 0) {
-    api.DeleteFramebuffers(1, &offscreen_fbo_);
-    api.DeleteTextures(1, &offscreen_texture_);
-    offscreen_fbo_ = 0;
-    offscreen_texture_ = 0;
-    offscreen_width_ = offscreen_height_ = 0;
-  }
+  release_offscreen(api);
 }
 
 void Plot::request_render() {

@@ -179,6 +179,54 @@ int main(void) {
   CHECK(x_labels > 50);
   CHECK(y_labels > 50);
 
+  /* ---- flip_y: the same frame, upside down ---- */
+
+  /* A host with a top-left-origin target sets this. Faz 0 handled it by moving
+   * the plot region and leaving the layers alone, which would have drawn
+   * right-way-up axes over upside-down data; it is now one flipped blit, so the
+   * only thing worth asserting is that the result is an exact mirror. */
+  typedef void(PH_CALL * clear_color_fn)(float, float, float, float);
+  typedef void(PH_CALL * clear_fn)(unsigned);
+  clear_color_fn set_clear_color = (clear_color_fn)eglGetProcAddress("glClearColor");
+  clear_fn clear = (clear_fn)eglGetProcAddress("glClear");
+  if (!set_clear_color || !clear) return skip("glClear unavailable");
+
+  unsigned char* flipped = (unsigned char*)malloc((size_t)WIDTH * HEIGHT * 4);
+  unsigned char* upright = (unsigned char*)malloc((size_t)WIDTH * HEIGHT * 4);
+  if (!flipped || !upright) return 1;
+
+  set_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
+  clear(0x00004000u /* GL_COLOR_BUFFER_BIT */);
+  CHECK_EQ(ph_plot_render(plot, &target), PH_OK);
+  read_pixels(0, 0, WIDTH, HEIGHT, 0x1908, 0x1401, upright);
+
+  target.flip_y = 1;
+  clear(0x00004000u);
+  CHECK_EQ(ph_plot_render(plot, &target), PH_OK);
+  read_pixels(0, 0, WIDTH, HEIGHT, 0x1908, 0x1401, flipped);
+  target.flip_y = 0;
+
+  /* Compared with a tolerance of two levels rather than byte-for-byte. The two
+   * frames are blended into different buffers — one the window's own, one our
+   * RGBA8 texture — and drivers are entitled to round the last bit of an
+   * anti-aliased edge differently between them. A broken flip would not miss by
+   * one level on a few edge pixels; it would miss by everything, everywhere. */
+  long off = 0;
+  int worst = 0;
+  for (int y = 0; y < HEIGHT; y++) {
+    const unsigned char* a = upright + (size_t)y * WIDTH * 4;
+    const unsigned char* b = flipped + (size_t)(HEIGHT - 1 - y) * WIDTH * 4;
+    for (int i = 0; i < WIDTH * 4; i++) {
+      const int delta = a[i] > b[i] ? a[i] - b[i] : b[i] - a[i];
+      if (delta > worst) worst = delta;
+      if (delta > 2) off++;
+    }
+  }
+  free(flipped);
+  free(upright);
+  printf("  flip_y: %ld samples off by more than two, worst delta %d\n", off, worst);
+  CHECK_EQ(off, 0);
+
   /* ---- the offscreen path, which is all JavaFX and WPF can use ---- */
 
   const int small_w = 320, small_h = 200;

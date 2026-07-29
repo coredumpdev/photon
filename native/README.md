@@ -3,14 +3,15 @@
 The C++ port of `@photonviz/core`, exposed through one C ABI so a single engine
 can drive GLFW, Qt/QML, C# and Java hosts.
 
-**Faz 0 and Faz 1 are done.** The ABI, the host contract and the interaction
-model are complete and tested; the OpenGL 3.3 backend draws line and scatter
-series with a full chart around them — grid, axes, tick labels, axis titles and
-a plot title, all rendered from an embedded SDF font. `ph_plot_render_pixels`
-covers hosts with no GL interop, and a GLFW host with a four-panel gallery is
-the reference. Next is the Qt/QML host. See [DESIGN.md](DESIGN.md) for the
-architecture and the reasoning behind it, and [TODO.md](TODO.md) for what is
-still outstanding.
+**Faz 0, Faz 1 and Faz 2 are done.** The ABI, the host contract and the
+interaction model are complete and tested; the OpenGL 3.3 backend draws line and
+scatter series with a full chart around them — grid, axes, tick labels, axis
+titles and a plot title, all rendered from an embedded SDF font.
+`ph_plot_render_pixels` covers hosts with no GL interop. Three hosts drive the
+same engine: GLFW, Qt Quick and Qt Widgets, all showing the same four charts
+from `hosts/common/panels.c`. Next are the C# and Java bindings. See
+[DESIGN.md](DESIGN.md) for the architecture and the reasoning behind it, and
+[TODO.md](TODO.md) for what is still outstanding.
 
 ## Build
 
@@ -29,16 +30,22 @@ Useful options: `-DPHOTON_BUILD_SHARED=OFF` for a static library,
 `-DPHOTON_BUILD_TESTS=OFF`, `-DPHOTON_WARNINGS_AS_ERRORS=ON` (already on in the
 presets).
 
-### The gallery
+### The galleries
+
+The same four charts, under three hosts. Both host options are off by default —
+GLFW because it is fetched over the network, Qt because it is a large thing to
+require of anyone building the library.
 
 ```bash
-cmake -S . -B build/glfw -DPHOTON_BUILD_GLFW_HOST=ON
-cmake --build build/glfw
-./build/glfw/bin/photon_gallery
+cmake -S . -B build/hosts -DPHOTON_BUILD_GLFW_HOST=ON -DPHOTON_BUILD_QT_HOST=ON
+cmake --build build/hosts
+
+./build/hosts/bin/photon_gallery            # GLFW
+./build/hosts/bin/photon_gallery_qml        # Qt Quick
+./build/hosts/bin/photon_gallery_widgets    # Qt Widgets
 ```
 
-Four charts in one window and one GL context. `PHOTON_BUILD_GLFW_HOST` is off by
-default because it fetches GLFW — everything else builds with no network.
+The GLFW gallery's keys:
 
 ```
 drag    pan            wheel   zoom about the cursor
@@ -46,6 +53,12 @@ B       box zoom       P       back to pan
 R       reset view     T       light / dark
 space   pause the streaming panel
 ```
+
+The Qt galleries put the same actions in a toolbar, and both take
+`--grab <file.png>` to render one frame to disk — which is how the native output
+gets compared against the web gallery as an image rather than by eye. See
+[hosts/qt/README.md](hosts/qt/README.md) for what building the second host
+turned up.
 
 ## Layout
 
@@ -78,7 +91,10 @@ tests/
   overlay_test.cpp        margins, axis placement, tick resolution, themes
   text_test.cpp           font metrics, kerning and UTF-8 — widths pinned
   gl_smoke_test.c         a real headless GL context; the only shader compile
-hosts/glfw/               the reference host and the gallery
+hosts/
+  common/panels.c         the demo charts, shared by every host
+  glfw/                   window, input, a grid of plots in one context
+  qt/                     a QQuickFramebufferObject item and a QOpenGLWidget
 third_party/
   stb_truetype.h          public domain, v1.26
   fonts/                  Inter subset (OFL-1.1) + its license

@@ -118,6 +118,8 @@ class Plot {
    */
   bool render_pixels(gl::Api& api, ph_gfx_api gfx, int32_t width, int32_t height, float dpr,
                      uint8_t* out_rgba, int32_t stride_bytes, std::string& error);
+  /// Release the offscreen target without touching anything else.
+  void release_offscreen(gl::Api& api);
   /// Release every layer's GL objects. Requires the context to be current.
   void release_gl(gl::Api& api);
   bool needs_redraw() const { return needs_redraw_; }
@@ -144,6 +146,13 @@ class Plot {
   Axis* find_axis(const char* id);
   /// Equalize the data-units-per-pixel of both axes. Port of applyAspect().
   void apply_aspect(const PlotRegion& r);
+
+  /// Draw one frame into an ordinary bottom-left-origin target.
+  bool render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target,
+                      std::string& error);
+  /// Size (creating if needed) the private colour target render_pixels and the
+  /// flipped path both draw into.
+  bool ensure_offscreen(gl::Api& api, int32_t width, int32_t height, std::string& error);
 
   YAxis& primary_y() { return y_axes_.front(); }
   const YAxis& primary_y() const { return y_axes_.front(); }

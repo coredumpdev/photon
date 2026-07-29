@@ -7,41 +7,30 @@ file to port **to** in `native/src/`, so a task can be picked up cold.
 Line counts are the TypeScript source, as a rough size signal — the C++ tends to
 land within about 20% of it.
 
-**State right now:** Faz 0 and Faz 1 are done. The ABI (52 entry points), the
-interaction model, the five scales, ticks, the GL 3.3 backend, line + scatter,
-the SDF text renderer, the grid/axes/labels/title overlay, theme and axis
-styling, offscreen readback and the GLFW host all work and are tested — 6/6
-tests on GCC and Clang across debug/release/asan. **Only Linux has ever been
-compiled.**
+**State right now:** Faz 0, Faz 1 and Faz 2 are done. The ABI (52 entry points),
+the interaction model, the five scales, ticks, the GL 3.3 backend, line +
+scatter, the SDF text renderer, the grid/axes/labels/title overlay, theme and
+axis styling, offscreen readback, and three hosts — GLFW, Qt Quick and Qt
+Widgets — all work and are tested: 6/6 tests on GCC and Clang across
+debug/release/asan. **Only Linux has ever been compiled.**
 
 ---
 
-## Faz 2 — Qt / QML host
+## The acceptance test nobody has run
 
-The second host is what proves the first host's abstraction was real. **Do not
-start Faz 3 before this lands.**
+- [ ] **Put a native gallery and `examples/vanilla` side by side in a browser and
+      diff them.** This is the acceptance test for the whole port and it is still
+      outstanding. Everything is in place for it: `photon_gallery_qml --grab
+      shot.png` and `photon_gallery_widgets --grab shot.png` write a frame to
+      disk, and the demo charts in `hosts/common/panels.c` are deterministic by
+      construction (a fixed LCG, no `rand()`), so the same picture comes out on
+      every machine and in every host. What is missing is the same four panels
+      on the web side and a comparison script.
 
-- [ ] `hosts/qt/` — `QQuickFramebufferObject::Renderer` subclass; hand its FBO
-      to `ph_frame_target.framebuffer`.
-- [ ] Pin the backend: `QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL)`.
-      Qt 6 defaults to RHI and may pick Vulkan/Metal/D3D, in which case there is
-      no GL context to give us.
-- [ ] **`flip_y` is written but never exercised.** Qt's FBOs are top-left origin.
-      Both the plot region's placement and the overlay's pixel transform honour
-      it (`gl::PixelTransform::of`), but nothing has ever run with it set. This
-      is the first thing to check when the first Qt frame comes out upside down —
-      and note that the *layers* do not use the pixel transform, so it is
-      possible for the axes to be right way up while the data is not.
-- [ ] Create the plot on the **render thread** — `Renderer` lives there, and
-      `ph_plot_render` returns `PH_E_WRONG_THREAD` from anywhere else.
-- [ ] Map `QMouseEvent`/`QWheelEvent` to the pointer/wheel calls. Qt's
-      `angleDelta().y()` is in eighths of a degree and positive *up*, so it needs
-      the same inversion the GLFW host does — see the comment on `on_scroll` in
-      `hosts/glfw/photon_glfw.c`, which is the one that got this right.
-- [ ] A `QOpenGLWidget` variant for Qt Widgets — simpler, and worth having.
-- [ ] Compare a Qt window and the web gallery side by side. That comparison is
-      the acceptance test for the port and it has still never been done against
-      a browser.
+Faz 2 found two engine bugs this way — a locale-dependent decimal separator and
+a half-implemented `flip_y` — and both were invisible to every test that existed
+at the time. There is no reason to think the browser comparison would find
+nothing.
 
 ---
 
@@ -149,10 +138,12 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       the pixels; a PNG encoder is a separate (small) decision.
 - [ ] **`grid.ts`** (229 lines) — the multi-plot grid layout helper. Note the
       GLFW host already does a crude version of this; the two should not diverge.
-- [ ] **Toolbar** (`ui/toolbar.ts`) — probably *not* core's job natively; a Qt
-      or Avalonia host builds a better one with its own widgets. Decide in Faz 2,
-      when there is a real widget toolkit to compare against, and write the
-      decision down in DESIGN.md.
+- [x] **Toolbar** (`ui/toolbar.ts`) — **decided in Faz 2: not core's job.** Both
+      Qt galleries build one out of ordinary `ToolBar` / `QToolBar` actions over
+      `ph_plot_set_mode` and `ph_plot_reset_view`, and the result is native,
+      themed, keyboard-navigable and accessible in a way a GL-drawn strip of
+      buttons could not be. The web core draws its own because a browser gives it
+      nothing better. Recorded in DESIGN.md.
 - [ ] **Accessibility** — `setAriaLabel` has no native meaning. Note it as
       deliberately dropped.
 
@@ -199,6 +190,15 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       through unchanged for ES; nothing has ever run it. ANGLE/WinUI needs it,
       and the text shader's `textureSize` and `fwidth` are both core in ES 3.0,
       so it *should* work — but "should" is why this line is here.
+- [ ] **A Qt host that loses its scene graph loses its view.** When Qt drops and
+      recreates the render thread's context, `PhotonPlotRenderer` goes with it
+      and the plot is rebuilt from scratch — panned and zoomed state included.
+      Saving and restoring the domains around that belongs in the host, but it
+      is the kind of thing every host will have to be told.
+- [ ] **QML cannot build its own series.** `PhotonPlot.panel` picks from the
+      shared demo charts and there is no way for an application to add its own
+      data from QML. That needs the same `synchronize()` treatment the input
+      queue gets, and is a real design question rather than a missing function.
 - [ ] The program cache and the glyph atlas are both keyed on there being **one
       GL context per process**. The cache is keyed on `const Api*` and there is
       exactly one `Api`; the atlas texture is a single process-global. If a
@@ -219,8 +219,14 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       deliberate no-allocation choice for a reference host, not a limit anyone
       should inherit; a real host should say so in its own code.
 - [ ] **Nothing has been compared against a browser yet.** `tests/gl_smoke_test.c`
-      proves pixels land in the right *regions*; it does not prove a native chart
-      and a web chart look the same. Faz 2's first job.
+      proves pixels land in the right *regions* and that the flipped frame is a
+      mirror of the upright one; it does not prove a native chart and a web chart
+      look the same. See the top of this file.
+- [ ] **No host is tested by CI, or at all.** The galleries are run by hand.
+      A headless Qt run under `QT_QPA_PLATFORM=offscreen` produced an empty
+      window here — the offscreen platform gives no usable GL context — so
+      testing a host in CI needs Xvfb or a software GL stack, and neither is
+      set up.
 
 ---
 

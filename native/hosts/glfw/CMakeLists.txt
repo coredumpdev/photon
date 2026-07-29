@@ -25,7 +25,7 @@ target_link_libraries(photon_glfw PUBLIC photon::photon glfw)
 target_include_directories(photon_glfw PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(photon_gallery gallery.c)
-target_link_libraries(photon_gallery PRIVATE photon_glfw)
+target_link_libraries(photon_gallery PRIVATE photon_glfw photon_panels)
 
 if(MSVC)
   target_compile_options(photon_glfw PRIVATE /W4 /utf-8)
@@ -33,8 +33,7 @@ if(MSVC)
 else()
   target_compile_options(photon_glfw PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(photon_gallery PRIVATE -Wall -Wextra -Wpedantic)
-  # The gallery's maths is all libm.
-  target_link_libraries(photon_gallery PRIVATE m)
+  target_link_libraries(photon_glfw PRIVATE m)
 endif()
 
 # On Windows the DLL has to sit beside the .exe.

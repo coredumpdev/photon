@@ -9,8 +9,8 @@ expensive to change later. It says *why*, not just what — the what is in
 
 ## Status
 
-Faz 0 and Faz 1 are complete: a chart drawn natively is a chart, not a series
-floating in a void. Faz 2 is the Qt/QML host.
+Faz 0, Faz 1 and Faz 2 are complete: a chart drawn natively is a chart, and it
+draws under three hosts from one engine. Faz 3 is the C# and Java bindings.
 
 | Area | State |
 | --- | --- |
@@ -29,7 +29,9 @@ floating in a void. Faz 2 is the Qt/QML host.
 | Rendering | draws to the host's framebuffer, scissored to the plot region — **verified headless on a real GL 3.3 context** |
 | Offscreen readback | `ph_plot_render_pixels`, top-row-first RGBA8 |
 | GLFW host | window, input, dpr, and a four-panel gallery |
-| Qt/QML host | not started (Faz 2) |
+| Qt Quick host | `QQuickFramebufferObject` item, render-thread safe, QML module |
+| Qt Widgets host | `QOpenGLWidget`, same charts, GUI thread |
+| C# / Java bindings | not started (Faz 3) |
 
 `tests/gl_smoke_test.c` is the one that matters most here: it creates a
 surfaceless EGL context, renders a chart through the public ABI, and reads the
@@ -77,8 +79,8 @@ The host makes its GL context current, fills this in, and calls
 | Host | framebuffer | Notes |
 | --- | --- | --- |
 | GLFW | `0` | reference host; `flip_y = 0` |
-| Qt Quick / QML | `QQuickFramebufferObject::Renderer`'s FBO | `flip_y = 1`; pin the backend with `QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL)` |
-| Qt Widgets | `QOpenGLWidget::defaultFramebufferObject()` | simplest Qt path |
+| Qt Quick / QML | `QQuickFramebufferObject::Renderer`'s FBO | `flip_y = 0` and `setMirrorVertically(true)` — see below; pin the backend with `QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL)` |
+| Qt Widgets | `QOpenGLWidget::defaultFramebufferObject()` | simplest Qt path; `flip_y = 0` |
 | Avalonia | `OpenGlControlBase`'s FBO | the clean .NET path |
 | WPF | — | no GL interop; use `ph_plot_render_pixels` |
 | LWJGL | `0` | GLFW underneath anyway |
@@ -96,6 +98,27 @@ blits into its own 2D canvas. Natively that constraint does not exist: one
 context, many viewports, no copy. So the mechanism survives but its role
 inverts, from a hard requirement to a compatibility fallback. **Do not port the
 shared-context design itself.** It solves a problem native hosts do not have.
+
+### `flip_y`, and what Faz 2 found
+
+Faz 0 added `flip_y` on the assumption that "Qt's FBOs are top-left origin".
+They are not. A `QQuickFramebufferObject`'s FBO is an ordinary
+bottom-left-origin GL framebuffer; what Qt does differently is not *mirror* the
+texture when it composites the item, and the fix is Qt's own
+`setMirrorVertically(true)`, which folds the flip into a composite it was going
+to do anyway.
+
+Worse, the flag as first implemented was wrong: it moved the plot region and the
+overlay's pixel transform and left the layers drawing upright, so a host that
+set it would have got right-way-up axes over upside-down data. It is now handled
+once, for the whole frame, as a flipped `glBlitFramebuffer` out of a private
+target — no shader knows about it and no layer added in Faz 4 can forget it. The
+smoke test renders the same chart both ways and checks that one is the mirror of
+the other.
+
+No host known to us needs it. It stays because a host that renders into a
+surface it cannot mirror itself would, and because it now costs one blit rather
+than a trap.
 
 ## ABI rules, and the reasoning
 
@@ -179,6 +202,16 @@ them.
 core is `#version 300 es` → `#version 330 core` plus dropping `precision`
 qualifiers.
 
+**Must not use the C locale**: number formatting. This is the bug the Qt host
+found, and it is worth recording because nothing else would have. Qt calls
+`setlocale(LC_ALL, "")` before `main()`, so every `printf`-family conversion
+starts following the desktop's locale — and the same build that printed a tick
+as `0.5` under GLFW printed `0,5` under Qt on a Turkish or German machine, while
+the web core printed `0.5` everywhere because JavaScript has no locale to
+consult. Tick formatting goes through `std::to_chars`, which is specified to
+behave as printf does in the C locale, and `tests/scale_test.cpp` checks it
+under a comma-decimal locale.
+
 **Reproduced numerically, rewritten structurally**: `plot.ts`. Layout,
 autoscale, and the pan/zoom/box math are reproduced exactly — `tests/interaction_test.cpp`
 checks them against values hand-derived from `plot.ts`, not from running this
@@ -240,6 +273,23 @@ quads. Positions are computed in *logical* pixels, exactly as the web computes
 CSS pixels, and converted to device pixels at the last moment — which is also
 where `ph_frame_target.flip_y` is handled for everything except the layers.
 
+## What the hosts own
+
+Faz 2 settled a question Faz 0 left open: how much chrome belongs in the engine.
+
+**The toolbar does not.** The web core draws its own (`ui/toolbar.ts`) because a
+browser gives it nothing better. Both Qt galleries build one out of ordinary
+`ToolBar` / `QToolBar` actions over `ph_plot_set_mode` and `ph_plot_reset_view`,
+and the result is native, themed, keyboard-navigable and accessible in a way a
+GL-drawn strip of buttons could never be. The same goes for status readouts,
+menus and dialogs. The engine's job ends at the plot's own furniture — grid,
+axes, labels, legend, tooltip — the parts that have to line up with the data.
+
+**Clearing does not either.** The Quick item clears to nothing and composites
+onto a themed QML window; the widget clears to the chart's page colour because a
+`QOpenGLWidget` composites onto whatever the palette put behind it. Neither is
+more correct. The engine draws its region background and leaves the rest alone.
+
 ## Binding mapping
 
 The ABI was shaped so that each binding is mechanical:
@@ -278,8 +328,11 @@ in each binding, or below it as `ph_plot_add_<chart>` — that call is Faz 4's.
 - **Faz 1 — done.** GL 3.3 backend, line + scatter, the SDF text renderer,
   grid/axes/labels/title, theme and axis styling, offscreen readback, and the
   GLFW host with a four-panel gallery (`-DPHOTON_BUILD_GLFW_HOST=ON`).
-- **Faz 2 — next.** Qt/QML host. *The second host is what proves the first
-  host's abstraction was real.* Do not start Faz 3 before this lands.
+- **Faz 2 — done.** Qt Quick (`QQuickFramebufferObject`) and Qt Widgets
+  (`QOpenGLWidget`) hosts, both driving the same demo charts as GLFW from
+  `hosts/common/panels.c`. *The second host is what proves the first host's
+  abstraction was real* — it proved it was not, twice: see the locale note above
+  and the `flip_y` note in the host contract.
 - **Faz 3.** C# and Java bindings, generated from the header rather than
   hand-written.
 - **Faz 4.** The remaining layers and the 3D family.

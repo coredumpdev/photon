@@ -18,9 +18,10 @@ option(PHOTON_BUILD_SHARED "Build libphoton as a shared library" ON)
 option(PHOTON_BUILD_TESTS  "Build the ABI conformance and interaction tests" ${PHOTON_IS_TOP_LEVEL})
 option(PHOTON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
-# Off by default because it fetches GLFW: the library and its tests must build
-# on a machine with no network.
+# Both hosts are off by default: GLFW because it is fetched over the network,
+# Qt because it is a large dependency to require of anyone building the library.
 option(PHOTON_BUILD_GLFW_HOST "Build the GLFW host and the gallery (fetches GLFW)" OFF)
+option(PHOTON_BUILD_QT_HOST   "Build the Qt Quick and Qt Widgets hosts (needs Qt 6.5+)" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -209,8 +210,27 @@ endif()
 # Hosts (Faz 1)
 # ---------------------------------------------------------------------------
 
+if(PHOTON_BUILD_GLFW_HOST OR PHOTON_BUILD_QT_HOST)
+  # The demo charts, shared by every host so that a difference on screen can
+  # only be the host's doing.
+  add_library(photon_panels STATIC hosts/common/panels.c)
+  target_link_libraries(photon_panels PUBLIC photon::photon)
+  target_include_directories(photon_panels PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/hosts/common)
+  set_property(TARGET photon_panels PROPERTY POSITION_INDEPENDENT_CODE ON)
+  if(MSVC)
+    target_compile_options(photon_panels PRIVATE /W4 /utf-8)
+  else()
+    target_compile_options(photon_panels PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(photon_panels PRIVATE m)
+  endif()
+endif()
+
 if(PHOTON_BUILD_GLFW_HOST)
   add_subdirectory(hosts/glfw)
+endif()
+
+if(PHOTON_BUILD_QT_HOST)
+  add_subdirectory(hosts/qt)
 endif()
 
 # ---------------------------------------------------------------------------

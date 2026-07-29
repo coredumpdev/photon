@@ -182,7 +182,8 @@ enum : GLenum {
   X(DeleteRenderbuffers,      void,   (GLsizei n, const GLuint* renderbuffers))                      \
   X(BindRenderbuffer,         void,   (GLenum target, GLuint renderbuffer))                          \
   X(RenderbufferStorage,      void,   (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
-  X(ReadPixels,               void,   (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels))
+  X(ReadPixels,               void,   (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels)) \
+  X(BlitFramebuffer,          void,   (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter))
 // clang-format on
 
 /// The resolved entry points. One instance lives in the Registry.
