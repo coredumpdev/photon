@@ -708,6 +708,60 @@ typedef struct ph_box_desc {
 } ph_box_desc;
 
 /**
+ * Mirrors core `CandlestickOptions`.
+ *
+ * One body rectangle and one low-to-high wick per period, coloured by
+ * direction. The x positions are data-space: epoch milliseconds on a time
+ * axis, or integer indices on the ordinal-time axis that collapses the gaps
+ * between sessions.
+ */
+typedef struct ph_candlestick_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  open;
+  const double*  high;
+  const double*  low;
+  const double*  close;
+  int32_t        count;
+  /** Body width in data units. 0 = 70% of the median spacing. */
+  double         width;
+  /** close >= open. PH_COLOR_AUTO is the core's teal. */
+  ph_color       up_color;
+  /** close < open. PH_COLOR_AUTO is the core's red. */
+  ph_color       down_color;
+  /** Wick thickness in logical px. 0 = 1.5. */
+  float          wick_width;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_candlestick_desc;
+
+/**
+ * Mirrors core `OhlcOptions` — the western cousin of the candlestick.
+ *
+ * Each period is a vertical low-to-high line with a tick left at the open and
+ * right at the close. Same five arrays, three segments instead of a box.
+ */
+typedef struct ph_ohlc_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  open;
+  const double*  high;
+  const double*  low;
+  const double*  close;
+  int32_t        count;
+  /** Total tick span in data units; each tick is half. 0 = 70% of the spacing. */
+  double         width;
+  ph_color       up_color;
+  ph_color       down_color;
+  /** Line thickness in logical px. 0 = 1.5. */
+  float          line_width;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_ohlc_desc;
+
+/**
  * Mirrors core `HeatmapOptions`.
  *
  * A regular grid coloured through a colormap and drawn as one textured quad —
@@ -922,6 +976,8 @@ PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
 PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
+PH_API void PH_CALL ph_candlestick_desc_init(ph_candlestick_desc* out);
+PH_API void PH_CALL ph_ohlc_desc_init(ph_ohlc_desc* out);
 PH_API void PH_CALL ph_heatmap_desc_init(ph_heatmap_desc* out);
 PH_API void PH_CALL ph_image_desc_init(ph_image_desc* out);
 
@@ -1009,6 +1065,8 @@ PH_API ph_result PH_CALL ph_plot_add_pie(ph_plot plot, const ph_pie_desc* desc, 
 PH_API ph_result PH_CALL ph_plot_add_stem(ph_plot plot, const ph_stem_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_errorbar(ph_plot plot, const ph_errorbar_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_box(ph_plot plot, const ph_box_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_candlestick(ph_plot plot, const ph_candlestick_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_ohlc(ph_plot plot, const ph_ohlc_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_heatmap(ph_plot plot, const ph_heatmap_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_image(ph_plot plot, const ph_image_desc* desc, ph_layer* out);
 

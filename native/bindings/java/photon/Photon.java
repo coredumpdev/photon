@@ -812,6 +812,102 @@ public final class Photon {
         }
     }
 
+    /** ph_candlestick_desc — 104 bytes, alignment 8. */
+    public static final class ph_candlestick_desc {
+        private ph_candlestick_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("open"),
+            ValueLayout.ADDRESS.withName("high"),
+            ValueLayout.ADDRESS.withName("low"),
+            ValueLayout.ADDRESS.withName("close"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("width"),
+            ValueLayout.JAVA_INT.withName("up_color"),
+            ValueLayout.JAVA_INT.withName("down_color"),
+            ValueLayout.JAVA_FLOAT.withName("wick_width"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_candlestick_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_OPEN = 16L;
+        public static final long OFFSET_HIGH = 24L;
+        public static final long OFFSET_LOW = 32L;
+        public static final long OFFSET_CLOSE = 40L;
+        public static final long OFFSET_COUNT = 48L;
+        public static final long OFFSET_WIDTH = 56L;
+        public static final long OFFSET_UP_COLOR = 64L;
+        public static final long OFFSET_DOWN_COLOR = 68L;
+        public static final long OFFSET_WICK_WIDTH = 72L;
+        public static final long OFFSET_NAME = 80L;
+        public static final long OFFSET_Y_AXIS = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_ohlc_desc — 104 bytes, alignment 8. */
+    public static final class ph_ohlc_desc {
+        private ph_ohlc_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("open"),
+            ValueLayout.ADDRESS.withName("high"),
+            ValueLayout.ADDRESS.withName("low"),
+            ValueLayout.ADDRESS.withName("close"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("width"),
+            ValueLayout.JAVA_INT.withName("up_color"),
+            ValueLayout.JAVA_INT.withName("down_color"),
+            ValueLayout.JAVA_FLOAT.withName("line_width"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_ohlc_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_OPEN = 16L;
+        public static final long OFFSET_HIGH = 24L;
+        public static final long OFFSET_LOW = 32L;
+        public static final long OFFSET_CLOSE = 40L;
+        public static final long OFFSET_COUNT = 48L;
+        public static final long OFFSET_WIDTH = 56L;
+        public static final long OFFSET_UP_COLOR = 64L;
+        public static final long OFFSET_DOWN_COLOR = 68L;
+        public static final long OFFSET_LINE_WIDTH = 72L;
+        public static final long OFFSET_NAME = 80L;
+        public static final long OFFSET_Y_AXIS = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_heatmap_desc — 112 bytes, alignment 8. */
     public static final class ph_heatmap_desc {
         private ph_heatmap_desc() {}
@@ -1038,6 +1134,8 @@ public final class Photon {
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_candlestick_desc_init",
+        "ph_ohlc_desc_init",
         "ph_heatmap_desc_init",
         "ph_image_desc_init",
         "ph_plot_create",
@@ -1065,6 +1163,8 @@ public final class Photon {
         "ph_plot_add_stem",
         "ph_plot_add_errorbar",
         "ph_plot_add_box",
+        "ph_plot_add_candlestick",
+        "ph_plot_add_ohlc",
         "ph_plot_add_heatmap",
         "ph_plot_add_image",
         "ph_layer_set_xy",
@@ -1120,6 +1220,8 @@ public final class Photon {
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_CANDLESTICK_DESC_INIT = handle("ph_candlestick_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_OHLC_DESC_INIT = handle("ph_ohlc_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_HEATMAP_DESC_INIT = handle("ph_heatmap_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_IMAGE_DESC_INIT = handle("ph_image_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_CREATE = handle("ph_plot_create", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -1147,6 +1249,8 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_STEM = handle("ph_plot_add_stem", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_ERRORBAR = handle("ph_plot_add_errorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_BOX = handle("ph_plot_add_box", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_CANDLESTICK = handle("ph_plot_add_candlestick", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_OHLC = handle("ph_plot_add_ohlc", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_HEATMAP = handle("ph_plot_add_heatmap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_IMAGE = handle("ph_plot_add_image", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_XY = handle("ph_layer_set_xy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
@@ -1411,6 +1515,22 @@ public final class Photon {
         }
     }
 
+    public static void ph_candlestick_desc_init(MemorySegment out) {
+        try {
+            PH_CANDLESTICK_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_candlestick_desc_init failed", photonFailure);
+        }
+    }
+
+    public static void ph_ohlc_desc_init(MemorySegment out) {
+        try {
+            PH_OHLC_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_ohlc_desc_init failed", photonFailure);
+        }
+    }
+
     public static void ph_heatmap_desc_init(MemorySegment out) {
         try {
             PH_HEATMAP_DESC_INIT.invokeExact(out);
@@ -1624,6 +1744,22 @@ public final class Photon {
             return (int) PH_PLOT_ADD_BOX.invokeExact(plot, desc, out);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_add_box failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_candlestick(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_CANDLESTICK.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_candlestick failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_ohlc(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_OHLC.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_ohlc failed", photonFailure);
         }
     }
 

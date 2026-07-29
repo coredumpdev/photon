@@ -20,6 +20,9 @@
 #define FIELD_ROWS 72
 /* The sprite is drawn by hand below, so its size is deliberately tiny. */
 #define SPRITE 16
+/* Enough sessions for the axis to collapse a few weekends, and few enough that
+ * an OHLC bar's open and close ticks are still distinguishable in one cell. */
+#define SESSIONS 34
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -60,11 +63,19 @@ struct ph_panels {
 
   double field[FIELD_COLS * FIELD_ROWS];
   unsigned char sprite[SPRITE * SPRITE * 4];
+
+  double session_index[SESSIONS];
+  double session_time[SESSIONS];
+  double bar_open[SESSIONS];
+  double bar_high[SESSIONS];
+  double bar_low[SESSIONS];
+  double bar_close[SESSIONS];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatter", "Streaming",
                                               "Revenue", "Funnel",       "Share",   "Impulse",
-                                              "Yield",   "Latency",      "Field",   "Sprite"};
+                                              "Yield",   "Latency",      "Field",   "Sprite",
+                                              "Candles", "Bars"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -234,6 +245,35 @@ ph_panels* ph_panels_create(void) {
       px[2] = (unsigned char)(255.0 * (ring * 0.3 + disc));
       px[3] = (unsigned char)(255.0 * (ring > 0.0 || disc > 0.0 ? 1.0 : 0.0));
     }
+  }
+
+  /* A random walk with an intraday range, dated onto weekdays only — so the
+   * session axis has real gaps to collapse, which is the whole reason that
+   * scale exists. Fixed seed, same reason as everywhere else here. */
+  seed = 24681357u;
+  double price = 100.0;
+  /* 2024-01-01T00:00:00Z, a Monday. */
+  double day = 1704067200000.0;
+  for (int i = 0; i < SESSIONS; i++) {
+    seed = seed * 1664525u + 1013904223u;
+    const double drift = ((double)(seed >> 8) / 16777216.0 - 0.48) * 3.2;
+    seed = seed * 1664525u + 1013904223u;
+    const double reach = (double)(seed >> 8) / 16777216.0 * 2.4 + 0.4;
+
+    const double open = price;
+    const double close = price + drift;
+    p->session_index[i] = i;
+    p->session_time[i] = day;
+    p->bar_open[i] = open;
+    p->bar_close[i] = close;
+    p->bar_high[i] = (open > close ? open : close) + reach;
+    p->bar_low[i] = (open < close ? open : close) - reach;
+    price = close;
+
+    /* Skip the weekend, so consecutive indices are consecutive *sessions*. */
+    day += 86400000.0;
+    const int weekday = (i + 1) % 7;
+    if (weekday == 4) day += 2.0 * 86400000.0;
   }
 
   return p;
@@ -546,6 +586,56 @@ static void build_sprite(ph_panels* p, ph_plot plot) {
   ph_plot_add_image(plot, &image, &layer);
 }
 
+/* The session axis: integer indices, dated back into calendar ticks. */
+static void session_axis(ph_panels* p, ph_plot plot) {
+  ph_axis_desc axis;
+  ph_axis_desc_init(&axis);
+  axis.type = PH_SCALE_ORDINAL_TIME;
+  /* The x values are indices; `times` is what turns them back into dates for
+   * the tick labels. Without it the axis would read 0..59. */
+  axis.times = p->session_time;
+  axis.time_count = SESSIONS;
+  ph_plot_set_scale(plot, "x", &axis);
+}
+
+/* Panel 12 — candlesticks on a session axis. */
+static void build_candles(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Candles");
+  session_axis(p, plot);
+  style_axis(plot, "x", "session", 0);
+  style_axis(plot, "y", "price", 0);
+
+  ph_candlestick_desc candles;
+  ph_candlestick_desc_init(&candles);
+  candles.x = p->session_index;
+  candles.open = p->bar_open;
+  candles.high = p->bar_high;
+  candles.low = p->bar_low;
+  candles.close = p->bar_close;
+  candles.count = SESSIONS;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_candlestick(plot, &candles, &layer);
+}
+
+/* Panel 13 — the same sessions as OHLC bars, so the two are comparable. */
+static void build_bars(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Bars");
+  session_axis(p, plot);
+  style_axis(plot, "x", "session", 0);
+  style_axis(plot, "y", "price", 0);
+
+  ph_ohlc_desc bars;
+  ph_ohlc_desc_init(&bars);
+  bars.x = p->session_index;
+  bars.open = p->bar_open;
+  bars.high = p->bar_high;
+  bars.low = p->bar_low;
+  bars.close = p->bar_close;
+  bars.count = SESSIONS;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_ohlc(plot, &bars, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -561,7 +651,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 8: build_yield(panels, plot); break;
     case 9: build_latency(panels, plot); break;
     case 10: build_field(panels, plot); break;
-    default: build_sprite(panels, plot); break;
+    case 11: build_sprite(panels, plot); break;
+    case 12: build_candles(panels, plot); break;
+    default: build_bars(panels, plot); break;
   }
 }
 

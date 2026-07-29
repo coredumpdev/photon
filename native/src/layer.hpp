@@ -370,6 +370,89 @@ class BoxLayer : public Layer {
 };
 
 /**
+ * The two OHLC chart types, which differ only in what they emit per period.
+ *
+ * Both retain the five input arrays because both stream: a live candle is
+ * rewritten many times before it closes, and rebuilding from the source is what
+ * makes the width and the bounds recompute correctly when it does.
+ */
+class OhlcSeries : public Layer {
+ public:
+  bool bounds(ph_range& x, ph_range& y) const override;
+  void release_gl(gl::Api& api) override;
+
+ protected:
+  /// Copy the arrays and derive the width, refs, bounds and vertex data.
+  void ingest(const double* x, const double* open, const double* high, const double* low,
+              const double* close, int32_t count);
+  /// Fill the per-period vertex arrays. Implemented by each shape.
+  virtual void emit() = 0;
+
+  std::vector<double> x_;
+  std::vector<double> open_;
+  std::vector<double> high_;
+  std::vector<double> low_;
+  std::vector<double> close_;
+  double explicit_width_ = 0.0;
+  double body_width_ = 1.0;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  Rgba up_{};
+  Rgba down_{};
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  ph_range ohlc_x_{0.0, 0.0};
+  ph_range ohlc_y_{0.0, 0.0};
+  bool ohlc_bounds_ = false;
+
+  /// Four floats per instance, and one RGBA per instance beside it.
+  std::vector<float> segments_;
+  std::vector<float> colors_;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint corner_buffer_ = 0;
+  gl::GLuint segment_buffer_ = 0;
+  gl::GLuint color_buffer_ = 0;
+};
+
+/// Body rectangles plus wicks: two programs over one colour buffer.
+class CandlestickLayer : public OhlcSeries {
+ public:
+  explicit CandlestickLayer(const ph_candlestick_desc& desc);
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ protected:
+  void emit() override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  float wick_width_ = 1.5f;
+  /// (x0, y0, x1, y1) per body, in offset data space.
+  std::vector<float> bodies_;
+  gl::GLuint body_vao_ = 0;
+  gl::GLuint rect_corner_buffer_ = 0;
+  gl::GLuint body_buffer_ = 0;
+};
+
+/// Three pixel-thick segments per period: the range, and a tick either side.
+class OhlcLayer : public OhlcSeries {
+ public:
+  explicit OhlcLayer(const ph_ohlc_desc& desc);
+  bool draw(const DrawState& state, std::string& error) override;
+
+ protected:
+  void emit() override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  float line_width_ = 1.5f;
+};
+
+/**
  * A regular grid coloured through a colormap, drawn as one textured quad.
  *
  * The colouring happens once, on the CPU, when the layer is built: the values

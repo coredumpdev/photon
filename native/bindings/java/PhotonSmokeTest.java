@@ -538,6 +538,91 @@ public final class PhotonSmokeTest {
             "ph_plot_add_box");
     }
 
+    /** The two OHLC shapes, which share their arrays, their width and their bounds. */
+    static void ohlc(Arena arena, long plot) {
+        // Four sessions at x = 0, 1, 2, 3. The default width is 70% of the
+        // median spacing, so 0.7 — and the bounds reach half of that either
+        // side of the first and last bar.
+        final double[][] bars = {{0, 10, 12, 9, 11}, {1, 11, 14, 10, 10},
+                                 {2, 10, 11, 6, 7},  {3, 7, 15, 7, 13}};
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        MemorySegment open = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        MemorySegment high = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        MemorySegment low = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        MemorySegment close = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        for (int i = 0; i < 4; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, bars[i][0]);
+            open.setAtIndex(ValueLayout.JAVA_DOUBLE, i, bars[i][1]);
+            high.setAtIndex(ValueLayout.JAVA_DOUBLE, i, bars[i][2]);
+            low.setAtIndex(ValueLayout.JAVA_DOUBLE, i, bars[i][3]);
+            close.setAtIndex(ValueLayout.JAVA_DOUBLE, i, bars[i][4]);
+        }
+
+        MemorySegment candle = ph_candlestick_desc.allocate(arena);
+        ph_candlestick_desc_init(candle);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_X, xs);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_OPEN, open);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_HIGH, high);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_LOW, low);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_CLOSE, close);
+        candle.set(ValueLayout.JAVA_INT, ph_candlestick_desc.OFFSET_COUNT, 4);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_candlestick(plot, candle, handle), PH_OK, "ph_plot_add_candlestick");
+        long candleLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(candleLayer, bx, by), PH_OK, "candlestick bounds");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) + 0.35) < 1e-9,
+              "the body reaches half a width past the first bar");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 3.35) < 1e-9,
+              "and past the last");
+        // y is the low of the lowest bar to the high of the highest, not the
+        // opens and closes — the wick is part of the chart.
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 6.0, "candlestick y lo");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 15.0, "candlestick y hi");
+
+        // An explicit width overrides the median-spacing default.
+        candle.set(ValueLayout.JAVA_DOUBLE, ph_candlestick_desc.OFFSET_WIDTH, 2.0);
+        checkEq(ph_plot_add_candlestick(plot, candle, handle), PH_OK, "an explicit width");
+        long wideLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(wideLayer, bx, by), PH_OK, "wide candlestick bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -1.0, "the width is used");
+        checkEq(ph_layer_destroy(wideLayer), PH_OK, "the wide layer is destroyed");
+
+        MemorySegment bar = ph_ohlc_desc.allocate(arena);
+        ph_ohlc_desc_init(bar);
+        bar.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_X, xs);
+        bar.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_OPEN, open);
+        bar.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_HIGH, high);
+        bar.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_LOW, low);
+        bar.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_CLOSE, close);
+        bar.set(ValueLayout.JAVA_INT, ph_ohlc_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_ohlc(plot, bar, handle), PH_OK, "ph_plot_add_ohlc");
+        long ohlcLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        MemorySegment obx = ph_range.allocate(arena);
+        MemorySegment oby = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(ohlcLayer, obx, oby), PH_OK, "ohlc bounds");
+        // The two shapes are the same data under the same width rule, so they
+        // must occupy the same space.
+        check(Math.abs(obx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) + 0.35) < 1e-9,
+              "ohlc spans the same x as the candlesticks");
+        check(Math.abs(obx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 3.35) < 1e-9,
+              "at both ends");
+        check(oby.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 6.0, "ohlc y lo");
+        check(oby.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 15.0, "ohlc y hi");
+
+        // Four arrays and a count is not enough: the fifth is required too.
+        bar.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_CLOSE, MemorySegment.NULL);
+        checkEq(ph_plot_add_ohlc(plot, bar, handle), PH_E_INVALID_ARGUMENT,
+                "all five arrays are required");
+
+        checkEq(ph_layer_destroy(candleLayer), PH_OK, "the candlestick layer is destroyed");
+        checkEq(ph_layer_destroy(ohlcLayer), PH_OK, "the ohlc layer is destroyed");
+        ran("ph_candlestick_desc_init", "ph_ohlc_desc_init", "ph_plot_add_candlestick",
+            "ph_plot_add_ohlc");
+    }
+
     /** The two textured-quad layers: a colormapped grid and raw RGBA pixels. */
     static void grids(Arena arena, long plot) {
         MemorySegment values = arena.allocate(ValueLayout.JAVA_DOUBLE, 6);
@@ -770,6 +855,8 @@ public final class PhotonSmokeTest {
             pieAndStem(arena, plot);
             step("errorBarsAndBoxes");
             errorBarsAndBoxes(arena, plot);
+            step("ohlc");
+            ohlc(arena, plot);
             step("grids");
             grids(arena, plot);
             step("patches");

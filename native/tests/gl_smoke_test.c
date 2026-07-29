@@ -609,6 +609,102 @@ int main(void) {
   free(grid_pixels);
 
   CHECK_EQ(ph_plot_destroy(grid_plot), PH_OK);
+
+  /* ---- candlesticks: the up/down colours, and that a body is a rectangle ---- */
+
+  ph_plot ohlc_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &ohlc_plot), PH_OK);
+
+  /* Two candles in a 10x10 view: the first rises 2..8 at x=2.5, the second
+   * falls 8..2 at x=7.5. With an explicit width of 5 each body is a quarter of
+   * the region — so counting them checks the direction colouring, the body
+   * geometry and the instancing in one pass. */
+  const double candle_x[2] = {2.5, 7.5};
+  const double candle_open[2] = {2.0, 8.0};
+  const double candle_high[2] = {9.0, 9.0};
+  const double candle_low[2] = {1.0, 1.0};
+  const double candle_close[2] = {8.0, 2.0};
+  ph_candlestick_desc candles;
+  ph_candlestick_desc_init(&candles);
+  candles.x = candle_x;
+  candles.open = candle_open;
+  candles.high = candle_high;
+  candles.low = candle_low;
+  candles.close = candle_close;
+  candles.count = 2;
+  candles.width = 5.0;
+  CHECK_EQ(ph_color_parse("#00ff00", &candles.up_color), PH_OK);
+  CHECK_EQ(ph_color_parse("#ff0000", &candles.down_color), PH_OK);
+  ph_layer candle_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_candlestick(ohlc_plot, &candles, &candle_layer) != PH_OK) {
+    printf("  FAIL add_candlestick: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* candle_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!candle_pixels) return 1;
+  if (ph_plot_render_pixels(ohlc_plot, patch_w, patch_h, 1.0f, candle_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL candlestick render: %s\n", ph_last_error());
+    return 1;
+  }
+  long up_px = 0, down_px = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = candle_pixels + (size_t)i * 4;
+    if (p[3] < 200) continue;
+    if (p[1] > 200 && p[0] < 40 && p[2] < 40) up_px++;
+    if (p[0] > 200 && p[1] < 40 && p[2] < 40) down_px++;
+  }
+  /* Each body is 5/10 of the width by 6/10 of the height: 30% of the region,
+   * plus a wick 1px wide over the rest of its 1..9 range. */
+  const double body = 18432.0 * 0.30;
+  printf("  candles up=%ld down=%ld (expect ~%.0f each)\n", up_px, down_px, body);
+  CHECK(up_px > body * 0.95 && up_px < body * 1.10);
+  CHECK(down_px > body * 0.95 && down_px < body * 1.10);
+  free(candle_pixels);
+  CHECK_EQ(ph_layer_destroy(candle_layer), PH_OK);
+
+  /* The same two periods as OHLC bars. Three thin segments each, so the ink is
+   * a small fraction of what the bodies cover — which is the difference between
+   * the two chart types, and worth asserting rather than assuming. */
+  ph_ohlc_desc bars;
+  ph_ohlc_desc_init(&bars);
+  bars.x = candle_x;
+  bars.open = candle_open;
+  bars.high = candle_high;
+  bars.low = candle_low;
+  bars.close = candle_close;
+  bars.count = 2;
+  bars.width = 5.0;
+  bars.line_width = 3.0f;
+  CHECK_EQ(ph_color_parse("#00ff00", &bars.up_color), PH_OK);
+  CHECK_EQ(ph_color_parse("#ff0000", &bars.down_color), PH_OK);
+  ph_layer ohlc_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_ohlc(ohlc_plot, &bars, &ohlc_layer) != PH_OK) {
+    printf("  FAIL add_ohlc: %s\n", ph_last_error());
+    return 1;
+  }
+  unsigned char* bar_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!bar_pixels) return 1;
+  if (ph_plot_render_pixels(ohlc_plot, patch_w, patch_h, 1.0f, bar_pixels, patch_w * 4) != PH_OK) {
+    printf("  FAIL ohlc render: %s\n", ph_last_error());
+    return 1;
+  }
+  long bar_green = 0, bar_red = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = bar_pixels + (size_t)i * 4;
+    if (p[3] < 200) continue;
+    if (p[1] > 200 && p[0] < 40 && p[2] < 40) bar_green++;
+    if (p[0] > 200 && p[1] < 40 && p[2] < 40) bar_red++;
+  }
+  free(bar_pixels);
+  /* One 3px vertical over 8/10 of the height plus two 3px ticks each half the
+   * 5-unit span: about 3*115 + 2*3*32 = 537 px per bar. */
+  printf("  ohlc green=%ld red=%ld\n", bar_green, bar_red);
+  CHECK(bar_green > 300 && bar_green < 900);
+  CHECK(bar_red > 300 && bar_red < 900);
+
+  CHECK_EQ(ph_plot_destroy(ohlc_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

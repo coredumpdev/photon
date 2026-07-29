@@ -74,9 +74,9 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (6 remaining of 17)
+### Layers with their own shaders (4 remaining of 17)
 
-`candlestick` `contour` `graph` `hexbin` `ohlc` `quiver`
+`contour` `graph` `hexbin` `quiver`
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
       under it.
@@ -101,7 +101,9 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       call at any resolution; `image` takes RGBA8 the caller already has,
       because fetching and decoding belongs to the host.
 - [ ] `hexbin` and `contour` still want the colormaps, which are now ported.
-- [ ] `candlestick` + `ohlc` need the ordinal-time axis, which is already done.
+- [x] ~~`candlestick` + `ohlc`~~ — one base class holding the five arrays and
+      the median-spacing width, two shapes over it. Both demo panels sit on the
+      ordinal-time axis, which is what makes the weekends disappear.
 - [ ] Patches has no choropleth: the web colours a patch by a per-patch `value`
       through a colormap, and those fields are absent from `ph_patches_desc`
       rather than accepted and ignored. Adding them is additive once the

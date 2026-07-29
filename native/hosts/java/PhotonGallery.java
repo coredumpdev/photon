@@ -1,4 +1,4 @@
-// The Java gallery: the same twelve charts as the GLFW and Qt ones, in a window.
+// The Java gallery: the same fourteen charts as the GLFW and Qt ones, in a window.
 //
 // This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
 // that. What it adds is the part of the ABI a headless test cannot reach: a
@@ -40,8 +40,8 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 12;
-    private static final int COLUMNS = 4;
+    private static final int PANELS = 14;
+    private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
     private static final int FUNNEL_STAGES = 5;
@@ -55,6 +55,7 @@ public final class PhotonGallery {
     private static final int FIELD_COLS = 96;
     private static final int FIELD_ROWS = 72;
     private static final int SPRITE = 16;
+    private static final int SESSIONS = 34;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -100,7 +101,7 @@ public final class PhotonGallery {
     }
 
     // -----------------------------------------------------------------------
-    // The charts — the same twelve as hosts/common/panels.c, through the binding
+    // The charts — the same fourteen as hosts/common/panels.c, through the binding
     // -----------------------------------------------------------------------
 
     private static MemorySegment doubles(int count) {
@@ -627,6 +628,99 @@ public final class PhotonGallery {
         }
     }
 
+    /** The five OHLC arrays plus the session dates, shared by the last two panels. */
+    private record Sessions(MemorySegment index, MemorySegment time, MemorySegment open,
+                            MemorySegment high, MemorySegment low, MemorySegment close) {}
+
+    private static Sessions sessions() {
+        MemorySegment index = doubles(SESSIONS);
+        MemorySegment time = doubles(SESSIONS);
+        MemorySegment open = doubles(SESSIONS);
+        MemorySegment high = doubles(SESSIONS);
+        MemorySegment low = doubles(SESSIONS);
+        MemorySegment close = doubles(SESSIONS);
+
+        // The same LCG and the same walk as the C panels, so the two galleries
+        // draw the same prices rather than similar ones.
+        int seed = 24681357;
+        double price = 100.0;
+        double day = 1704067200000.0;  // 2024-01-01T00:00:00Z, a Monday
+        for (int i = 0; i < SESSIONS; i++) {
+            seed = seed * 1664525 + 1013904223;
+            double drift = (((seed >>> 8) & 0xFFFFFF) / 16777216.0 - 0.48) * 3.2;
+            seed = seed * 1664525 + 1013904223;
+            double reach = ((seed >>> 8) & 0xFFFFFF) / 16777216.0 * 2.4 + 0.4;
+
+            double o = price;
+            double c = price + drift;
+            index.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            time.setAtIndex(ValueLayout.JAVA_DOUBLE, i, day);
+            open.setAtIndex(ValueLayout.JAVA_DOUBLE, i, o);
+            close.setAtIndex(ValueLayout.JAVA_DOUBLE, i, c);
+            high.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.max(o, c) + reach);
+            low.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.min(o, c) - reach);
+            price = c;
+
+            // Skip the weekend, so consecutive indices are consecutive sessions.
+            day += 86400000.0;
+            if ((i + 1) % 7 == 4) day += 2.0 * 86400000.0;
+        }
+        return new Sessions(index, time, open, high, low, close);
+    }
+
+    private static void sessionAxis(long plot, Sessions s) {
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment axis = ph_axis_desc.allocate(scratch);
+            ph_axis_desc_init(axis);
+            axis.set(ValueLayout.JAVA_INT, ph_axis_desc.OFFSET_TYPE, PH_SCALE_ORDINAL_TIME);
+            // The x values are indices; `times` is what turns them back into
+            // dates for the tick labels.
+            axis.set(ValueLayout.ADDRESS, ph_axis_desc.OFFSET_TIMES, s.time());
+            axis.set(ValueLayout.JAVA_INT, ph_axis_desc.OFFSET_TIME_COUNT, SESSIONS);
+            ph_plot_set_scale(plot, scratch.allocateFrom("x"), axis);
+        }
+        styleAxis(plot, "x", "session", 0);
+        styleAxis(plot, "y", "price", 0);
+    }
+
+    /** Panel 12 — candlesticks on a session axis. */
+    private static void buildCandles(long plot, Sessions s) {
+        setTitle(plot, "Candles");
+        sessionAxis(plot, s);
+
+        MemorySegment desc = ph_candlestick_desc.allocate(ARENA);
+        ph_candlestick_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_X, s.index());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_OPEN, s.open());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_HIGH, s.high());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_LOW, s.low());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_CLOSE, s.close());
+        desc.set(ValueLayout.JAVA_INT, ph_candlestick_desc.OFFSET_COUNT, SESSIONS);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_candlestick(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 13 — the same sessions as OHLC bars, so the two are comparable. */
+    private static void buildBars(long plot, Sessions s) {
+        setTitle(plot, "Bars");
+        sessionAxis(plot, s);
+
+        MemorySegment desc = ph_ohlc_desc.allocate(ARENA);
+        ph_ohlc_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_X, s.index());
+        desc.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_OPEN, s.open());
+        desc.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_HIGH, s.high());
+        desc.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_LOW, s.low());
+        desc.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_CLOSE, s.close());
+        desc.set(ValueLayout.JAVA_INT, ph_ohlc_desc.OFFSET_COUNT, SESSIONS);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_ohlc(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         for (int i = 0; i < STREAM_POINTS; i++) {
             double phase = seconds * 2.0 + i * 0.035;
@@ -848,6 +942,9 @@ public final class PhotonGallery {
         buildLatency(plots[9]);
         buildField(plots[10]);
         buildSprite(plots[11]);
+        Sessions bars = sessions();
+        buildCandles(plots[12], bars);
+        buildBars(plots[13], bars);
 
         installCallbacks();
 

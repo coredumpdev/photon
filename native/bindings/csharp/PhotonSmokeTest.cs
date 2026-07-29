@@ -470,6 +470,81 @@ internal static class PhotonSmokeTest
             "ph_plot_add_box");
     }
 
+    /// The two OHLC shapes, which share their arrays, their width and their bounds.
+    private static void Ohlc(ulong plot)
+    {
+        // Four sessions at x = 0..3. The default width is 70% of the median
+        // spacing, so 0.7 — and the bounds reach half of that either side.
+        var xs = new double[] { 0, 1, 2, 3 };
+        var open = new double[] { 10, 11, 10, 7 };
+        var high = new double[] { 12, 14, 11, 15 };
+        var low = new double[] { 9, 10, 6, 7 };
+        var close = new double[] { 11, 10, 7, 13 };
+        var handles = new[]
+        {
+            GCHandle.Alloc(xs, GCHandleType.Pinned), GCHandle.Alloc(open, GCHandleType.Pinned),
+            GCHandle.Alloc(high, GCHandleType.Pinned), GCHandle.Alloc(low, GCHandleType.Pinned),
+            GCHandle.Alloc(close, GCHandleType.Pinned),
+        };
+        try
+        {
+            ph_candlestick_desc_init(out var candle);
+            candle.x = handles[0].AddrOfPinnedObject();
+            candle.open = handles[1].AddrOfPinnedObject();
+            candle.high = handles[2].AddrOfPinnedObject();
+            candle.low = handles[3].AddrOfPinnedObject();
+            candle.close = handles[4].AddrOfPinnedObject();
+            candle.count = xs.Length;
+            CheckEq(ph_plot_add_candlestick(plot, in candle, out var candleLayer), PH_OK,
+                "ph_plot_add_candlestick");
+            CheckEq(ph_layer_bounds(candleLayer, out var candleX, out var candleY), PH_OK,
+                "candlestick bounds");
+            Check(Math.Abs(candleX.lo + 0.35) < 1e-9 && Math.Abs(candleX.hi - 3.35) < 1e-9,
+                "the body reaches half a width past the outer bars");
+            // y is the low of the lowest bar to the high of the highest, not
+            // the opens and closes — the wick is part of the chart.
+            Check(candleY.lo == 6.0 && candleY.hi == 15.0, "the wicks set the y bounds");
+            CheckEq(ph_layer_destroy(candleLayer), PH_OK, "the candlestick layer is destroyed");
+
+            // An explicit width overrides the median-spacing default.
+            candle.width = 2.0;
+            CheckEq(ph_plot_add_candlestick(plot, in candle, out var wideLayer), PH_OK,
+                "an explicit width");
+            CheckEq(ph_layer_bounds(wideLayer, out var wideX, out _), PH_OK, "wide bounds");
+            Check(wideX.lo == -1.0, "the width is used");
+            CheckEq(ph_layer_destroy(wideLayer), PH_OK, "the wide layer is destroyed");
+
+            ph_ohlc_desc_init(out var bar);
+            bar.x = handles[0].AddrOfPinnedObject();
+            bar.open = handles[1].AddrOfPinnedObject();
+            bar.high = handles[2].AddrOfPinnedObject();
+            bar.low = handles[3].AddrOfPinnedObject();
+            bar.close = handles[4].AddrOfPinnedObject();
+            bar.count = xs.Length;
+            CheckEq(ph_plot_add_ohlc(plot, in bar, out var ohlcLayer), PH_OK, "ph_plot_add_ohlc");
+            CheckEq(ph_layer_bounds(ohlcLayer, out var ohlcX, out var ohlcY), PH_OK,
+                "ohlc bounds");
+            // The two shapes are the same data under the same width rule, so
+            // they must occupy the same space.
+            Check(Math.Abs(ohlcX.lo + 0.35) < 1e-9 && Math.Abs(ohlcX.hi - 3.35) < 1e-9,
+                "ohlc spans the same x as the candlesticks");
+            Check(ohlcY.lo == 6.0 && ohlcY.hi == 15.0, "and the same y");
+            CheckEq(ph_layer_destroy(ohlcLayer), PH_OK, "the ohlc layer is destroyed");
+
+            // Four arrays and a count is not enough: the fifth is required too.
+            bar.close = IntPtr.Zero;
+            CheckEq(ph_plot_add_ohlc(plot, in bar, out _), PH_E_INVALID_ARGUMENT,
+                "all five arrays are required");
+        }
+        finally
+        {
+            foreach (var handle in handles) handle.Free();
+        }
+
+        Ran("ph_candlestick_desc_init", "ph_ohlc_desc_init", "ph_plot_add_candlestick",
+            "ph_plot_add_ohlc");
+    }
+
     /// The two textured-quad layers: a colormapped grid and raw RGBA pixels.
     private static void Grids(ulong plot)
     {
@@ -688,6 +763,7 @@ internal static class PhotonSmokeTest
         AreaAndBars(plot);
         PieAndStem(plot);
         ErrorBarsAndBoxes(plot);
+        Ohlc(plot);
         Grids(plot);
         Patches(plot);
         Interaction(plot);

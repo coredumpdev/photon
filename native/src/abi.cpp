@@ -796,6 +796,64 @@ extern "C" ph_result PH_CALL ph_plot_add_stem(ph_plot handle, const ph_stem_desc
                                                        "ph_stem_desc");
 }
 
+extern "C" void PH_CALL ph_candlestick_desc_init(ph_candlestick_desc* out) {
+  if (!out) return;
+  *out = ph_candlestick_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_candlestick_desc));
+  out->wick_width = 1.5f;
+  out->render_type = PH_RENDER_STATIC;
+  // width stays 0, which the layer reads as 70% of the median spacing — the
+  // same thing an omitted `width` means in the TypeScript.
+}
+
+extern "C" void PH_CALL ph_ohlc_desc_init(ph_ohlc_desc* out) {
+  if (!out) return;
+  *out = ph_ohlc_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_ohlc_desc));
+  out->line_width = 1.5f;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+/// The five OHLC arrays are checked the same way for both layers.
+template <typename Desc, typename LayerType>
+ph_result add_ohlc_layer(ph_plot handle, const Desc* desc, ph_layer* out,
+                         void (PH_CALL* init)(Desc*), const char* type_name) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                std::string(type_name) + ".struct_size is larger than this build's");
+  }
+  const Desc normalized = normalize(desc, init);
+  if (normalized.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (normalized.count > 0 && (!normalized.x || !normalized.open || !normalized.high ||
+                               !normalized.low || !normalized.close)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "x, open, high, low and close must be non-null when count > 0");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<LayerType>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating an OHLC layer");
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_candlestick(ph_plot handle,
+                                                     const ph_candlestick_desc* desc,
+                                                     ph_layer* out) {
+  return add_ohlc_layer<ph_candlestick_desc, photon::CandlestickLayer>(
+      handle, desc, out, ph_candlestick_desc_init, "ph_candlestick_desc");
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_ohlc(ph_plot handle, const ph_ohlc_desc* desc,
+                                              ph_layer* out) {
+  return add_ohlc_layer<ph_ohlc_desc, photon::OhlcLayer>(handle, desc, out, ph_ohlc_desc_init,
+                                                         "ph_ohlc_desc");
+}
+
 extern "C" void PH_CALL ph_heatmap_desc_init(ph_heatmap_desc* out) {
   if (!out) return;
   *out = ph_heatmap_desc{};

@@ -269,6 +269,40 @@ PH_ASSERT_LAYOUT(offsetof(ph_box_desc, name) == 40, "ph_box_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, y_axis) == 48, "ph_box_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, render_type) == 56, "ph_box_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_candlestick_desc) == 104, "ph_candlestick_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_candlestick_desc) == 8, "ph_candlestick_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, struct_size) == 0, "ph_candlestick_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, x) == 8, "ph_candlestick_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, open) == 16, "ph_candlestick_desc.open offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, high) == 24, "ph_candlestick_desc.high offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, low) == 32, "ph_candlestick_desc.low offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, close) == 40, "ph_candlestick_desc.close offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, count) == 48, "ph_candlestick_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, width) == 56, "ph_candlestick_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, up_color) == 64, "ph_candlestick_desc.up_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, down_color) == 68, "ph_candlestick_desc.down_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, wick_width) == 72, "ph_candlestick_desc.wick_width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, name) == 80, "ph_candlestick_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, y_axis) == 88, "ph_candlestick_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, render_type) == 96, "ph_candlestick_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_ohlc_desc) == 104, "ph_ohlc_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_ohlc_desc) == 8, "ph_ohlc_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, struct_size) == 0, "ph_ohlc_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, x) == 8, "ph_ohlc_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, open) == 16, "ph_ohlc_desc.open offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, high) == 24, "ph_ohlc_desc.high offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, low) == 32, "ph_ohlc_desc.low offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, close) == 40, "ph_ohlc_desc.close offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, count) == 48, "ph_ohlc_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, width) == 56, "ph_ohlc_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, up_color) == 64, "ph_ohlc_desc.up_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, down_color) == 68, "ph_ohlc_desc.down_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, line_width) == 72, "ph_ohlc_desc.line_width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, name) == 80, "ph_ohlc_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, y_axis) == 88, "ph_ohlc_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_ohlc_desc, render_type) == 96, "ph_ohlc_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_heatmap_desc) == 112, "ph_heatmap_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_heatmap_desc) == 8, "ph_heatmap_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_heatmap_desc, struct_size) == 0, "ph_heatmap_desc.struct_size offset");
@@ -336,7 +370,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 23);
+  printf("%d struct layouts match the generated bindings\n", 25);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

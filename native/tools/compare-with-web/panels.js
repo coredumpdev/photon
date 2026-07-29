@@ -1,5 +1,5 @@
 /**
- * The twelve demo charts, built with @photonviz/core.
+ * The fourteen demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -20,6 +20,7 @@ const BOX_SAMPLES = 60;
 const FIELD_COLS = 96;
 const FIELD_ROWS = 72;
 const SPRITE = 16;
+const SESSIONS = 34;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -334,5 +335,68 @@ function sprite(container) {
   return plot;
 }
 
+/** The five OHLC arrays plus the session dates, shared by the last two panels. */
+function sessions() {
+  const index = new Float64Array(SESSIONS);
+  const time = new Float64Array(SESSIONS);
+  const open = new Float64Array(SESSIONS);
+  const high = new Float64Array(SESSIONS);
+  const low = new Float64Array(SESSIONS);
+  const close = new Float64Array(SESSIONS);
+
+  let seed = 24681357;
+  const next = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216.0;
+  };
+  let price = 100;
+  let day = 1704067200000; // 2024-01-01T00:00:00Z, a Monday
+  for (let i = 0; i < SESSIONS; i++) {
+    const drift = (next() - 0.48) * 3.2;
+    const reach = next() * 2.4 + 0.4;
+    const o = price;
+    const c = price + drift;
+    index[i] = i;
+    time[i] = day;
+    open[i] = o;
+    close[i] = c;
+    high[i] = Math.max(o, c) + reach;
+    low[i] = Math.min(o, c) - reach;
+    price = c;
+    // Skip the weekend, so consecutive indices are consecutive sessions.
+    day += 86400000;
+    if ((i + 1) % 7 === 4) day += 2 * 86400000;
+  }
+  return { index, time, open, high, low, close };
+}
+
+const SESSION_BARS = sessions();
+
+function sessionPlot(container, title) {
+  return new Plot(container, {
+    ...common,
+    title,
+    // The x values are indices; `times` is what turns them back into dates for
+    // the tick labels, and what collapses the weekends between them.
+    scales: { x: { type: "ordinal-time", times: SESSION_BARS.time } },
+    axes: { x: { title: "session" }, y: { title: "price" } },
+  });
+}
+
+function candles(container) {
+  const plot = sessionPlot(container, "Candles");
+  const { index, open, high, low, close } = SESSION_BARS;
+  plot.addCandlestick({ x: index, open, high, low, close });
+  return plot;
+}
+
+function bars(container) {
+  const plot = sessionPlot(container, "Bars");
+  const { index, open, high, low, close } = SESSION_BARS;
+  plot.addOhlc({ x: index, open, high, low, close });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
-                       share, impulse, yieldCurve, latency, field, sprite];
+                       share, impulse, yieldCurve, latency, field, sprite,
+                       candles, bars];
