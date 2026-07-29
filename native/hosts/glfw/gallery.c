@@ -1,5 +1,5 @@
 /*
- * The GLFW gallery: four charts in one window, one GL context, one swap.
+ * The GLFW gallery: six charts in one window, one GL context, one swap.
  *
  * The charts themselves come from hosts/common/panels.c, shared verbatim with
  * the Qt galleries — so anything that looks different between the two hosts is
@@ -118,7 +118,7 @@ int main(void) {
     ph_panels_build(g_panels, g_plots[i], i);
   }
 
-  ph_glfw_host* host = ph_glfw_host_create(window, g_plots, PH_PANEL_COUNT, 2);
+  ph_glfw_host* host = ph_glfw_host_create(window, g_plots, PH_PANEL_COUNT, 3);
   if (!host) {
     fprintf(stderr, "could not attach the plots to the window\n");
     return 1;

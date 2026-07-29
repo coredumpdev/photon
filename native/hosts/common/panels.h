@@ -17,14 +17,14 @@
 extern "C" {
 #endif
 
-#define PH_PANEL_COUNT 4
+#define PH_PANEL_COUNT 6
 
 /**
  * Per-instance state for one set of panels.
  *
- * Not a set of globals, because a Qt window holds four independent items, each
- * with its own plot on its own render thread — the streaming panel's buffers
- * cannot be shared between them.
+ * Not a set of globals, because a Qt window holds one independent item per panel,
+ * each with its own plot on its own render thread — the streaming panel's
+ * buffers cannot be shared between them.
  */
 typedef struct ph_panels ph_panels;
 

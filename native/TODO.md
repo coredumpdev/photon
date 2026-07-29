@@ -24,7 +24,7 @@ been compiled at all.**
       `tools/compare-with-web/` transcribes the demo panels onto the web core,
       renders them in headless Chromium, and compares the plot region and every
       grid line against a native grab. **The layout now matches exactly**, in
-      all four panels.
+      all six panels.
 - [ ] It is not run by CI. It needs Playwright and a Chromium, which the native
       workflow does not install; running it there would make a native change
       that shifts the layout fail immediately rather than at the next manual

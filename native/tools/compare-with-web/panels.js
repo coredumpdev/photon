@@ -129,4 +129,47 @@ function streaming(container) {
   return plot;
 }
 
-export const PANELS = [waves, decay, scatter, streaming];
+function revenue(container) {
+  const REVENUE = [42, 47, 51, 49, 58, 63, 61, 68, 72, 70, 78, 84];
+  const month = REVENUE.map((_, i) => i);
+  const low = REVENUE.map((v) => v * 0.82);
+  const high = REVENUE.map((v) => v * 1.14);
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Revenue",
+    axes: { x: { title: "month" }, y: { title: "k$" } },
+  });
+  // The band first, so the bars land on top of it — layers draw in the order
+  // they were added, in both cores.
+  plot.addArea({ x: month, y: high, base: low, color: "rgba(56,189,248,0.24)" });
+  plot.addBar({ x: month, y: REVENUE, width: 0.62, color: "#3b82f6" });
+  return plot;
+}
+
+function funnel(container) {
+  const reach = [1.0, 0.72, 0.46, 0.28, 0.15, 0.09];
+  const colors = ["#38bdf8", "#22d3ee", "#34d399", "#a3e635", "#facc15"];
+  const patches = [];
+  for (let i = 0; i < 5; i++) {
+    const top = 5 - i;
+    const bottom = top - 0.86;
+    const halfTop = reach[i] / 2;
+    const halfBottom = reach[i + 1] / 2;
+    patches.push({
+      x: [0.5 - halfTop, 0.5 + halfTop, 0.5 + halfBottom, 0.5 - halfBottom],
+      y: [top, top, bottom, bottom],
+      color: colors[i],
+    });
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Funnel",
+    axes: { x: { title: "share" }, y: { title: "stage" } },
+  });
+  plot.addPatches({ patches });
+  return plot;
+}
+
+export const PANELS = [waves, decay, scatter, streaming, revenue, funnel];

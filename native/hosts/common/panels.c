@@ -6,6 +6,9 @@
 #define SAMPLES 512
 #define SCATTER_POINTS 1500
 #define STREAM_POINTS 400
+#define MONTHS 12
+/* A funnel stage is a trapezoid: four corners, and five of them. */
+#define FUNNEL_STAGES 5
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -23,9 +26,19 @@ struct ph_panels {
   double stream_x[STREAM_POINTS];
   double stream_y[STREAM_POINTS];
   ph_layer stream_layer;
+
+  double month[MONTHS];
+  double revenue[MONTHS];
+  double band_low[MONTHS];
+  double band_high[MONTHS];
+
+  double funnel_x[FUNNEL_STAGES][4];
+  double funnel_y[FUNNEL_STAGES][4];
+  ph_patch funnel[FUNNEL_STAGES];
 };
 
-static const char* kTitles[PH_PANEL_COUNT] = {"Waves", "Log decay", "Scatter", "Streaming"};
+static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
+                                              "Streaming", "Revenue",  "Funnel"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -79,6 +92,48 @@ ph_panels* ph_panels_create(void) {
     p->stream_x[i] = i;
     p->stream_y[i] = 0.0;
   }
+
+  /* Twelve months of revenue with a confidence band around it. Fixed numbers
+   * rather than generated ones: the band has to sit around the bars in a way a
+   * reader recognizes, which noise does not reliably do. */
+  static const double revenue[MONTHS] = {42, 47, 51, 49, 58, 63, 61, 68, 72, 70, 78, 84};
+  for (int i = 0; i < MONTHS; i++) {
+    p->month[i] = i;
+    p->revenue[i] = revenue[i];
+    p->band_low[i] = revenue[i] * 0.82;
+    p->band_high[i] = revenue[i] * 1.14;
+  }
+
+  /* Five funnel stages, each a trapezoid narrowing as it descends. This is the
+   * shape patches exists for — the web core's funnel, treemap and sankey are
+   * all free functions that emit polygons and hand them to addPatches. */
+  static const double reach[FUNNEL_STAGES + 1] = {1.0, 0.72, 0.46, 0.28, 0.15, 0.09};
+  for (int i = 0; i < FUNNEL_STAGES; i++) {
+    const double top = (double)(FUNNEL_STAGES - i);
+    const double bottom = top - 0.86; /* a gap between stages */
+    const double half_top = reach[i] / 2.0;
+    const double half_bottom = reach[i + 1] / 2.0;
+    p->funnel_x[i][0] = 0.5 - half_top;
+    p->funnel_y[i][0] = top;
+    p->funnel_x[i][1] = 0.5 + half_top;
+    p->funnel_y[i][1] = top;
+    p->funnel_x[i][2] = 0.5 + half_bottom;
+    p->funnel_y[i][2] = bottom;
+    p->funnel_x[i][3] = 0.5 - half_bottom;
+    p->funnel_y[i][3] = bottom;
+
+    p->funnel[i].x = p->funnel_x[i];
+    p->funnel[i].y = p->funnel_y[i];
+    p->funnel[i].count = 4;
+    p->funnel[i].holes = NULL;
+    p->funnel[i].hole_count = 0;
+  }
+  p->funnel[0].color = parse("#38bdf8");
+  p->funnel[1].color = parse("#22d3ee");
+  p->funnel[2].color = parse("#34d399");
+  p->funnel[3].color = parse("#a3e635");
+  p->funnel[4].color = parse("#facc15");
+
   return p;
 }
 
@@ -189,6 +244,49 @@ static void build_stream(ph_panels* p, ph_plot plot) {
   ph_plot_set_domain(plot, "y", domain);
 }
 
+/* Panel 4 — bars with a band behind them: area and bar on one plot. */
+static void build_revenue(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Revenue");
+  style_axis(plot, "x", "month", 0);
+  style_axis(plot, "y", "k$", 0);
+
+  ph_layer layer = PH_NULL_HANDLE;
+
+  /* The band goes first so the bars land on top of it. Layers draw in the
+   * order they were added, which is the only z-ordering the core has. */
+  ph_area_desc area;
+  ph_area_desc_init(&area);
+  area.x = p->month;
+  area.y = p->band_high;
+  area.base = p->band_low;
+  area.count = MONTHS;
+  area.color = parse("#38bdf83d");
+  ph_plot_add_area(plot, &area, &layer);
+
+  ph_bar_desc bar;
+  ph_bar_desc_init(&bar);
+  bar.x = p->month;
+  bar.y = p->revenue;
+  bar.count = MONTHS;
+  bar.width = 0.62;
+  bar.color = parse("#3b82f6");
+  ph_plot_add_bar(plot, &bar, &layer);
+}
+
+/* Panel 5 — five filled trapezoids, one patches layer. */
+static void build_funnel(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Funnel");
+  style_axis(plot, "x", "share", 0);
+  style_axis(plot, "y", "stage", 0);
+
+  ph_patches_desc desc;
+  ph_patches_desc_init(&desc);
+  desc.patches = p->funnel;
+  desc.patch_count = FUNNEL_STAGES;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_patches(plot, &desc, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -196,7 +294,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 0: build_waves(panels, plot); break;
     case 1: build_decay(panels, plot); break;
     case 2: build_scatter(panels, plot); break;
-    default: build_stream(panels, plot); break;
+    case 3: build_stream(panels, plot); break;
+    case 4: build_revenue(panels, plot); break;
+    default: build_funnel(panels, plot); break;
   }
 }
 

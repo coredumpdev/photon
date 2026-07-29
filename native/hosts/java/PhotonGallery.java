@@ -1,4 +1,4 @@
-// The Java gallery: the same four charts as the GLFW and Qt ones, in a window.
+// The Java gallery: the same six charts as the GLFW and Qt ones, in a window.
 //
 // This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
 // that. What it adds is the part of the ABI a headless test cannot reach: a
@@ -40,9 +40,11 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 4;
-    private static final int COLUMNS = 2;
+    private static final int PANELS = 6;
+    private static final int COLUMNS = 3;
     private static final int SAMPLES = 512;
+    private static final int MONTHS = 12;
+    private static final int FUNNEL_STAGES = 5;
     private static final int SCATTER_POINTS = 1500;
     private static final int STREAM_POINTS = 400;
 
@@ -90,7 +92,7 @@ public final class PhotonGallery {
     }
 
     // -----------------------------------------------------------------------
-    // The charts — the same four as hosts/common/panels.c, through the binding
+    // The charts — the same six as hosts/common/panels.c, through the binding
     // -----------------------------------------------------------------------
 
     private static MemorySegment doubles(int count) {
@@ -287,6 +289,92 @@ public final class PhotonGallery {
             domain.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO, -2.2);
             domain.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI, 2.2);
             ph_plot_set_domain(plot, scratch.allocateFrom("y"), domain);
+        }
+    }
+
+    /** Panel 4 — bars with a band behind them: area and bar on one plot. */
+    private static void buildRevenue(long plot) {
+        final double[] revenue = {42, 47, 51, 49, 58, 63, 61, 68, 72, 70, 78, 84};
+        MemorySegment month = doubles(MONTHS);
+        MemorySegment value = doubles(MONTHS);
+        MemorySegment low = doubles(MONTHS);
+        MemorySegment high = doubles(MONTHS);
+        for (int i = 0; i < MONTHS; i++) {
+            month.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            value.setAtIndex(ValueLayout.JAVA_DOUBLE, i, revenue[i]);
+            low.setAtIndex(ValueLayout.JAVA_DOUBLE, i, revenue[i] * 0.82);
+            high.setAtIndex(ValueLayout.JAVA_DOUBLE, i, revenue[i] * 1.14);
+        }
+
+        setTitle(plot, "Revenue");
+        styleAxis(plot, "x", "month", 0);
+        styleAxis(plot, "y", "k$", 0);
+
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+
+        // The band first, so the bars land on top of it: layers draw in the
+        // order they were added, which is the only z-ordering the core has.
+        MemorySegment area = ph_area_desc.allocate(ARENA);
+        ph_area_desc_init(area);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_X, month);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_Y, high);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_BASE, low);
+        area.set(ValueLayout.JAVA_INT, ph_area_desc.OFFSET_COUNT, MONTHS);
+        area.set(ValueLayout.JAVA_INT, ph_area_desc.OFFSET_COLOR, color("#38bdf83d"));
+        if (ph_plot_add_area(plot, area, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        MemorySegment bar = ph_bar_desc.allocate(ARENA);
+        ph_bar_desc_init(bar);
+        bar.set(ValueLayout.ADDRESS, ph_bar_desc.OFFSET_X, month);
+        bar.set(ValueLayout.ADDRESS, ph_bar_desc.OFFSET_Y, value);
+        bar.set(ValueLayout.JAVA_INT, ph_bar_desc.OFFSET_COUNT, MONTHS);
+        bar.set(ValueLayout.JAVA_DOUBLE, ph_bar_desc.OFFSET_WIDTH, 0.62);
+        bar.set(ValueLayout.JAVA_INT, ph_bar_desc.OFFSET_COLOR, color("#3b82f6"));
+        if (ph_plot_add_bar(plot, bar, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 5 — five filled trapezoids, one patches layer. */
+    private static void buildFunnel(long plot) {
+        final double[] reach = {1.0, 0.72, 0.46, 0.28, 0.15, 0.09};
+        final int[] colors = {color("#38bdf8"), color("#22d3ee"), color("#34d399"),
+                              color("#a3e635"), color("#facc15")};
+
+        setTitle(plot, "Funnel");
+        styleAxis(plot, "x", "share", 0);
+        styleAxis(plot, "y", "stage", 0);
+
+        MemorySegment patches = ARENA.allocate(ph_patch.LAYOUT, FUNNEL_STAGES);
+        for (int i = 0; i < FUNNEL_STAGES; i++) {
+            double top = FUNNEL_STAGES - i;
+            double bottom = top - 0.86;
+            double halfTop = reach[i] / 2.0;
+            double halfBottom = reach[i + 1] / 2.0;
+            MemorySegment xs = doubles(4);
+            MemorySegment ys = doubles(4);
+            double[] cx = {0.5 - halfTop, 0.5 + halfTop, 0.5 + halfBottom, 0.5 - halfBottom};
+            double[] cy = {top, top, bottom, bottom};
+            for (int k = 0; k < 4; k++) {
+                xs.setAtIndex(ValueLayout.JAVA_DOUBLE, k, cx[k]);
+                ys.setAtIndex(ValueLayout.JAVA_DOUBLE, k, cy[k]);
+            }
+            long base = i * ph_patch.SIZE;
+            patches.set(ValueLayout.ADDRESS, base + ph_patch.OFFSET_X, xs);
+            patches.set(ValueLayout.ADDRESS, base + ph_patch.OFFSET_Y, ys);
+            patches.set(ValueLayout.JAVA_INT, base + ph_patch.OFFSET_COUNT, 4);
+            patches.set(ValueLayout.JAVA_INT, base + ph_patch.OFFSET_COLOR, colors[i]);
+        }
+
+        MemorySegment desc = ph_patches_desc.allocate(ARENA);
+        ph_patches_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_patches_desc.OFFSET_PATCHES, patches);
+        desc.set(ValueLayout.JAVA_INT, ph_patches_desc.OFFSET_PATCH_COUNT, FUNNEL_STAGES);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_patches(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
         }
     }
 
@@ -503,6 +591,8 @@ public final class PhotonGallery {
         buildDecay(plots[1]);
         buildScatter(plots[2]);
         buildStream(plots[3]);
+        buildRevenue(plots[4]);
+        buildFunnel(plots[5]);
 
         installCallbacks();
 

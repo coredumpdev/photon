@@ -30,7 +30,7 @@ generated bindings. Faz 4 is the rest of the layers.
 | Theme and axis styling | `lightTheme` / `darkTheme` / `resolveAxisStyle`, exposed as `ph_axis_config` |
 | Rendering | draws to the host's framebuffer, scissored to the plot region — **verified headless on a real GL 3.3 context** |
 | Offscreen readback | `ph_plot_render_pixels`, top-row-first RGBA8 |
-| GLFW host | window, input, dpr, and a four-panel gallery |
+| GLFW host | window, input, dpr, and a six-panel gallery |
 | Qt Quick host | `QQuickFramebufferObject` item, render-thread safe, QML module |
 | Qt Widgets host | `QOpenGLWidget`, same charts, GUI thread |
 | Java host | LWJGL window, Panama upcall for GL resolution — output pixel-identical to the C host |
@@ -349,7 +349,7 @@ alpha compositing. The demo charts use a fixed LCG rather than a random source
 precisely so this can exist.
 
 *Against the web core*, structurally: `tools/compare-with-web/` builds the same
-four panels on `@photonviz/core`, renders them in headless Chromium and compares
+six panels on `@photonviz/core`, renders them in headless Chromium and compares
 the plot region and every grid line against a native grab. Those match exactly.
 They cannot match by pixel — the web draws text with Canvas2D and the system
 font while the native side rasterizes an embedded Inter subset, which is a
@@ -379,7 +379,7 @@ in each binding, or below it as `ph_plot_add_<chart>` — that call is Faz 4's.
 - **Faz 0 — done.** ABI, host contract, handle safety, interaction port, build.
 - **Faz 1 — done.** GL 3.3 backend, line + scatter, the SDF text renderer,
   grid/axes/labels/title, theme and axis styling, offscreen readback, and the
-  GLFW host with a four-panel gallery (`-DPHOTON_BUILD_GLFW_HOST=ON`).
+  GLFW host with a gallery (`-DPHOTON_BUILD_GLFW_HOST=ON`).
 - **Faz 2 — done.** Qt Quick (`QQuickFramebufferObject`) and Qt Widgets
   (`QOpenGLWidget`) hosts, both driving the same demo charts as GLFW from
   `hosts/common/panels.c`. *The second host is what proves the first host's
