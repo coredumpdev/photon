@@ -645,10 +645,66 @@ extern "C" ph_result PH_CALL ph_plot_add_pie(ph_plot handle, const ph_pie_desc* 
   }
 }
 
+extern "C" void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out) {
+  if (!out) return;
+  *out = ph_errorbar_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_errorbar_desc));
+  out->width = 1.5f;
+  out->cap_size = 6.0f;
+  out->band_opacity = 0.2f;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" void PH_CALL ph_box_desc_init(ph_box_desc* out) {
+  if (!out) return;
+  *out = ph_box_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_box_desc));
+  out->width = 0.6;
+  out->render_type = PH_RENDER_STATIC;
+}
+
 extern "C" ph_result PH_CALL ph_plot_add_stem(ph_plot handle, const ph_stem_desc* desc,
                                               ph_layer* out) {
   return add_xy_layer<ph_stem_desc, photon::StemLayer>(handle, desc, out, ph_stem_desc_init,
                                                        "ph_stem_desc");
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_errorbar(ph_plot handle, const ph_errorbar_desc* desc,
+                                                  ph_layer* out) {
+  return add_xy_layer<ph_errorbar_desc, photon::ErrorBarLayer>(handle, desc, out,
+                                                               ph_errorbar_desc_init,
+                                                               "ph_errorbar_desc");
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_box(ph_plot handle, const ph_box_desc* desc,
+                                             ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_box_desc.struct_size is larger than this build's");
+  }
+  const ph_box_desc normalized = normalize(desc, ph_box_desc_init);
+  if (normalized.group_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "group_count must be non-negative");
+  }
+  if (normalized.group_count > 0 && !normalized.groups) {
+    return fail(PH_E_INVALID_ARGUMENT, "groups must be non-null when group_count > 0");
+  }
+  for (int32_t i = 0; i < normalized.group_count; ++i) {
+    const ph_box_group& group = normalized.groups[i];
+    if (group.count < 0) return fail(PH_E_INVALID_ARGUMENT, "group count must be non-negative");
+    if (group.count > 0 && !group.values) {
+      return fail(PH_E_INVALID_ARGUMENT, "group values must be non-null when count > 0");
+    }
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::BoxLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating box layer");
+  }
 }
 
 extern "C" ph_result PH_CALL ph_plot_add_patches(ph_plot handle, const ph_patches_desc* desc,

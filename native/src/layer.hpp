@@ -283,6 +283,90 @@ class StemLayer : public XYLayer {
   gl::GLuint tip_buffer_ = 0;
 };
 
+/**
+ * Whiskers, caps and an optional band around each point.
+ *
+ * Three programs over one point set: the band as a triangle strip in data
+ * space, the whiskers as pixel-thick segments, the caps as pixel-sized ticks.
+ * Everything but the band is measured in pixels, so an error bar keeps its
+ * weight at any zoom.
+ */
+class ErrorBarLayer : public XYLayer {
+ public:
+  explicit ErrorBarLayer(const ph_errorbar_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  float width_ = 1.5f;
+  float cap_size_ = 6.0f;
+  float band_opacity_ = 0.2f;
+  bool whiskers_ = true;
+  bool show_band_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+
+  /// Four floats per whisker: (x0, y0, x1, y1) in offset data space.
+  std::vector<float> segments_;
+  /// Three floats per cap: (x, y, orient), orient 0 horizontal / 1 vertical.
+  std::vector<float> caps_;
+  /// Interleaved high/low pairs, drawn as one triangle strip.
+  std::vector<float> band_strip_;
+  ph_range err_x_{0.0, 0.0};
+  ph_range err_y_{0.0, 0.0};
+  bool err_bounds_ = false;
+  bool dirty_ = true;
+
+  gl::GLuint seg_vao_ = 0;
+  gl::GLuint cap_vao_ = 0;
+  gl::GLuint band_vao_ = 0;
+  gl::GLuint seg_corner_buffer_ = 0;
+  gl::GLuint quad_corner_buffer_ = 0;
+  gl::GLuint seg_buffer_ = 0;
+  gl::GLuint cap_buffer_ = 0;
+  gl::GLuint band_buffer_ = 0;
+};
+
+/**
+ * Tukey boxes, one per group, optionally as violins.
+ *
+ * The quartiles are computed here rather than asked for, so a caller hands over
+ * samples. Three primitives share one program and one buffer: triangles for the
+ * bodies, lines for the outlines, medians and whiskers, and points for the
+ * outliers.
+ */
+class BoxLayer : public Layer {
+ public:
+  explicit BoxLayer(const ph_box_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  /// Position + colour, six floats per vertex, in three consecutive runs:
+  /// triangles, then lines, then points.
+  std::vector<float> vertices_;
+  size_t triangle_count_ = 0;
+  size_t line_start_ = 0;
+  size_t line_count_ = 0;
+  size_t point_start_ = 0;
+  size_t point_count_ = 0;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  ph_range box_x_{0.0, 0.0};
+  ph_range box_y_{0.0, 0.0};
+  bool box_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+};
+
 class PatchesLayer : public Layer {
  public:
   explicit PatchesLayer(const ph_patches_desc& desc);

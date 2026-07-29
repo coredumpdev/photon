@@ -388,6 +388,133 @@ int main(void) {
   CHECK(magenta < 18432.0 * 0.16 * 1.05);
 
   CHECK_EQ(ph_plot_destroy(fill_plot), PH_OK);
+
+  /* ---- error bars: the band is a strip whose area is arithmetic ---- */
+
+  ph_plot band_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &band_plot), PH_OK);
+
+  /* Two points spanning the width at y=5 with a symmetric error of 2, drawn as
+   * an opaque band: y runs 3 to 7, so 40% of the region. The whiskers are off
+   * so nothing else contributes to the count. */
+  const double err_x[2] = {0.0, 10.0};
+  const double err_y[2] = {5.0, 5.0};
+  ph_errorbar_desc err_desc;
+  ph_errorbar_desc_init(&err_desc);
+  err_desc.x = err_x;
+  err_desc.y = err_y;
+  err_desc.count = 2;
+  err_desc.y_err = 2.0;
+  err_desc.band = 1;
+  err_desc.band_opacity = 1.0f;
+  err_desc.no_whiskers = 1;
+  CHECK_EQ(ph_color_parse("#00ffff", &err_desc.color), PH_OK);
+  ph_layer err_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_errorbar(band_plot, &err_desc, &err_layer) != PH_OK) {
+    printf("  FAIL add_errorbar: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* band_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!band_pixels) return 1;
+  const ph_result band_result =
+      ph_plot_render_pixels(band_plot, patch_w, patch_h, 1.0f, band_pixels, patch_w * 4);
+  if (band_result != PH_OK) {
+    printf("  FAIL errorbar render (%d): %s\n", band_result, ph_last_error());
+    return 1;
+  }
+  long band_px = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = band_pixels + (size_t)i * 4;
+    if (p[3] > 200 && p[0] < 40 && p[1] > 200 && p[2] > 200) band_px++;
+  }
+  free(band_pixels);
+  printf("  errorbar band=%ld px (expect ~%.0f)\n", band_px, 18432.0 * 0.40);
+  CHECK(band_px > 18432.0 * 0.40 * 0.95);
+  CHECK(band_px < 18432.0 * 0.40 * 1.05);
+  CHECK_EQ(ph_plot_destroy(band_plot), PH_OK);
+
+  /* ---- box: the body area, and that an outlier is a disc and not a pixel ---- */
+
+  ph_plot box_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &box_plot), PH_OK);
+
+  /* Five values chosen so the quartiles are exact: q1 = 2.5, q3 = 7.5. With a
+   * width of 4 the body is 40% of the region across and 50% down. */
+  const double box_values[5] = {0.0, 2.5, 5.0, 7.5, 10.0};
+  ph_box_group box_group;
+  memset(&box_group, 0, sizeof(box_group));
+  box_group.position = 5.0;
+  box_group.values = box_values;
+  box_group.count = 5;
+  CHECK_EQ(ph_color_parse("#ff0000", &box_group.color), PH_OK);
+
+  ph_box_desc box_desc;
+  ph_box_desc_init(&box_desc);
+  box_desc.groups = &box_group;
+  box_desc.group_count = 1;
+  box_desc.width = 4.0;
+  ph_layer box_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_box(box_plot, &box_desc, &box_layer) != PH_OK) {
+    printf("  FAIL add_box: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* box_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!box_pixels) return 1;
+  const ph_result box_result =
+      ph_plot_render_pixels(box_plot, patch_w, patch_h, 1.0f, box_pixels, patch_w * 4);
+  if (box_result != PH_OK) {
+    printf("  FAIL box render (%d): %s\n", box_result, ph_last_error());
+    return 1;
+  }
+  /* The body is 35% red on a transparent background, so both the colour and
+   * the alpha come back at about a third — premultiplied, hence red > 60 with
+   * nothing in the other channels rather than a solid 255. */
+  long reddish = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = box_pixels + (size_t)i * 4;
+    if (p[3] > 60 && p[0] > 60 && p[0] > p[1] + 20 && p[2] + 20 < p[0]) reddish++;
+  }
+  free(box_pixels);
+  /* 20% of the region for the body, plus the whiskers reaching the extremes. */
+  printf("  box body=%ld px (expect ~%.0f)\n", reddish, 18432.0 * 0.20);
+  CHECK(reddish > 18432.0 * 0.20 * 0.95);
+  CHECK(reddish < 18432.0 * 0.20 * 1.15);
+  CHECK_EQ(ph_layer_destroy(box_layer), PH_OK);
+
+  /* Now a group with one outlier well above the fence. It is drawn with
+   * gl_PointSize, which a desktop core profile ignores unless
+   * GL_PROGRAM_POINT_SIZE is enabled — and an ignored point size is one pixel,
+   * not an error. So this counts the disc. */
+  const double outlier_values[6] = {4.0, 4.5, 5.0, 5.5, 6.0, 9.5};
+  box_group.values = outlier_values;
+  box_group.count = 6;
+  if (ph_plot_add_box(box_plot, &box_desc, &box_layer) != PH_OK) {
+    printf("  FAIL add_box (outlier): %s\n", ph_last_error());
+    return 1;
+  }
+  unsigned char* outlier_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!outlier_pixels) return 1;
+  if (ph_plot_render_pixels(box_plot, patch_w, patch_h, 1.0f, outlier_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL box outlier render: %s\n", ph_last_error());
+    return 1;
+  }
+  /* Rows 16..50 are the top of the region. The whisker cap reaches y=6, which
+   * is row 74 — so nothing but the outlier at y=9.5 is up there. */
+  long disc = 0;
+  for (int row = 16; row < 50; row++) {
+    for (int col = 56; col < 184; col++) {
+      const unsigned char* p = outlier_pixels + ((size_t)row * patch_w + col) * 4;
+      if (p[3] > 60 && p[0] > 60 && p[0] > p[1] + 20 && p[2] + 20 < p[0]) disc++;
+    }
+  }
+  free(outlier_pixels);
+  printf("  box outlier disc=%ld px\n", disc);
+  CHECK(disc >= 8);
+
+  CHECK_EQ(ph_plot_destroy(box_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

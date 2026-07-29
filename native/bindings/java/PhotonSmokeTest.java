@@ -392,6 +392,67 @@ public final class PhotonSmokeTest {
         ran("ph_pie_desc_init", "ph_stem_desc_init", "ph_plot_add_pie", "ph_plot_add_stem");
     }
 
+    /** Error bars and box plots — the two layers whose bounds are computed. */
+    static void errorBarsAndBoxes(Arena arena, long plot) {
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, 3);
+        MemorySegment ys = arena.allocate(ValueLayout.JAVA_DOUBLE, 3);
+        for (int i = 0; i < 3; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 10.0);
+        }
+        MemorySegment err = ph_errorbar_desc.allocate(arena);
+        ph_errorbar_desc_init(err);
+        err.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_X, xs);
+        err.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_Y, ys);
+        err.set(ValueLayout.JAVA_INT, ph_errorbar_desc.OFFSET_COUNT, 3);
+        err.set(ValueLayout.JAVA_DOUBLE, ph_errorbar_desc.OFFSET_Y_ERR, 2.0);
+        err.set(ValueLayout.JAVA_DOUBLE, ph_errorbar_desc.OFFSET_X_ERR, 0.5);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_errorbar(plot, err, handle), PH_OK, "ph_plot_add_errorbar");
+        long errLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(errLayer, bx, by), PH_OK, "errorbar bounds");
+        // The bounds are the whisker ends, not the points: x runs 0-0.5 to
+        // 2+0.5 and y is 10 plus or minus 2 for every point.
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -0.5, "errorbar x lo");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 2.5, "errorbar x hi");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 8.0, "errorbar y lo");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 12.0, "errorbar y hi");
+
+        // 1..9 plus a lone 100: the quartiles are 3 and 7, so the fences sit at
+        // -3 and 13 and the 100 is the only outlier. The bounds have to reach
+        // it — an outlier drawn outside the view would look like a bug.
+        MemorySegment values = arena.allocate(ValueLayout.JAVA_DOUBLE, 10);
+        for (int i = 0; i < 9; i++) values.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i + 1);
+        values.setAtIndex(ValueLayout.JAVA_DOUBLE, 9, 100.0);
+
+        MemorySegment group = arena.allocate(ph_box_group.LAYOUT);
+        group.set(ValueLayout.JAVA_DOUBLE, ph_box_group.OFFSET_POSITION, 1.0);
+        group.set(ValueLayout.ADDRESS, ph_box_group.OFFSET_VALUES, values);
+        group.set(ValueLayout.JAVA_INT, ph_box_group.OFFSET_COUNT, 10);
+        group.set(ValueLayout.JAVA_INT, ph_box_group.OFFSET_COLOR, PH_COLOR_AUTO);
+
+        MemorySegment box = ph_box_desc.allocate(arena);
+        ph_box_desc_init(box);
+        box.set(ValueLayout.ADDRESS, ph_box_desc.OFFSET_GROUPS, group);
+        box.set(ValueLayout.JAVA_INT, ph_box_desc.OFFSET_GROUP_COUNT, 1);
+        box.set(ValueLayout.JAVA_DOUBLE, ph_box_desc.OFFSET_WIDTH, 0.8);
+        checkEq(ph_plot_add_box(plot, box, handle), PH_OK, "ph_plot_add_box");
+        long boxLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(boxLayer, bx, by), PH_OK, "box bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 0.6, "box x lo");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 1.4, "box x hi");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 1.0, "box y lo");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 100.0, "box y hi");
+
+        checkEq(ph_layer_destroy(errLayer), PH_OK, "the error bar layer is destroyed");
+        checkEq(ph_layer_destroy(boxLayer), PH_OK, "the box layer is destroyed");
+        ran("ph_errorbar_desc_init", "ph_box_desc_init", "ph_plot_add_errorbar",
+            "ph_plot_add_box");
+    }
+
     /** Filled polygons, including the hole path through the triangulator. */
     static void patches(Arena arena, long plot) {
         // A 10x10 square with a 4x4 hole: eight vertices, the hole starting at
@@ -556,6 +617,8 @@ public final class PhotonSmokeTest {
             areaAndBars(arena, plot);
             step("pieAndStem");
             pieAndStem(arena, plot);
+            step("errorBarsAndBoxes");
+            errorBarsAndBoxes(arena, plot);
             step("patches");
             patches(arena, plot);
             step("interaction");

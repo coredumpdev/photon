@@ -74,10 +74,9 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (10 remaining of 17)
+### Layers with their own shaders (8 remaining of 17)
 
-`box` `candlestick` `contour` `errorbar` `graph` `heatmap` `hexbin` `image`
-`ohlc` `quiver`
+`candlestick` `contour` `graph` `heatmap` `hexbin` `image` `ohlc` `quiver`
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
       under it.
@@ -87,6 +86,12 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       over the same points.
 - [x] ~~`area` and `bar`~~ — the two most-used types after line and scatter.
       Neither has `setData`, so neither can stream yet; see the note below.
+- [x] ~~`errorbar`~~ — the stem segment program for the whiskers, the area
+      program for the band, and one new program for the pixel-sized caps.
+- [x] ~~`box`~~ — one program over three primitive runs in one buffer, with
+      `src/stats/stats.cpp` (quantiles, Tukey fences, KDE) under it. The
+      outlier discs need `GL_PROGRAM_POINT_SIZE`, which WebGL2 has permanently
+      on and a desktop core profile does not.
 - [ ] Grouped and stacked bars are the caller's job in the web core too
       (`addGroupedBars` passes an `offset`, `addStackedBars` a cumulative
       `base`), and both fields are in `ph_bar_desc`. What is missing is the
@@ -122,6 +127,8 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 - [ ] `ml/metrics.ts`, `ml/reduce.ts`, `ml/charts.ts`, `ml/model.ts`,
       `ml/model-chart.ts`
 - [ ] `stats/regression.ts`, `signal.ts`, `waterfall.ts`, `charts.ts`
+      (`stats/index.ts`'s quantiles, `boxStats` and `kde` are already in
+      `src/stats/stats.cpp`, with `tests/stats_test.cpp` over them)
 - [x] ~~`geo/earcut.ts`~~ — ported with its vitest suite transcribed, plus two
       cases the TypeScript does not have (winding independence, two holes).
 - [ ] `geo/delaunay.ts` (needed by contour)

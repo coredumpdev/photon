@@ -1,5 +1,5 @@
 /**
- * The four demo charts, built with @photonviz/core.
+ * The ten demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -12,6 +12,11 @@ import { Plot } from "@photonviz/core";
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
 const STREAM_POINTS = 400;
+const SLICES = 5;
+const IMPULSES = 24;
+const TRIALS = 14;
+const BOXES = 5;
+const BOX_SAMPLES = 60;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -172,4 +177,98 @@ function funnel(container) {
   return plot;
 }
 
-export const PANELS = [waves, decay, scatter, streaming, revenue, funnel];
+function share(container) {
+  const plot = new Plot(container, {
+    ...common,
+    title: "Share",
+    // A pie has no axes worth reading, and the grid behind it is noise.
+    axes: {
+      x: { showAxisLine: false, showTicks: false, showGrid: false },
+      y: { showAxisLine: false, showTicks: false, showGrid: false },
+    },
+  });
+  plot.addPie({ values: [38, 24, 18, 12, 8], radius: 1.0, innerRadius: 0.55 });
+  return plot;
+}
+
+function impulse(container) {
+  const xs = new Float64Array(IMPULSES);
+  const ys = new Float64Array(IMPULSES);
+  for (let i = 0; i < IMPULSES; i++) {
+    xs[i] = i;
+    ys[i] = Math.exp(-i * 0.12) * Math.cos(i * 0.7);
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Impulse",
+    axes: { x: { title: "n" }, y: { title: "h[n]" } },
+  });
+  plot.addStem({ x: xs, y: ys, color: "#22d3ee", width: 2, markerSize: 7 });
+  return plot;
+}
+
+function yieldCurve(container) {
+  const xs = new Float64Array(TRIALS);
+  const ys = new Float64Array(TRIALS);
+  const err = new Float64Array(TRIALS);
+  for (let i = 0; i < TRIALS; i++) {
+    const dose = i * 0.5;
+    xs[i] = dose;
+    ys[i] = 90.0 / (1.0 + Math.exp(-(dose - 3.2) * 1.1));
+    err[i] = 3.0 + ys[i] * 0.09;
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Yield",
+    axes: { x: { title: "dose (mg)" }, y: { title: "yield (%)" } },
+  });
+  plot.addErrorBar({ x: xs, y: ys, yerr: err, band: true, color: "#f59e0b" });
+  plot.addLine({ x: xs, y: ys, color: "#f59e0b", width: 2 });
+  return plot;
+}
+
+function latency(container) {
+  const centre = [1.6, 2.0, 2.35, 1.85, 2.6];
+  const spread = [0.28, 0.34, 0.22, 0.55, 0.30];
+  const colors = ["#38bdf8", "#22d3ee", "#34d399", "#facc15", "#f472b6"];
+
+  // The same LCG as the C panels, drawn in the same order, so the quartiles
+  // match rather than merely resemble each other.
+  let seed = 987654321;
+  const next = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216.0;
+  };
+  const groups = [];
+  for (let b = 0; b < BOXES; b++) {
+    const values = new Float64Array(BOX_SAMPLES);
+    for (let i = 0; i < BOX_SAMPLES; i++) {
+      const u = next();
+      const v = next();
+      const gauss = Math.sqrt(-2.0 * Math.log(u + 1e-12)) * Math.cos(6.283185307179586 * v);
+      values[i] = Math.exp(centre[b] + spread[b] * gauss);
+    }
+    groups.push({ position: b, values, color: colors[b] });
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Latency",
+    axes: {
+      x: {
+        title: "service",
+        ticks: [
+          { value: 0, label: "api" }, { value: 1, label: "auth" },
+          { value: 2, label: "db" }, { value: 3, label: "cdn" },
+          { value: 4, label: "ui" },
+        ],
+      },
+      y: { title: "ms" },
+    },
+  });
+  plot.addBox({ groups, width: 0.62 });
+  return plot;
+}
+
+export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
+                       share, impulse, yieldCurve, latency];

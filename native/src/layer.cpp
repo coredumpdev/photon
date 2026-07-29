@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "geo/earcut.hpp"
+#include "stats/stats.hpp"
 #include "gl/program.hpp"
 
 namespace photon {
@@ -397,6 +398,55 @@ void main() {
   if (r > 1.0) discard;
   float alpha = smoothstep(1.0, 1.0 - 0.15, r);
   outColor = vec4(uColor.rgb * uColor.a * alpha, uColor.a * alpha);
+})";
+
+/// Error-bar caps: a pixel-sized tick centred on a data point. `orient` picks
+/// the axis it lies along, so one program draws both the y and x caps.
+const char* const kCapVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec3 aCap;
+uniform vec2 uResolution;
+uniform float uCapSize;
+uniform float uWidth;
+)";
+
+const char* const kCapVertMain = R"(
+void main() {
+  vec2 c = (dataToClip(aCap.xy) * 0.5 + 0.5) * uResolution;
+  vec2 h = aCap.z < 0.5 ? vec2(uCapSize * 0.5, uWidth * 0.5) : vec2(uWidth * 0.5, uCapSize * 0.5);
+  vec2 pos = c + aCorner * h;
+  gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+/// Box: one program for triangles, lines and points, with the point path
+/// clipped to a disc in the fragment shader.
+const char* const kBoxVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec4 aColor;
+uniform float uPointSize;
+)";
+
+const char* const kBoxVertMain = R"(
+out vec4 vColor;
+void main() {
+  vColor = aColor;
+  gl_PointSize = uPointSize;
+  gl_Position = vec4(dataToClip(aPos), 0.0, 1.0);
+})";
+
+const char* const kBoxFrag = R"(#version 300 es
+precision highp float;
+in vec4 vColor;
+uniform float uIsPoint;
+out vec4 outColor;
+void main() {
+  if (uIsPoint > 0.5) {
+    vec2 d = gl_PointCoord - 0.5;
+    if (length(d) > 0.5) discard;
+  }
+  outColor = vec4(vColor.rgb * vColor.a, vColor.a);
 })";
 
 /// The core's default area fill, rgba(59,130,246,0.4) — translucent on purpose,
@@ -1640,5 +1690,458 @@ void StemLayer::release_gl(Api& api) {
   corner_buffer_ = quad_buffer_ = segment_buffer_ = tip_buffer_ = 0;
   dirty_ = true;
 }
+
+// -- ErrorBarLayer ----------------------------------------------------------
+
+ErrorBarLayer::ErrorBarLayer(const ph_errorbar_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  if (desc.width > 0.0f) width_ = desc.width;
+  // Negative hides the caps; zero keeps a zero-initialized struct meaning the
+  // core's default rather than "no caps".
+  if (desc.cap_size != 0.0f) cap_size_ = std::max(0.0f, desc.cap_size);
+  if (desc.band_opacity > 0.0f) band_opacity_ = std::min(desc.band_opacity, 1.0f);
+  whiskers_ = desc.no_whiskers == 0;
+  show_band_ = desc.band != 0;
+
+  const size_t n =
+      (desc.count > 0 && desc.x && desc.y) ? static_cast<size_t>(desc.count) : 0;
+  if (n == 0) return;
+  x_.assign(desc.x, desc.x + n);
+  y_.assign(desc.y, desc.y + n);
+  x_ref_ = x_[0];
+  y_ref_ = y_[0];
+
+  // An error is a per-point array when one is given and a single number
+  // otherwise; the asymmetric arrays win over the symmetric one, which is how
+  // the core resolves the same four options.
+  const auto err_at = [](const double* array, double scalar, size_t i) {
+    return array ? array[i] : scalar;
+  };
+  const bool has_y = desc.y_err_array || desc.y_err_low_array || desc.y_err_high_array ||
+                     desc.y_err != 0.0;
+  const bool has_x = desc.x_err_array || desc.x_err != 0.0;
+
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+
+  segments_.reserve(n * 8);
+  caps_.reserve(n * 6);
+  band_strip_.reserve(n * 4);
+  for (size_t i = 0; i < n; ++i) {
+    const double x = x_[i];
+    const double y = y_[i];
+    const double e_lo = desc.y_err_low_array ? desc.y_err_low_array[i]
+                                             : err_at(desc.y_err_array, desc.y_err, i);
+    const double e_hi = desc.y_err_high_array ? desc.y_err_high_array[i]
+                                              : err_at(desc.y_err_array, desc.y_err, i);
+    const double e_x = err_at(desc.x_err_array, desc.x_err, i);
+    const double y_lo = y - e_lo;
+    const double y_hi = y + e_hi;
+    const double x_lo = x - e_x;
+    const double x_hi = x + e_x;
+
+    const float ox = static_cast<float>(x - x_ref_);
+    const float oy = static_cast<float>(y - y_ref_);
+    const float oy_lo = static_cast<float>(y_lo - y_ref_);
+    const float oy_hi = static_cast<float>(y_hi - y_ref_);
+
+    if (has_y) {
+      segments_.insert(segments_.end(), {ox, oy_lo, ox, oy_hi});
+      caps_.insert(caps_.end(), {ox, oy_lo, 0.0f, ox, oy_hi, 0.0f});
+    }
+    if (has_x) {
+      const float ox_lo = static_cast<float>(x_lo - x_ref_);
+      const float ox_hi = static_cast<float>(x_hi - x_ref_);
+      segments_.insert(segments_.end(), {ox_lo, oy, ox_hi, oy});
+      caps_.insert(caps_.end(), {ox_lo, oy, 1.0f, ox_hi, oy, 1.0f});
+    }
+    // The band is a strip alternating high/low along x, so it exists whether or
+    // not it is drawn — cheap, and it means toggling `band` needs no rebuild.
+    band_strip_.insert(band_strip_.end(), {ox, oy_hi, ox, oy_lo});
+
+    if (!finite(x_lo) || !finite(x_hi) || !finite(y_lo) || !finite(y_hi)) continue;
+    min_x = std::min(min_x, x_lo);
+    max_x = std::max(max_x, x_hi);
+    min_y = std::min(min_y, y_lo);
+    max_y = std::max(max_y, y_hi);
+    err_bounds_ = true;
+  }
+  if (err_bounds_) {
+    err_x_ = ph_range{min_x, max_x};
+    err_y_ = ph_range{min_y, max_y};
+  }
+}
+
+bool ErrorBarLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!err_bounds_) return false;
+  x = err_x_;
+  y = err_y_;
+  return true;
+}
+
+bool ErrorBarLayer::ensure_gl(Api& api, std::string& error) {
+  if (seg_vao_ == 0) {
+    api.GenVertexArrays(1, &seg_vao_);
+    api.GenVertexArrays(1, &cap_vao_);
+    api.GenVertexArrays(1, &band_vao_);
+    api.GenBuffers(1, &seg_corner_buffer_);
+    api.GenBuffers(1, &quad_corner_buffer_);
+    api.GenBuffers(1, &seg_buffer_);
+    api.GenBuffers(1, &cap_buffer_);
+    api.GenBuffers(1, &band_buffer_);
+    if (seg_vao_ == 0 || cap_vao_ == 0 || band_vao_ == 0) {
+      error = "failed to create error bar vertex arrays";
+      return false;
+    }
+
+    api.BindVertexArray(seg_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, seg_corner_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(kLineCorners)), kLineCorners,
+                   GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, seg_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+
+    api.BindVertexArray(cap_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, quad_corner_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(kQuadCorners)), kQuadCorners,
+                   GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, cap_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 3, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+
+    api.BindVertexArray(band_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, band_buffer_);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+
+    api.BindVertexArray(0);
+  }
+
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, seg_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(segments_.size() * sizeof(float)),
+                   segments_.empty() ? nullptr : segments_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, cap_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(caps_.size() * sizeof(float)),
+                   caps_.empty() ? nullptr : caps_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, band_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(band_strip_.size() * sizeof(float)),
+                   band_strip_.empty() ? nullptr : band_strip_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool ErrorBarLayer::draw(const DrawState& state, std::string& error) {
+  if (!err_bounds_ || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  const Rgba colour = unpack_color(color_);
+
+  if (show_band_ && band_strip_.size() >= 8) {
+    // The band is the area layer's program: a triangle strip in data space
+    // under one colour, which is what an area already is.
+    static const std::vector<std::string> kBandUniforms = with_transform_uniforms({"uColor"});
+    const Program* band = get_program(api, "area", vertex_source(kAreaVertBody, kAreaVertMain),
+                                      kAreaFrag, kBandUniforms, state.gfx, error);
+    if (!band) return false;
+    api.UseProgram(band->id);
+    set_transform_uniforms(api, *band, state.x, state.y, x_ref_, y_ref_);
+    api.Uniform4f(band->uniform("uColor"), colour.r, colour.g, colour.b,
+                  colour.a * band_opacity_);
+    api.BindVertexArray(band_vao_);
+    api.DrawArrays(GL_TRIANGLE_STRIP, 0, static_cast<GLsizei>(band_strip_.size() / 2));
+    api.BindVertexArray(0);
+  }
+
+  if (!whiskers_ || segments_.empty()) return true;
+
+  // The whiskers are the stem layer's program, for the same reason: a whisker
+  // and a stem are both a data-space segment given a pixel width.
+  static const std::vector<std::string> kSegUniforms =
+      with_transform_uniforms({"uColor", "uResolution", "uWidth"});
+  const Program* seg = get_program(api, "stem", vertex_source(kStemVertBody, kStemVertMain),
+                                   kStemFrag, kSegUniforms, state.gfx, error);
+  if (!seg) return false;
+  api.UseProgram(seg->id);
+  set_transform_uniforms(api, *seg, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(seg->uniform("uColor"), colour.r, colour.g, colour.b, colour.a);
+  api.Uniform2f(seg->uniform("uResolution"), static_cast<GLfloat>(state.pixel_width),
+                static_cast<GLfloat>(state.pixel_height));
+  api.Uniform1f(seg->uniform("uWidth"), width_ * state.dpr);
+  api.BindVertexArray(seg_vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(segments_.size() / 4));
+  api.BindVertexArray(0);
+
+  if (cap_size_ <= 0.0f || caps_.empty()) return true;
+
+  static const std::vector<std::string> kCapUniforms =
+      with_transform_uniforms({"uColor", "uResolution", "uCapSize", "uWidth"});
+  const Program* cap = get_program(api, "errorbar-cap", vertex_source(kCapVertBody, kCapVertMain),
+                                   kStemFrag, kCapUniforms, state.gfx, error);
+  if (!cap) return false;
+  api.UseProgram(cap->id);
+  set_transform_uniforms(api, *cap, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(cap->uniform("uColor"), colour.r, colour.g, colour.b, colour.a);
+  api.Uniform2f(cap->uniform("uResolution"), static_cast<GLfloat>(state.pixel_width),
+                static_cast<GLfloat>(state.pixel_height));
+  api.Uniform1f(cap->uniform("uCapSize"), cap_size_ * state.dpr);
+  api.Uniform1f(cap->uniform("uWidth"), width_ * state.dpr);
+  api.BindVertexArray(cap_vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(caps_.size() / 3));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void ErrorBarLayer::release_gl(Api& api) {
+  if (seg_vao_ == 0) return;
+  const GLuint vaos[] = {seg_vao_, cap_vao_, band_vao_};
+  api.DeleteVertexArrays(3, vaos);
+  const GLuint buffers[] = {seg_corner_buffer_, quad_corner_buffer_, seg_buffer_, cap_buffer_,
+                            band_buffer_};
+  api.DeleteBuffers(5, buffers);
+  seg_vao_ = cap_vao_ = band_vao_ = 0;
+  seg_corner_buffer_ = quad_corner_buffer_ = seg_buffer_ = cap_buffer_ = band_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- BoxLayer ---------------------------------------------------------------
+
+BoxLayer::BoxLayer(const ph_box_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  render_type_ = desc.render_type;
+  const double half = (desc.width > 0.0 ? desc.width : 0.6) / 2.0;
+  const bool show_box = desc.no_box == 0;
+  const bool show_violin = desc.violin != 0;
+
+  const size_t groups =
+      desc.groups && desc.group_count > 0 ? static_cast<size_t>(desc.group_count) : 0;
+  if (groups == 0) return;
+  x_ref_ = desc.groups[0].position;
+  y_ref_ = desc.groups[0].values && desc.groups[0].count > 0 ? desc.groups[0].values[0] : 0.0;
+  if (!finite(x_ref_)) x_ref_ = 0.0;
+  if (!finite(y_ref_)) y_ref_ = 0.0;
+
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+  const auto track = [&](double x, double y) {
+    if (!finite(x) || !finite(y)) return;
+    min_x = std::min(min_x, x);
+    max_x = std::max(max_x, x);
+    min_y = std::min(min_y, y);
+    max_y = std::max(max_y, y);
+    box_bounds_ = true;
+  };
+
+  std::vector<float> triangles;
+  std::vector<float> lines;
+  std::vector<float> points;
+  const auto push = [&](std::vector<float>& into, double x, double y, const Rgba& c) {
+    into.push_back(static_cast<float>(x - x_ref_));
+    into.push_back(static_cast<float>(y - y_ref_));
+    into.push_back(c.r);
+    into.push_back(c.g);
+    into.push_back(c.b);
+    into.push_back(c.a);
+  };
+
+  for (size_t g = 0; g < groups; ++g) {
+    const ph_box_group& group = desc.groups[g];
+    // A non-finite position makes every vertex in the group NaN, and a plot
+    // that silently draws nothing is worse to debug than one that draws the
+    // rest — so this group is skipped and the others still appear.
+    if (!finite(group.position)) continue;
+    const stats::BoxStats box = stats::box_stats(
+        group.values, group.count > 0 ? static_cast<size_t>(group.count) : 0);
+    if (!box.valid) continue;
+
+    const Rgba stroke = unpack_color(group.color);
+    Rgba fill = stroke;
+    fill.a = 0.35f;
+
+    const double cx = group.position;
+    track(cx - half, box.whisker_lo);
+    track(cx + half, box.whisker_hi);
+
+    if (show_violin) {
+      const stats::Density d = stats::kde(group.values,
+                                          group.count > 0 ? static_cast<size_t>(group.count) : 0,
+                                          box.min, box.max, 48);
+      double peak = 0.0;
+      for (const double v : d.ys) peak = std::max(peak, v);
+      if (peak <= 0.0) peak = 1.0;
+      for (size_t i = 0; i + 1 < d.xs.size(); ++i) {
+        const double w0 = (d.ys[i] / peak) * half;
+        const double w1 = (d.ys[i + 1] / peak) * half;
+        const double y0 = d.xs[i];
+        const double y1 = d.xs[i + 1];
+        push(triangles, cx - w0, y0, fill);
+        push(triangles, cx + w0, y0, fill);
+        push(triangles, cx + w1, y1, fill);
+        push(triangles, cx - w0, y0, fill);
+        push(triangles, cx + w1, y1, fill);
+        push(triangles, cx - w1, y1, fill);
+      }
+      track(cx - half, box.min);
+      track(cx + half, box.max);
+    }
+
+    if (!show_box) continue;
+
+    const double x0 = cx - half;
+    const double x1 = cx + half;
+    // A violin already fills the middle; drawing the body over it would only
+    // darken the same pixels.
+    if (!show_violin) {
+      push(triangles, x0, box.q1, fill);
+      push(triangles, x1, box.q1, fill);
+      push(triangles, x1, box.q3, fill);
+      push(triangles, x0, box.q1, fill);
+      push(triangles, x1, box.q3, fill);
+      push(triangles, x0, box.q3, fill);
+    }
+
+    const double edges[4][4] = {{x0, box.q1, x1, box.q1},
+                                {x1, box.q1, x1, box.q3},
+                                {x1, box.q3, x0, box.q3},
+                                {x0, box.q3, x0, box.q1}};
+    for (const auto& e : edges) {
+      push(lines, e[0], e[1], stroke);
+      push(lines, e[2], e[3], stroke);
+    }
+    push(lines, x0, box.median, stroke);
+    push(lines, x1, box.median, stroke);
+    push(lines, cx, box.q3, stroke);
+    push(lines, cx, box.whisker_hi, stroke);
+    push(lines, cx, box.q1, stroke);
+    push(lines, cx, box.whisker_lo, stroke);
+    const double cap_half = half * 0.5;
+    push(lines, cx - cap_half, box.whisker_hi, stroke);
+    push(lines, cx + cap_half, box.whisker_hi, stroke);
+    push(lines, cx - cap_half, box.whisker_lo, stroke);
+    push(lines, cx + cap_half, box.whisker_lo, stroke);
+
+    for (const double outlier : box.outliers) {
+      push(points, cx, outlier, stroke);
+      track(cx, outlier);
+    }
+  }
+
+  // One buffer, three runs: triangles, then lines, then points, so drawing is
+  // three calls into one binding rather than three bindings.
+  triangle_count_ = triangles.size() / 6;
+  line_start_ = triangle_count_;
+  line_count_ = lines.size() / 6;
+  point_start_ = line_start_ + line_count_;
+  point_count_ = points.size() / 6;
+  vertices_.reserve(triangles.size() + lines.size() + points.size());
+  vertices_.insert(vertices_.end(), triangles.begin(), triangles.end());
+  vertices_.insert(vertices_.end(), lines.begin(), lines.end());
+  vertices_.insert(vertices_.end(), points.begin(), points.end());
+
+  if (box_bounds_) {
+    box_x_ = ph_range{min_x, max_x};
+    box_y_ = ph_range{min_y, max_y};
+  }
+}
+
+bool BoxLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!box_bounds_) return false;
+  x = box_x_;
+  y = box_y_;
+  return true;
+}
+
+bool BoxLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &buffer_);
+    if (vao_ == 0) {
+      error = "failed to create box layer vertex array";
+      return false;
+    }
+    api.BindVertexArray(vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+    const GLsizei stride = 6 * static_cast<GLsizei>(sizeof(float));
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, stride, nullptr);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, stride,
+                            reinterpret_cast<const void*>(2 * sizeof(float)));
+    api.BindVertexArray(0);
+  }
+  if (dirty_) {
+    api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+                   vertices_.empty() ? nullptr : vertices_.data(), buffer_usage(render_type_));
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool BoxLayer::draw(const DrawState& state, std::string& error) {
+  if (vertices_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms =
+      with_transform_uniforms({"uPointSize", "uIsPoint"});
+  const Program* program = get_program(api, "box", vertex_source(kBoxVertBody, kBoxVertMain),
+                                       kBoxFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform1f(program->uniform("uPointSize"), 5.0f * state.dpr);
+  api.BindVertexArray(vao_);
+
+  api.Uniform1f(program->uniform("uIsPoint"), 0.0f);
+  if (triangle_count_ > 0) {
+    api.DrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(triangle_count_));
+  }
+  if (line_count_ > 0) {
+    api.DrawArrays(GL_LINES, static_cast<GLint>(line_start_),
+                   static_cast<GLsizei>(line_count_));
+  }
+  if (point_count_ > 0) {
+    // gl_PointSize is always live in WebGL2 and gated in a desktop core
+    // profile. Without this enable the outliers come out as single pixels,
+    // which reads as a rendering artefact rather than a missing GL state.
+    api.Enable(GL_PROGRAM_POINT_SIZE);
+    api.Uniform1f(program->uniform("uIsPoint"), 1.0f);
+    api.DrawArrays(GL_POINTS, static_cast<GLint>(point_start_),
+                   static_cast<GLsizei>(point_count_));
+    api.Disable(GL_PROGRAM_POINT_SIZE);
+  }
+  api.BindVertexArray(0);
+  return true;
+}
+
+void BoxLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  vao_ = 0;
+  buffer_ = 0;
+  dirty_ = true;
+}
+
 
 }  // namespace photon

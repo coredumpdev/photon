@@ -476,6 +476,90 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_errorbar_desc — 128 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_errorbar_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public int count;
+        /// <summary>offset 32</summary>
+        public IntPtr y_err_array;
+        /// <summary>offset 40</summary>
+        public double y_err;
+        /// <summary>offset 48</summary>
+        public IntPtr y_err_low_array;
+        /// <summary>offset 56</summary>
+        public IntPtr y_err_high_array;
+        /// <summary>offset 64</summary>
+        public IntPtr x_err_array;
+        /// <summary>offset 72</summary>
+        public double x_err;
+        /// <summary>offset 80</summary>
+        public uint color;
+        /// <summary>offset 84</summary>
+        public float width;
+        /// <summary>offset 88</summary>
+        public float cap_size;
+        /// <summary>offset 92</summary>
+        public int no_whiskers;
+        /// <summary>offset 96</summary>
+        public int band;
+        /// <summary>offset 100</summary>
+        public float band_opacity;
+        /// <summary>offset 104</summary>
+        public IntPtr name;
+        /// <summary>offset 112</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 120</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_box_group — 32 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_box_group
+    {
+        /// <summary>offset 0</summary>
+        public double position;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 20</summary>
+        public uint color;
+        /// <summary>offset 24</summary>
+        public IntPtr label;
+    }
+
+    /// <summary>ph_box_desc — 64 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_box_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr groups;
+        /// <summary>offset 16</summary>
+        public int group_count;
+        /// <summary>offset 24</summary>
+        public double width;
+        /// <summary>offset 32</summary>
+        public int no_box;
+        /// <summary>offset 36</summary>
+        public int violin;
+        /// <summary>offset 40</summary>
+        public IntPtr name;
+        /// <summary>offset 48</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 56</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_patch — 40 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_patch
@@ -565,6 +649,8 @@ public static partial class Ph
         "ph_bar_desc_init",
         "ph_pie_desc_init",
         "ph_stem_desc_init",
+        "ph_errorbar_desc_init",
+        "ph_box_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -588,6 +674,8 @@ public static partial class Ph
         "ph_plot_add_bar",
         "ph_plot_add_pie",
         "ph_plot_add_stem",
+        "ph_plot_add_errorbar",
+        "ph_plot_add_box",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -667,6 +755,12 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stem_desc_init")]
     public static extern void ph_stem_desc_init(out ph_stem_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_errorbar_desc_init")]
+    public static extern void ph_errorbar_desc_init(out ph_errorbar_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_box_desc_init")]
+    public static extern void ph_box_desc_init(out ph_box_desc @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_create")]
     public static extern int ph_plot_create(IntPtr desc, out ulong @out);
@@ -772,6 +866,18 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stem")]
     public static extern int ph_plot_add_stem(ulong plot, in ph_stem_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_errorbar")]
+    public static extern int ph_plot_add_errorbar(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_errorbar")]
+    public static extern int ph_plot_add_errorbar(ulong plot, in ph_errorbar_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_box")]
+    public static extern int ph_plot_add_box(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_box")]
+    public static extern int ph_plot_add_box(ulong plot, in ph_box_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_xy")]
     public static extern int ph_layer_set_xy(ulong layer, double[] x, double[] y, int count);

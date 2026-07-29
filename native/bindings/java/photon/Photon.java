@@ -662,6 +662,126 @@ public final class Photon {
         }
     }
 
+    /** ph_errorbar_desc — 128 bytes, alignment 8. */
+    public static final class ph_errorbar_desc {
+        private ph_errorbar_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("y_err_array"),
+            ValueLayout.JAVA_DOUBLE.withName("y_err"),
+            ValueLayout.ADDRESS.withName("y_err_low_array"),
+            ValueLayout.ADDRESS.withName("y_err_high_array"),
+            ValueLayout.ADDRESS.withName("x_err_array"),
+            ValueLayout.JAVA_DOUBLE.withName("x_err"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("width"),
+            ValueLayout.JAVA_FLOAT.withName("cap_size"),
+            ValueLayout.JAVA_INT.withName("no_whiskers"),
+            ValueLayout.JAVA_INT.withName("band"),
+            ValueLayout.JAVA_FLOAT.withName("band_opacity"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_errorbar_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_COUNT = 24L;
+        public static final long OFFSET_Y_ERR_ARRAY = 32L;
+        public static final long OFFSET_Y_ERR = 40L;
+        public static final long OFFSET_Y_ERR_LOW_ARRAY = 48L;
+        public static final long OFFSET_Y_ERR_HIGH_ARRAY = 56L;
+        public static final long OFFSET_X_ERR_ARRAY = 64L;
+        public static final long OFFSET_X_ERR = 72L;
+        public static final long OFFSET_COLOR = 80L;
+        public static final long OFFSET_WIDTH = 84L;
+        public static final long OFFSET_CAP_SIZE = 88L;
+        public static final long OFFSET_NO_WHISKERS = 92L;
+        public static final long OFFSET_BAND = 96L;
+        public static final long OFFSET_BAND_OPACITY = 100L;
+        public static final long OFFSET_NAME = 104L;
+        public static final long OFFSET_Y_AXIS = 112L;
+        public static final long OFFSET_RENDER_TYPE = 120L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_box_group — 32 bytes, alignment 8. */
+    public static final class ph_box_group {
+        private ph_box_group() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("position"),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.ADDRESS.withName("label")
+        ).withName("ph_box_group");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_POSITION = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_COLOR = 20L;
+        public static final long OFFSET_LABEL = 24L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_box_desc — 64 bytes, alignment 8. */
+    public static final class ph_box_desc {
+        private ph_box_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("groups"),
+            ValueLayout.JAVA_INT.withName("group_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("width"),
+            ValueLayout.JAVA_INT.withName("no_box"),
+            ValueLayout.JAVA_INT.withName("violin"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_box_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_GROUPS = 8L;
+        public static final long OFFSET_GROUP_COUNT = 16L;
+        public static final long OFFSET_WIDTH = 24L;
+        public static final long OFFSET_NO_BOX = 32L;
+        public static final long OFFSET_VIOLIN = 36L;
+        public static final long OFFSET_NAME = 40L;
+        public static final long OFFSET_Y_AXIS = 48L;
+        public static final long OFFSET_RENDER_TYPE = 56L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_patch — 40 bytes, alignment 8. */
     public static final class ph_patch {
         private ph_patch() {}
@@ -790,6 +910,8 @@ public final class Photon {
         "ph_bar_desc_init",
         "ph_pie_desc_init",
         "ph_stem_desc_init",
+        "ph_errorbar_desc_init",
+        "ph_box_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -813,6 +935,8 @@ public final class Photon {
         "ph_plot_add_bar",
         "ph_plot_add_pie",
         "ph_plot_add_stem",
+        "ph_plot_add_errorbar",
+        "ph_plot_add_box",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -854,6 +978,8 @@ public final class Photon {
     private static final MethodHandle PH_BAR_DESC_INIT = handle("ph_bar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PIE_DESC_INIT = handle("ph_pie_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_CREATE = handle("ph_plot_create", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_DESTROY = handle("ph_plot_destroy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_PLOT_VALID = handle("ph_plot_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
@@ -877,6 +1003,8 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_BAR = handle("ph_plot_add_bar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_PIE = handle("ph_plot_add_pie", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_STEM = handle("ph_plot_add_stem", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_ERRORBAR = handle("ph_plot_add_errorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_BOX = handle("ph_plot_add_box", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_XY = handle("ph_layer_set_xy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_SET_VISIBLE = handle("ph_layer_set_visible", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_VALID = handle("ph_layer_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
@@ -1040,6 +1168,22 @@ public final class Photon {
             PH_STEM_DESC_INIT.invokeExact(out);
         } catch (Throwable t) {
             throw new AssertionError("photon: ph_stem_desc_init failed", t);
+        }
+    }
+
+    public static void ph_errorbar_desc_init(MemorySegment out) {
+        try {
+            PH_ERRORBAR_DESC_INIT.invokeExact(out);
+        } catch (Throwable t) {
+            throw new AssertionError("photon: ph_errorbar_desc_init failed", t);
+        }
+    }
+
+    public static void ph_box_desc_init(MemorySegment out) {
+        try {
+            PH_BOX_DESC_INIT.invokeExact(out);
+        } catch (Throwable t) {
+            throw new AssertionError("photon: ph_box_desc_init failed", t);
         }
     }
 
@@ -1224,6 +1368,22 @@ public final class Photon {
             return (int) PH_PLOT_ADD_STEM.invokeExact(plot, desc, out);
         } catch (Throwable t) {
             throw new AssertionError("photon: ph_plot_add_stem failed", t);
+        }
+    }
+
+    public static int ph_plot_add_errorbar(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_ERRORBAR.invokeExact(plot, desc, out);
+        } catch (Throwable t) {
+            throw new AssertionError("photon: ph_plot_add_errorbar failed", t);
+        }
+    }
+
+    public static int ph_plot_add_box(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_BOX.invokeExact(plot, desc, out);
+        } catch (Throwable t) {
+            throw new AssertionError("photon: ph_plot_add_box failed", t);
         }
     }
 

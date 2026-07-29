@@ -45,7 +45,7 @@ const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
 const page = await browser.newPage({
-  viewport: { width: 1920, height: 840 },
+  viewport: { width: 3200, height: 840 },
   deviceScaleFactor: 1,
 });
 page.on("console", (message) => {
@@ -55,7 +55,7 @@ page.on("pageerror", (error) => console.error("page:", error.message));
 
 await page.goto(page_url);
 await page.waitForSelector("body[data-ready='1']", { state: "attached", timeout: 20000 });
-await page.screenshot({ path: out, clip: { x: 0, y: 0, width: 1920, height: 840 } });
+await page.screenshot({ path: out, clip: { x: 0, y: 0, width: 3200, height: 840 } });
 await browser.close();
 server.close();
 console.log("wrote " + out);

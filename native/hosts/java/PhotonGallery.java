@@ -1,4 +1,4 @@
-// The Java gallery: the same six charts as the GLFW and Qt ones, in a window.
+// The Java gallery: the same ten charts as the GLFW and Qt ones, in a window.
 //
 // This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
 // that. What it adds is the part of the ABI a headless test cannot reach: a
@@ -40,13 +40,18 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 6;
-    private static final int COLUMNS = 3;
+    private static final int PANELS = 10;
+    private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
     private static final int FUNNEL_STAGES = 5;
     private static final int SCATTER_POINTS = 1500;
     private static final int STREAM_POINTS = 400;
+    private static final int SLICES = 5;
+    private static final int IMPULSES = 24;
+    private static final int TRIALS = 14;
+    private static final int BOXES = 5;
+    private static final int BOX_SAMPLES = 60;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -92,7 +97,7 @@ public final class PhotonGallery {
     }
 
     // -----------------------------------------------------------------------
-    // The charts — the same six as hosts/common/panels.c, through the binding
+    // The charts — the same ten as hosts/common/panels.c, through the binding
     // -----------------------------------------------------------------------
 
     private static MemorySegment doubles(int count) {
@@ -378,6 +383,153 @@ public final class PhotonGallery {
         }
     }
 
+    /** Panel 6 — a donut, which is the pie layer with an inner radius. */
+    private static void buildShare(long plot) {
+        final double[] slices = {38.0, 24.0, 18.0, 12.0, 8.0};
+        MemorySegment values = doubles(SLICES);
+        for (int i = 0; i < SLICES; i++) values.setAtIndex(ValueLayout.JAVA_DOUBLE, i, slices[i]);
+
+        setTitle(plot, "Share");
+        // A pie has no axes worth reading, and the grid behind it is noise.
+        try (Arena scratch = Arena.ofConfined()) {
+            for (String axis : new String[] {"x", "y"}) {
+                MemorySegment bare = ph_axis_config.allocate(scratch);
+                ph_axis_config_init(bare);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_AXIS_LINE, 1);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_TICKS, 1);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_GRID, 1);
+                ph_plot_set_axis_config(plot, scratch.allocateFrom(axis), bare);
+            }
+        }
+
+        MemorySegment desc = ph_pie_desc.allocate(ARENA);
+        ph_pie_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_pie_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_pie_desc.OFFSET_COUNT, SLICES);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_pie_desc.OFFSET_RADIUS, 1.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_pie_desc.OFFSET_INNER_RADIUS, 0.55);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_pie(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 7 — stems from zero, with a disc at each tip. */
+    private static void buildImpulse(long plot) {
+        MemorySegment xs = doubles(IMPULSES);
+        MemorySegment ys = doubles(IMPULSES);
+        for (int i = 0; i < IMPULSES; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.exp(-i * 0.12) * Math.cos(i * 0.7));
+        }
+        setTitle(plot, "Impulse");
+        styleAxis(plot, "x", "n", 0);
+        styleAxis(plot, "y", "h[n]", 0);
+
+        MemorySegment desc = ph_stem_desc.allocate(ARENA);
+        ph_stem_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_stem_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_stem_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_stem_desc.OFFSET_COUNT, IMPULSES);
+        desc.set(ValueLayout.JAVA_INT, ph_stem_desc.OFFSET_COLOR, color("#22d3ee"));
+        desc.set(ValueLayout.JAVA_FLOAT, ph_stem_desc.OFFSET_WIDTH, 2.0f);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_stem_desc.OFFSET_MARKER_SIZE, 7.0f);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_stem(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 8 — a measured curve with its uncertainty, as a band and whiskers. */
+    private static void buildYield(long plot) {
+        MemorySegment xs = doubles(TRIALS);
+        MemorySegment ys = doubles(TRIALS);
+        MemorySegment err = doubles(TRIALS);
+        for (int i = 0; i < TRIALS; i++) {
+            double dose = i * 0.5;
+            double y = 90.0 / (1.0 + Math.exp(-(dose - 3.2) * 1.1));
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, dose);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, y);
+            err.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 3.0 + y * 0.09);
+        }
+        setTitle(plot, "Yield");
+        styleAxis(plot, "x", "dose (mg)", 0);
+        styleAxis(plot, "y", "yield (%)", 0);
+
+        MemorySegment desc = ph_errorbar_desc.allocate(ARENA);
+        ph_errorbar_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_errorbar_desc.OFFSET_COUNT, TRIALS);
+        desc.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_Y_ERR_ARRAY, err);
+        desc.set(ValueLayout.JAVA_INT, ph_errorbar_desc.OFFSET_BAND, 1);
+        desc.set(ValueLayout.JAVA_INT, ph_errorbar_desc.OFFSET_COLOR, color("#f59e0b"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_errorbar(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+        addLine(plot, xs, ys, TRIALS, "#f59e0b", 2.0f, null, 0, PH_JOIN_ROUND);
+    }
+
+    /** Panel 9 — five Tukey boxes, quartiles computed by the core. */
+    private static void buildLatency(long plot) {
+        final double[] centre = {1.6, 2.0, 2.35, 1.85, 2.6};
+        final double[] spread = {0.28, 0.34, 0.22, 0.55, 0.30};
+        final int[] colors = {color("#38bdf8"), color("#22d3ee"), color("#34d399"),
+                              color("#facc15"), color("#f472b6")};
+        final String[] labels = {"api", "auth", "db", "cdn", "ui"};
+
+        // The same LCG as the C panels, so the quartiles are identical here —
+        // which is what makes the pixel comparison between the hosts mean
+        // something.
+        int seed = 987654321;
+        MemorySegment groups = ARENA.allocate(ph_box_group.LAYOUT, BOXES);
+        for (int b = 0; b < BOXES; b++) {
+            MemorySegment values = doubles(BOX_SAMPLES);
+            for (int i = 0; i < BOX_SAMPLES; i++) {
+                seed = seed * 1664525 + 1013904223;
+                double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+                seed = seed * 1664525 + 1013904223;
+                double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+                double gauss = Math.sqrt(-2.0 * Math.log(u + 1e-12))
+                    * Math.cos(6.283185307179586 * v);
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                                  Math.exp(centre[b] + spread[b] * gauss));
+            }
+            long base = b * ph_box_group.SIZE;
+            groups.set(ValueLayout.JAVA_DOUBLE, base + ph_box_group.OFFSET_POSITION, b);
+            groups.set(ValueLayout.ADDRESS, base + ph_box_group.OFFSET_VALUES, values);
+            groups.set(ValueLayout.JAVA_INT, base + ph_box_group.OFFSET_COUNT, BOX_SAMPLES);
+            groups.set(ValueLayout.JAVA_INT, base + ph_box_group.OFFSET_COLOR, colors[b]);
+        }
+
+        setTitle(plot, "Latency");
+        styleAxis(plot, "x", "service", 0);
+        styleAxis(plot, "y", "ms", 0);
+
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment ticks = scratch.allocate(ph_tick.LAYOUT, BOXES);
+            for (int i = 0; i < BOXES; i++) {
+                long base = i * ph_tick.SIZE;
+                ticks.set(ValueLayout.JAVA_DOUBLE, base + ph_tick.OFFSET_VALUE, i);
+                ticks.set(ValueLayout.ADDRESS, base + ph_tick.OFFSET_LABEL,
+                          scratch.allocateFrom(labels[i]));
+                ticks.set(ValueLayout.JAVA_INT, base + ph_tick.OFFSET_GRID, PH_TOGGLE_DEFAULT);
+            }
+            ph_plot_set_axis_ticks(plot, scratch.allocateFrom("x"), ticks, BOXES);
+        }
+
+        MemorySegment desc = ph_box_desc.allocate(ARENA);
+        ph_box_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_box_desc.OFFSET_GROUPS, groups);
+        desc.set(ValueLayout.JAVA_INT, ph_box_desc.OFFSET_GROUP_COUNT, BOXES);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_box_desc.OFFSET_WIDTH, 0.62);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_box(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         for (int i = 0; i < STREAM_POINTS; i++) {
             double phase = seconds * 2.0 + i * 0.035;
@@ -593,6 +745,10 @@ public final class PhotonGallery {
         buildStream(plots[3]);
         buildRevenue(plots[4]);
         buildFunnel(plots[5]);
+        buildShare(plots[6]);
+        buildImpulse(plots[7]);
+        buildYield(plots[8]);
+        buildLatency(plots[9]);
 
         installCallbacks();
 

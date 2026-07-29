@@ -561,6 +561,77 @@ typedef struct ph_stem_desc {
 } ph_stem_desc;
 
 /**
+ * Mirrors core `ErrorBarOptions`.
+ *
+ * Whiskers through each point, with caps, and optionally a shaded band joining
+ * the low and high bounds. Errors may be symmetric (`y_err`) or asymmetric
+ * (`y_err_low`/`y_err_high`), and each may be one number for every point or an
+ * array of `count`.
+ */
+typedef struct ph_errorbar_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  y;
+  int32_t        count;
+  /** Symmetric half-height. Per-point when the array is set, else `y_err`. */
+  const double*  y_err_array;
+  double         y_err;
+  /** Asymmetric below/above y. Either array overrides the symmetric value. */
+  const double*  y_err_low_array;
+  const double*  y_err_high_array;
+  /** Symmetric half-width along x. */
+  const double*  x_err_array;
+  double         x_err;
+  ph_color       color;
+  /** Whisker and cap thickness in logical px. 0 = 1.5. */
+  float          width;
+  /** Cap length in logical px. Negative hides them; 0 = 6. */
+  float          cap_size;
+  /** Suppress the I-beam whiskers, which are on in the core. */
+  ph_bool        no_whiskers;
+  /** Fill a band between the low and high bounds. Off in the core. */
+  ph_bool        band;
+  /** Band opacity. 0 = 0.2. */
+  float          band_opacity;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_errorbar_desc;
+
+/** One box in a box plot: a position on the axis and the samples at it. */
+typedef struct ph_box_group {
+  double        position;
+  const double* values;
+  int32_t       count;
+  /** PH_COLOR_AUTO uses the core's default blue. */
+  ph_color      color;
+  const char*   label;
+} ph_box_group;
+
+/**
+ * Mirrors core `BoxOptions`.
+ *
+ * A Tukey box per group: the interquartile body, the median, whiskers out to
+ * the furthest sample inside the 1.5-IQR fences, and a point for everything
+ * beyond them. The quartiles are computed here, so the caller passes samples
+ * rather than a summary.
+ */
+typedef struct ph_box_desc {
+  uint32_t             struct_size;
+  const ph_box_group*  groups;
+  int32_t              group_count;
+  /** Box width in data units. 0 = 0.6. */
+  double               width;
+  /** Suppress the Tukey box, which is on in the core. */
+  ph_bool              no_box;
+  /** Add a kernel-density violin. Off in the core; it replaces the box body. */
+  ph_bool              violin;
+  const char*          name;
+  const char*          y_axis;
+  ph_render_type       render_type;
+} ph_box_desc;
+
+/**
  * One filled polygon: a ring of x/y, with optional holes.
  *
  * `holes[k]` is the *vertex* index where hole ring k begins — the same
@@ -711,6 +782,8 @@ PH_API void PH_CALL ph_area_desc_init(ph_area_desc* out);
 PH_API void PH_CALL ph_bar_desc_init(ph_bar_desc* out);
 PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
+PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
+PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
 
 /* ------------------------------------------------------------------------ */
 /* Plot lifecycle                                                             */
@@ -794,13 +867,15 @@ PH_API ph_result PH_CALL ph_plot_add_area(ph_plot plot, const ph_area_desc* desc
 PH_API ph_result PH_CALL ph_plot_add_bar(ph_plot plot, const ph_bar_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_pie(ph_plot plot, const ph_pie_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_stem(ph_plot plot, const ph_stem_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_errorbar(ph_plot plot, const ph_errorbar_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_box(ph_plot plot, const ph_box_desc* desc, ph_layer* out);
 
 /*
- * The remaining 24 layer types (bar, area, heatmap, box, hexbin, contour,
- * errorbar, stem, quiver, candlestick, ohlc, patches, pie, image, graph, and
- * the plot3d family) follow this exact shape: one `ph_<name>_desc` struct, one
- * `ph_<name>_desc_init`, one `ph_plot_add_<name>`. They land in Faz 4 and are
- * additive — appending them does not change this ABI version.
+ * The remaining layer types (heatmap, hexbin, contour, quiver, candlestick,
+ * ohlc, image, graph, and the plot3d family) follow this exact shape: one
+ * `ph_<name>_desc` struct, one `ph_<name>_desc_init`, one `ph_plot_add_<name>`.
+ * They land in Faz 4 and are additive — appending them does not change this ABI
+ * version.
  */
 
 /** Replace a layer's x/y data in place. Cheap on PH_RENDER_DYNAMIC layers. */

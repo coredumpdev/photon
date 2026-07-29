@@ -11,6 +11,10 @@
 #define FUNNEL_STAGES 5
 #define SLICES 5
 #define IMPULSES 24
+#define TRIALS 14
+/* Five latency buckets of sixty samples each. */
+#define BOXES 5
+#define BOX_SAMPLES 60
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -41,10 +45,18 @@ struct ph_panels {
   double slice[SLICES];
   double impulse_x[IMPULSES];
   double impulse_y[IMPULSES];
+
+  double trial_x[TRIALS];
+  double trial_y[TRIALS];
+  double trial_err[TRIALS];
+
+  double latency[BOXES][BOX_SAMPLES];
+  ph_box_group boxes[BOXES];
 };
 
-static const char* kTitles[PH_PANEL_COUNT] = {"Waves",     "Log decay", "Scatter", "Streaming",
-                                              "Revenue",   "Funnel",    "Share",   "Impulse"};
+static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatter", "Streaming",
+                                              "Revenue", "Funnel",       "Share",   "Impulse",
+                                              "Yield",   "Latency"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -150,6 +162,41 @@ ph_panels* ph_panels_create(void) {
     p->impulse_x[i] = i;
     p->impulse_y[i] = exp(-i * 0.12) * cos(i * 0.7);
   }
+
+  /* A measured curve with an uncertainty that grows with the reading — the
+   * shape an error bar exists to show, and one a line alone would hide. */
+  for (int i = 0; i < TRIALS; i++) {
+    const double dose = i * 0.5;
+    p->trial_x[i] = dose;
+    p->trial_y[i] = 90.0 / (1.0 + exp(-(dose - 3.2) * 1.1));
+    p->trial_err[i] = 3.0 + p->trial_y[i] * 0.09;
+  }
+
+  /* Five services' latencies. Same LCG as the scatter, for the same reason:
+   * the quartiles have to be identical in every host or comparing the pictures
+   * proves nothing. A lognormal shape, because latency is never symmetric. */
+  seed = 987654321u;
+  static const double centre[BOXES] = {1.6, 2.0, 2.35, 1.85, 2.6};
+  static const double spread[BOXES] = {0.28, 0.34, 0.22, 0.55, 0.30};
+  for (int b = 0; b < BOXES; b++) {
+    for (int i = 0; i < BOX_SAMPLES; i++) {
+      seed = seed * 1664525u + 1013904223u;
+      const double u = (double)(seed >> 8) / 16777216.0;
+      seed = seed * 1664525u + 1013904223u;
+      const double v = (double)(seed >> 8) / 16777216.0;
+      const double gauss = sqrt(-2.0 * log(u + 1e-12)) * cos(6.283185307179586 * v);
+      p->latency[b][i] = exp(centre[b] + spread[b] * gauss);
+    }
+    p->boxes[b].position = b;
+    p->boxes[b].values = p->latency[b];
+    p->boxes[b].count = BOX_SAMPLES;
+    p->boxes[b].label = NULL;
+  }
+  p->boxes[0].color = parse("#38bdf8");
+  p->boxes[1].color = parse("#22d3ee");
+  p->boxes[2].color = parse("#34d399");
+  p->boxes[3].color = parse("#facc15");
+  p->boxes[4].color = parse("#f472b6");
 
   return p;
 }
@@ -344,6 +391,61 @@ static void build_impulse(ph_panels* p, ph_plot plot) {
   ph_plot_add_stem(plot, &stem, &layer);
 }
 
+/* Panel 8 — a measured curve with its uncertainty, as a band and whiskers. */
+static void build_yield(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Yield");
+  style_axis(plot, "x", "dose (mg)", 0);
+  style_axis(plot, "y", "yield (%)", 0);
+
+  ph_layer layer = PH_NULL_HANDLE;
+
+  /* Band first, then the line, then the whiskers on top: the reading is the
+   * thing in focus and the uncertainty is the context behind it. */
+  ph_errorbar_desc err;
+  ph_errorbar_desc_init(&err);
+  err.x = p->trial_x;
+  err.y = p->trial_y;
+  err.count = TRIALS;
+  err.y_err_array = p->trial_err;
+  err.band = 1;
+  err.color = parse("#f59e0b");
+  ph_plot_add_errorbar(plot, &err, &layer);
+
+  ph_line_desc line;
+  ph_line_desc_init(&line);
+  line.x = p->trial_x;
+  line.y = p->trial_y;
+  line.count = TRIALS;
+  line.width = 2.0f;
+  line.color = parse("#f59e0b");
+  ph_plot_add_line(plot, &line, &layer);
+}
+
+/* Panel 9 — five Tukey boxes, quartiles computed by the core. */
+static void build_latency(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Latency");
+  style_axis(plot, "x", "service", 0);
+  style_axis(plot, "y", "ms", 0);
+
+  /* Named ticks, because the x axis is five categories and not five numbers.
+   * Short names on purpose: the core does not rotate labels, so in a narrow
+   * cell long ones would run into each other. */
+  const ph_tick ticks[BOXES] = {
+      {0.0, "api", 0, PH_TOGGLE_DEFAULT}, {1.0, "auth", 0, PH_TOGGLE_DEFAULT},
+      {2.0, "db", 0, PH_TOGGLE_DEFAULT},  {3.0, "cdn", 0, PH_TOGGLE_DEFAULT},
+      {4.0, "ui", 0, PH_TOGGLE_DEFAULT},
+  };
+  ph_plot_set_axis_ticks(plot, "x", ticks, BOXES);
+
+  ph_box_desc box;
+  ph_box_desc_init(&box);
+  box.groups = p->boxes;
+  box.group_count = BOXES;
+  box.width = 0.62;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_box(plot, &box, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -355,7 +457,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 4: build_revenue(panels, plot); break;
     case 5: build_funnel(panels, plot); break;
     case 6: build_share(panels, plot); break;
-    default: build_impulse(panels, plot); break;
+    case 7: build_impulse(panels, plot); break;
+    case 8: build_yield(panels, plot); break;
+    default: build_latency(panels, plot); break;
   }
 }
 

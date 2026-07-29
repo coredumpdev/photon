@@ -12,7 +12,7 @@ node native/tools/compare-with-web/compare.mjs native.png web.png --out diff.png
 ```
 
 `panels.js` is a transcription of `hosts/common/panels.c`, line for line, so the
-comparison is between two engines rather than two charts. The scatter panel uses
+comparison is between two engines rather than two charts. The scatter and box panels use
 a fixed LCG in both for the same reason.
 
 ## What is compared, and what cannot be

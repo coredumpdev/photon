@@ -209,7 +209,9 @@ if (nativeImage.width !== webImage.width || nativeImage.height !== webImage.heig
 
 const PANELS = [
   ["Waves", 0, 0], ["Log decay", 640, 0], ["Scatter", 1280, 0],
-  ["Streaming", 0, 420], ["Revenue", 640, 420], ["Funnel", 1280, 420],
+  ["Streaming", 1920, 0], ["Revenue", 2560, 0],
+  ["Funnel", 0, 420], ["Share", 640, 420], ["Impulse", 1280, 420],
+  ["Yield", 1920, 420], ["Latency", 2560, 420],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

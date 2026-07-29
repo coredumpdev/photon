@@ -218,6 +218,48 @@ PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, name) == 56, "ph_stem_desc.name offset")
 PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, y_axis) == 64, "ph_stem_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_stem_desc, render_type) == 72, "ph_stem_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_errorbar_desc) == 128, "ph_errorbar_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_errorbar_desc) == 8, "ph_errorbar_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, struct_size) == 0, "ph_errorbar_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, x) == 8, "ph_errorbar_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, y) == 16, "ph_errorbar_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, count) == 24, "ph_errorbar_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, y_err_array) == 32, "ph_errorbar_desc.y_err_array offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, y_err) == 40, "ph_errorbar_desc.y_err offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, y_err_low_array) == 48, "ph_errorbar_desc.y_err_low_array offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, y_err_high_array) == 56, "ph_errorbar_desc.y_err_high_array offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, x_err_array) == 64, "ph_errorbar_desc.x_err_array offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, x_err) == 72, "ph_errorbar_desc.x_err offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, color) == 80, "ph_errorbar_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, width) == 84, "ph_errorbar_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, cap_size) == 88, "ph_errorbar_desc.cap_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, no_whiskers) == 92, "ph_errorbar_desc.no_whiskers offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, band) == 96, "ph_errorbar_desc.band offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, band_opacity) == 100, "ph_errorbar_desc.band_opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, name) == 104, "ph_errorbar_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, y_axis) == 112, "ph_errorbar_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_errorbar_desc, render_type) == 120, "ph_errorbar_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_box_group) == 32, "ph_box_group size");
+PH_ASSERT_LAYOUT(_Alignof(ph_box_group) == 8, "ph_box_group alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_box_group, position) == 0, "ph_box_group.position offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_group, values) == 8, "ph_box_group.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_group, count) == 16, "ph_box_group.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_group, color) == 20, "ph_box_group.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_group, label) == 24, "ph_box_group.label offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_box_desc) == 64, "ph_box_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_box_desc) == 8, "ph_box_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, struct_size) == 0, "ph_box_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, groups) == 8, "ph_box_desc.groups offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, group_count) == 16, "ph_box_desc.group_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, width) == 24, "ph_box_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, no_box) == 32, "ph_box_desc.no_box offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, violin) == 36, "ph_box_desc.violin offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, name) == 40, "ph_box_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, y_axis) == 48, "ph_box_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_desc, render_type) == 56, "ph_box_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_patch) == 40, "ph_patch size");
 PH_ASSERT_LAYOUT(_Alignof(ph_patch) == 8, "ph_patch alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_patch, x) == 0, "ph_patch.x offset");
@@ -255,7 +297,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 17);
+  printf("%d struct layouts match the generated bindings\n", 20);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

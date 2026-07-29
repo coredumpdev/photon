@@ -352,6 +352,71 @@ internal static class PhotonSmokeTest
         Ran("ph_pie_desc_init", "ph_stem_desc_init", "ph_plot_add_pie", "ph_plot_add_stem");
     }
 
+    /// Error bars and box plots — the two layers whose bounds are computed.
+    private static void ErrorBarsAndBoxes(ulong plot)
+    {
+        var xs = new double[] { 0, 1, 2 };
+        var ys = new double[] { 10, 10, 10 };
+        // 1..9 plus a lone 100: the quartiles are 3 and 7, the fences -3 and 13,
+        // so 100 is the only outlier — and the bounds have to reach it.
+        var values = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 100 };
+        var xsHandle = GCHandle.Alloc(xs, GCHandleType.Pinned);
+        var ysHandle = GCHandle.Alloc(ys, GCHandleType.Pinned);
+        var valuesHandle = GCHandle.Alloc(values, GCHandleType.Pinned);
+        try
+        {
+            ph_errorbar_desc_init(out var err);
+            err.x = xsHandle.AddrOfPinnedObject();
+            err.y = ysHandle.AddrOfPinnedObject();
+            err.count = xs.Length;
+            err.y_err = 2.0;
+            err.x_err = 0.5;
+            CheckEq(ph_plot_add_errorbar(plot, in err, out var errLayer), PH_OK,
+                "ph_plot_add_errorbar");
+            CheckEq(ph_layer_bounds(errLayer, out var errX, out var errY), PH_OK,
+                "errorbar bounds");
+            Check(errX.lo == -0.5 && errX.hi == 2.5, "the bounds are the whisker ends in x");
+            Check(errY.lo == 8.0 && errY.hi == 12.0, "the bounds are the whisker ends in y");
+            CheckEq(ph_layer_destroy(errLayer), PH_OK, "the error bar layer is destroyed");
+
+            var group = new ph_box_group
+            {
+                position = 1.0,
+                values = valuesHandle.AddrOfPinnedObject(),
+                count = values.Length,
+                // Left at PH_COLOR_AUTO, which is zero — the layer then takes
+                // the core's default series colour.
+            };
+            var groupHandle = GCHandle.Alloc(group, GCHandleType.Pinned);
+            try
+            {
+                ph_box_desc_init(out var box);
+                box.groups = groupHandle.AddrOfPinnedObject();
+                box.group_count = 1;
+                box.width = 0.8;
+                CheckEq(ph_plot_add_box(plot, in box, out var boxLayer), PH_OK, "ph_plot_add_box");
+                CheckEq(ph_layer_bounds(boxLayer, out var boxX, out var boxY), PH_OK,
+                    "box bounds");
+                Check(boxX.lo == 0.6 && boxX.hi == 1.4, "the box is centred on its position");
+                Check(boxY.lo == 1.0 && boxY.hi == 100.0, "the bounds reach the outlier");
+                CheckEq(ph_layer_destroy(boxLayer), PH_OK, "the box layer is destroyed");
+            }
+            finally
+            {
+                groupHandle.Free();
+            }
+        }
+        finally
+        {
+            xsHandle.Free();
+            ysHandle.Free();
+            valuesHandle.Free();
+        }
+
+        Ran("ph_errorbar_desc_init", "ph_box_desc_init", "ph_plot_add_errorbar",
+            "ph_plot_add_box");
+    }
+
     /// Filled polygons, including the hole path through the triangulator.
     private static void Patches(ulong plot)
     {
@@ -506,6 +571,7 @@ internal static class PhotonSmokeTest
         var line = Layers(plot);
         AreaAndBars(plot);
         PieAndStem(plot);
+        ErrorBarsAndBoxes(plot);
         Patches(plot);
         Interaction(plot);
         Events(plot);

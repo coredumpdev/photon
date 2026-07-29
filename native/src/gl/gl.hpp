@@ -63,6 +63,10 @@ enum : GLenum {
   GL_SCISSOR_TEST = 0x0C11,
   GL_CULL_FACE = 0x0B44,
   GL_MULTISAMPLE = 0x809D,
+  /* Desktop core profile gates gl_PointSize behind this; WebGL2 and ES have it
+   * permanently on, which is exactly the sort of difference that turns into a
+   * layer that draws the wrong thing rather than an error. */
+  GL_PROGRAM_POINT_SIZE = 0x8642,
   GL_TEXTURE_2D = 0x0DE1,
   GL_TEXTURE0 = 0x84C0,
   GL_TEXTURE_MAG_FILTER = 0x2800,
