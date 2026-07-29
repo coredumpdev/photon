@@ -370,6 +370,80 @@ class BoxLayer : public Layer {
 };
 
 /**
+ * Points binned onto a hex lattice, each cell coloured by its count.
+ *
+ * The binning is d3-hexbin's, simplified: round to the nearest lattice row,
+ * then to the nearest column offset by half on odd rows. One instanced hexagon
+ * per occupied cell, so a million points cost a few thousand instances.
+ */
+class HexbinLayer : public Layer {
+ public:
+  explicit HexbinLayer(const ph_hexbin_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<float> centers_;
+  std::vector<float> colors_;
+  double radius_ = 1.0;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  ph_range hex_x_{0.0, 0.0};
+  ph_range hex_y_{0.0, 0.0};
+  bool hex_bounds_ = false;
+  /// The count range the colours span — what a colorbar would caption.
+  ph_range count_domain_{1.0, 1.0};
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint hex_buffer_ = 0;
+  gl::GLuint center_buffer_ = 0;
+  gl::GLuint color_buffer_ = 0;
+};
+
+/**
+ * An arrow per sample: a data-space shaft with a screen-space head.
+ *
+ * The head is three vertices generated from gl_VertexID rather than a buffer,
+ * because its shape is entirely a function of the shaft it sits on.
+ */
+class QuiverLayer : public Layer {
+ public:
+  explicit QuiverLayer(const ph_quiver_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  /// (base x, base y, tip x, tip y) per arrow, in offset data space.
+  std::vector<float> arrows_;
+  std::vector<float> colors_;
+  bool vertex_color_ = false;
+  float width_ = 1.5f;
+  float head_size_ = 9.0f;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  ph_range quiver_x_{0.0, 0.0};
+  ph_range quiver_y_{0.0, 0.0};
+  bool quiver_bounds_ = false;
+  ph_range value_domain_{0.0, 1.0};
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint shaft_vao_ = 0;
+  gl::GLuint head_vao_ = 0;
+  gl::GLuint corner_buffer_ = 0;
+  gl::GLuint arrow_buffer_ = 0;
+  gl::GLuint color_buffer_ = 0;
+};
+
+/**
  * The two OHLC chart types, which differ only in what they emit per period.
  *
  * Both retain the five input arrays because both stream: a live candle is

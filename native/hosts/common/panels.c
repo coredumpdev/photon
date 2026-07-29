@@ -23,6 +23,12 @@
 /* Enough sessions for the axis to collapse a few weekends, and few enough that
  * an OHLC bar's open and close ticks are still distinguishable in one cell. */
 #define SESSIONS 34
+/* Enough points that a plain scatter would be a solid blob — which is the
+ * argument for binning them. */
+#define DENSE_POINTS 24000
+/* A 14x14 lattice of arrows: dense enough to read as a field, sparse enough
+ * that the individual arrowheads are still visible. */
+#define FLOW 14
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -70,12 +76,20 @@ struct ph_panels {
   double bar_high[SESSIONS];
   double bar_low[SESSIONS];
   double bar_close[SESSIONS];
+
+  double dense_x[DENSE_POINTS];
+  double dense_y[DENSE_POINTS];
+
+  double flow_x[FLOW * FLOW];
+  double flow_y[FLOW * FLOW];
+  double flow_u[FLOW * FLOW];
+  double flow_v[FLOW * FLOW];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatter", "Streaming",
                                               "Revenue", "Funnel",       "Share",   "Impulse",
                                               "Yield",   "Latency",      "Field",   "Sprite",
-                                              "Candles", "Bars"};
+                                              "Candles", "Bars",         "Density", "Flow"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -274,6 +288,38 @@ ph_panels* ph_panels_create(void) {
     day += 86400000.0;
     const int weekday = (i + 1) % 7;
     if (weekday == 4) day += 2.0 * 86400000.0;
+  }
+
+  /* Two overlapping Gaussian blobs, twenty-four thousand points. Drawn as a
+   * scatter this is a shape with no interior; binned, the interior is the
+   * whole message. */
+  seed = 13572468u;
+  for (int i = 0; i < DENSE_POINTS; i++) {
+    seed = seed * 1664525u + 1013904223u;
+    const double u = (double)(seed >> 8) / 16777216.0;
+    seed = seed * 1664525u + 1013904223u;
+    const double v = (double)(seed >> 8) / 16777216.0;
+    const double radius = sqrt(-2.0 * log(u + 1e-12));
+    const double angle = 6.283185307179586 * v;
+    const double cx = (i % 3 == 0) ? 2.2 : -1.4;
+    const double cy = (i % 3 == 0) ? 1.1 : -0.7;
+    p->dense_x[i] = cx + radius * cos(angle) * 1.15;
+    p->dense_y[i] = cy + radius * sin(angle) * 0.85;
+  }
+
+  /* A rotational field with a sink at the centre: the arrows curl, and their
+   * magnitude falls off, so colouring by magnitude actually says something. */
+  for (int row = 0; row < FLOW; row++) {
+    for (int col = 0; col < FLOW; col++) {
+      const double x = -3.0 + col * (6.0 / (FLOW - 1));
+      const double y = -3.0 + row * (6.0 / (FLOW - 1));
+      const double r2 = x * x + y * y + 0.6;
+      const int i = row * FLOW + col;
+      p->flow_x[i] = x;
+      p->flow_y[i] = y;
+      p->flow_u[i] = (-y - x * 0.35) / r2 * 4.0;
+      p->flow_v[i] = (x - y * 0.35) / r2 * 4.0;
+    }
   }
 
   return p;
@@ -636,6 +682,52 @@ static void build_bars(ph_panels* p, ph_plot plot) {
   ph_plot_add_ohlc(plot, &bars, &layer);
 }
 
+/* Panel 14 — twenty-four thousand points as a few hundred hexagons. */
+static void build_density(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Density");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_colormap_spec cmap;
+  ph_colormap_spec_init(&cmap);
+  cmap.name = "magma";
+
+  ph_hexbin_desc hexes;
+  ph_hexbin_desc_init(&hexes);
+  hexes.x = p->dense_x;
+  hexes.y = p->dense_y;
+  hexes.count = DENSE_POINTS;
+  hexes.radius = 0.16;
+  hexes.colormap = &cmap;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_hexbin(plot, &hexes, &layer);
+}
+
+/* Panel 15 — a vector field, each arrow coloured by its own magnitude. */
+static void build_flow(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Flow");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_colormap_spec cmap;
+  ph_colormap_spec_init(&cmap);
+  cmap.name = "turbo";
+
+  ph_quiver_desc arrows;
+  ph_quiver_desc_init(&arrows);
+  arrows.x = p->flow_x;
+  arrows.y = p->flow_y;
+  arrows.u = p->flow_u;
+  arrows.v = p->flow_v;
+  arrows.count = FLOW * FLOW;
+  /* No values given, so the colour follows each arrow's own magnitude. */
+  arrows.color_by = 1;
+  arrows.color_map = &cmap;
+  arrows.width = 2.0f;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_quiver(plot, &arrows, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -653,7 +745,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 10: build_field(panels, plot); break;
     case 11: build_sprite(panels, plot); break;
     case 12: build_candles(panels, plot); break;
-    default: build_bars(panels, plot); break;
+    case 13: build_bars(panels, plot); break;
+    case 14: build_density(panels, plot); break;
+    default: build_flow(panels, plot); break;
   }
 }
 

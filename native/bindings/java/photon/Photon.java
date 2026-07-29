@@ -812,6 +812,98 @@ public final class Photon {
         }
     }
 
+    /** ph_hexbin_desc — 88 bytes, alignment 8. */
+    public static final class ph_hexbin_desc {
+        private ph_hexbin_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("radius"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_hexbin_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_COUNT = 24L;
+        public static final long OFFSET_RADIUS = 32L;
+        public static final long OFFSET_COLORMAP = 40L;
+        public static final long OFFSET_DOMAIN = 48L;
+        public static final long OFFSET_NAME = 64L;
+        public static final long OFFSET_Y_AXIS = 72L;
+        public static final long OFFSET_RENDER_TYPE = 80L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_quiver_desc — 128 bytes, alignment 8. */
+    public static final class ph_quiver_desc {
+        private ph_quiver_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.ADDRESS.withName("u"),
+            ValueLayout.ADDRESS.withName("v"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("scale"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("width"),
+            ValueLayout.JAVA_FLOAT.withName("head_size"),
+            ValueLayout.JAVA_INT.withName("color_by"),
+            ValueLayout.ADDRESS.withName("color_values"),
+            ValueLayout.ADDRESS.withName("color_map"),
+            ph_range.LAYOUT.withName("color_domain"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_quiver_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_U = 24L;
+        public static final long OFFSET_V = 32L;
+        public static final long OFFSET_COUNT = 40L;
+        public static final long OFFSET_SCALE = 48L;
+        public static final long OFFSET_COLOR = 56L;
+        public static final long OFFSET_WIDTH = 60L;
+        public static final long OFFSET_HEAD_SIZE = 64L;
+        public static final long OFFSET_COLOR_BY = 68L;
+        public static final long OFFSET_COLOR_VALUES = 72L;
+        public static final long OFFSET_COLOR_MAP = 80L;
+        public static final long OFFSET_COLOR_DOMAIN = 88L;
+        public static final long OFFSET_NAME = 104L;
+        public static final long OFFSET_Y_AXIS = 112L;
+        public static final long OFFSET_RENDER_TYPE = 120L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_candlestick_desc — 104 bytes, alignment 8. */
     public static final class ph_candlestick_desc {
         private ph_candlestick_desc() {}
@@ -1134,6 +1226,8 @@ public final class Photon {
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_hexbin_desc_init",
+        "ph_quiver_desc_init",
         "ph_candlestick_desc_init",
         "ph_ohlc_desc_init",
         "ph_heatmap_desc_init",
@@ -1163,6 +1257,8 @@ public final class Photon {
         "ph_plot_add_stem",
         "ph_plot_add_errorbar",
         "ph_plot_add_box",
+        "ph_plot_add_hexbin",
+        "ph_plot_add_quiver",
         "ph_plot_add_candlestick",
         "ph_plot_add_ohlc",
         "ph_plot_add_heatmap",
@@ -1220,6 +1316,8 @@ public final class Photon {
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_HEXBIN_DESC_INIT = handle("ph_hexbin_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_QUIVER_DESC_INIT = handle("ph_quiver_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_CANDLESTICK_DESC_INIT = handle("ph_candlestick_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_OHLC_DESC_INIT = handle("ph_ohlc_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_HEATMAP_DESC_INIT = handle("ph_heatmap_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
@@ -1249,6 +1347,8 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_STEM = handle("ph_plot_add_stem", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_ERRORBAR = handle("ph_plot_add_errorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_BOX = handle("ph_plot_add_box", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_HEXBIN = handle("ph_plot_add_hexbin", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_QUIVER = handle("ph_plot_add_quiver", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_CANDLESTICK = handle("ph_plot_add_candlestick", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_OHLC = handle("ph_plot_add_ohlc", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_HEATMAP = handle("ph_plot_add_heatmap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -1515,6 +1615,22 @@ public final class Photon {
         }
     }
 
+    public static void ph_hexbin_desc_init(MemorySegment out) {
+        try {
+            PH_HEXBIN_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_hexbin_desc_init failed", photonFailure);
+        }
+    }
+
+    public static void ph_quiver_desc_init(MemorySegment out) {
+        try {
+            PH_QUIVER_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_quiver_desc_init failed", photonFailure);
+        }
+    }
+
     public static void ph_candlestick_desc_init(MemorySegment out) {
         try {
             PH_CANDLESTICK_DESC_INIT.invokeExact(out);
@@ -1744,6 +1860,22 @@ public final class Photon {
             return (int) PH_PLOT_ADD_BOX.invokeExact(plot, desc, out);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_add_box failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_hexbin(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_HEXBIN.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_hexbin failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_quiver(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_QUIVER.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_quiver failed", photonFailure);
         }
     }
 

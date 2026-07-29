@@ -796,6 +796,55 @@ extern "C" ph_result PH_CALL ph_plot_add_stem(ph_plot handle, const ph_stem_desc
                                                        "ph_stem_desc");
 }
 
+extern "C" void PH_CALL ph_hexbin_desc_init(ph_hexbin_desc* out) {
+  if (!out) return;
+  *out = ph_hexbin_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_hexbin_desc));
+  out->render_type = PH_RENDER_STATIC;
+  // radius and domain stay 0, which the layer reads as "derive them".
+}
+
+extern "C" void PH_CALL ph_quiver_desc_init(ph_quiver_desc* out) {
+  if (!out) return;
+  *out = ph_quiver_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_quiver_desc));
+  out->width = 1.5f;
+  out->head_size = 9.0f;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_hexbin(ph_plot handle, const ph_hexbin_desc* desc,
+                                                ph_layer* out) {
+  return add_xy_layer<ph_hexbin_desc, photon::HexbinLayer>(handle, desc, out,
+                                                           ph_hexbin_desc_init, "ph_hexbin_desc");
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_quiver(ph_plot handle, const ph_quiver_desc* desc,
+                                                ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_quiver_desc.struct_size is larger than this build's");
+  }
+  const ph_quiver_desc normalized = normalize(desc, ph_quiver_desc_init);
+  if (normalized.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (normalized.count > 0 && (!normalized.x || !normalized.y || !normalized.u ||
+                               !normalized.v)) {
+    return fail(PH_E_INVALID_ARGUMENT, "x, y, u and v must be non-null when count > 0");
+  }
+  if (normalized.color_map && !desc_size_ok(normalized.color_map)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_colormap_spec.struct_size is larger than this build's");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::QuiverLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating quiver layer");
+  }
+}
+
 extern "C" void PH_CALL ph_candlestick_desc_init(ph_candlestick_desc* out) {
   if (!out) return;
   *out = ph_candlestick_desc{};

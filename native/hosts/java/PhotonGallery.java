@@ -1,4 +1,4 @@
-// The Java gallery: the same fourteen charts as the GLFW and Qt ones, in a window.
+// The Java gallery: the same sixteen charts as the GLFW and Qt ones, in a window.
 //
 // This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
 // that. What it adds is the part of the ABI a headless test cannot reach: a
@@ -40,8 +40,8 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 14;
-    private static final int COLUMNS = 5;
+    private static final int PANELS = 16;
+    private static final int COLUMNS = 4;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
     private static final int FUNNEL_STAGES = 5;
@@ -56,6 +56,8 @@ public final class PhotonGallery {
     private static final int FIELD_ROWS = 72;
     private static final int SPRITE = 16;
     private static final int SESSIONS = 34;
+    private static final int DENSE_POINTS = 24000;
+    private static final int FLOW = 14;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -101,7 +103,7 @@ public final class PhotonGallery {
     }
 
     // -----------------------------------------------------------------------
-    // The charts — the same fourteen as hosts/common/panels.c, through the binding
+    // The charts — the same sixteen as hosts/common/panels.c, through the binding
     // -----------------------------------------------------------------------
 
     private static MemorySegment doubles(int count) {
@@ -721,6 +723,89 @@ public final class PhotonGallery {
         }
     }
 
+    /** Panel 14 — twenty-four thousand points as a few hundred hexagons. */
+    private static void buildDensity(long plot) {
+        MemorySegment xs = doubles(DENSE_POINTS);
+        MemorySegment ys = doubles(DENSE_POINTS);
+        int seed = 13572468;
+        for (int i = 0; i < DENSE_POINTS; i++) {
+            seed = seed * 1664525 + 1013904223;
+            double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            seed = seed * 1664525 + 1013904223;
+            double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            double radius = Math.sqrt(-2.0 * Math.log(u + 1e-12));
+            double angle = 6.283185307179586 * v;
+            double cx = (i % 3 == 0) ? 2.2 : -1.4;
+            double cy = (i % 3 == 0) ? 1.1 : -0.7;
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, cx + radius * Math.cos(angle) * 1.15);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, cy + radius * Math.sin(angle) * 0.85);
+        }
+
+        setTitle(plot, "Density");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment cmap = ph_colormap_spec.allocate(ARENA);
+        ph_colormap_spec_init(cmap);
+        cmap.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_NAME, ARENA.allocateFrom("magma"));
+
+        MemorySegment desc = ph_hexbin_desc.allocate(ARENA);
+        ph_hexbin_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_hexbin_desc.OFFSET_COUNT, DENSE_POINTS);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_hexbin_desc.OFFSET_RADIUS, 0.16);
+        desc.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_COLORMAP, cmap);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_hexbin(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 15 — a vector field, each arrow coloured by its own magnitude. */
+    private static void buildFlow(long plot) {
+        MemorySegment xs = doubles(FLOW * FLOW);
+        MemorySegment ys = doubles(FLOW * FLOW);
+        MemorySegment us = doubles(FLOW * FLOW);
+        MemorySegment vs = doubles(FLOW * FLOW);
+        for (int row = 0; row < FLOW; row++) {
+            for (int col = 0; col < FLOW; col++) {
+                double x = -3.0 + col * (6.0 / (FLOW - 1));
+                double y = -3.0 + row * (6.0 / (FLOW - 1));
+                double r2 = x * x + y * y + 0.6;
+                int i = row * FLOW + col;
+                xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, x);
+                ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, y);
+                us.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (-y - x * 0.35) / r2 * 4.0);
+                vs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (x - y * 0.35) / r2 * 4.0);
+            }
+        }
+
+        setTitle(plot, "Flow");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment cmap = ph_colormap_spec.allocate(ARENA);
+        ph_colormap_spec_init(cmap);
+        cmap.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_NAME, ARENA.allocateFrom("turbo"));
+
+        MemorySegment desc = ph_quiver_desc.allocate(ARENA);
+        ph_quiver_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_U, us);
+        desc.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_V, vs);
+        desc.set(ValueLayout.JAVA_INT, ph_quiver_desc.OFFSET_COUNT, FLOW * FLOW);
+        // No values given, so the colour follows each arrow's own magnitude.
+        desc.set(ValueLayout.JAVA_INT, ph_quiver_desc.OFFSET_COLOR_BY, 1);
+        desc.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_COLOR_MAP, cmap);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_quiver_desc.OFFSET_WIDTH, 2.0f);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_quiver(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         for (int i = 0; i < STREAM_POINTS; i++) {
             double phase = seconds * 2.0 + i * 0.035;
@@ -945,6 +1030,8 @@ public final class PhotonGallery {
         Sessions bars = sessions();
         buildCandles(plots[12], bars);
         buildBars(plots[13], bars);
+        buildDensity(plots[14]);
+        buildFlow(plots[15]);
 
         installCallbacks();
 

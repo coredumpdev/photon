@@ -538,6 +538,72 @@ public final class PhotonSmokeTest {
             "ph_plot_add_box");
     }
 
+    /** Binned hexagons and a vector field — the two layers that colour themselves. */
+    static void fields(Arena arena, long plot) {
+        // Nine points in a 3x3 block, all inside one hex when the radius is
+        // large: one cell, and bounds that are the points' own extent rather
+        // than the hexagon's.
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, 9);
+        MemorySegment ys = arena.allocate(ValueLayout.JAVA_DOUBLE, 9);
+        for (int i = 0; i < 9; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (i % 3) * 0.1);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (i / 3) * 0.1);
+        }
+        MemorySegment hex = ph_hexbin_desc.allocate(arena);
+        ph_hexbin_desc_init(hex);
+        hex.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_X, xs);
+        hex.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_Y, ys);
+        hex.set(ValueLayout.JAVA_INT, ph_hexbin_desc.OFFSET_COUNT, 9);
+        hex.set(ValueLayout.JAVA_DOUBLE, ph_hexbin_desc.OFFSET_RADIUS, 5.0);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_hexbin(plot, hex, handle), PH_OK, "ph_plot_add_hexbin");
+        long hexLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(hexLayer, bx, by), PH_OK, "hexbin bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 0.0, "hexbin x lo");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 0.2) < 1e-9,
+              "the bounds are the points, not the hexagons");
+
+        // Two arrows of length 1 and 3 from the origin. With an explicit scale
+        // of 1 the tips land at x = 1 and x = 3, so the bounds are the tips.
+        MemorySegment ax = arena.allocate(ValueLayout.JAVA_DOUBLE, 2);
+        MemorySegment ay = arena.allocate(ValueLayout.JAVA_DOUBLE, 2);
+        MemorySegment au = arena.allocate(ValueLayout.JAVA_DOUBLE, 2);
+        MemorySegment av = arena.allocate(ValueLayout.JAVA_DOUBLE, 2);
+        au.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, 1.0);
+        au.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, 3.0);
+        av.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, 0.0);
+        av.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, -2.0);
+
+        MemorySegment quiver = ph_quiver_desc.allocate(arena);
+        ph_quiver_desc_init(quiver);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_X, ax);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_Y, ay);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_U, au);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_V, av);
+        quiver.set(ValueLayout.JAVA_INT, ph_quiver_desc.OFFSET_COUNT, 2);
+        quiver.set(ValueLayout.JAVA_DOUBLE, ph_quiver_desc.OFFSET_SCALE, 1.0);
+        quiver.set(ValueLayout.JAVA_INT, ph_quiver_desc.OFFSET_COLOR_BY, 1);
+        checkEq(ph_plot_add_quiver(plot, quiver, handle), PH_OK, "ph_plot_add_quiver");
+        long quiverLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(quiverLayer, bx, by), PH_OK, "quiver bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 3.0,
+              "the bounds reach the arrow tips");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == -2.0, "in both directions");
+
+        // Four arrays and a count, and all four are required.
+        quiver.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_V, MemorySegment.NULL);
+        checkEq(ph_plot_add_quiver(plot, quiver, handle), PH_E_INVALID_ARGUMENT,
+                "u and v are both required");
+
+        checkEq(ph_layer_destroy(hexLayer), PH_OK, "the hexbin layer is destroyed");
+        checkEq(ph_layer_destroy(quiverLayer), PH_OK, "the quiver layer is destroyed");
+        ran("ph_hexbin_desc_init", "ph_quiver_desc_init", "ph_plot_add_hexbin",
+            "ph_plot_add_quiver");
+    }
+
     /** The two OHLC shapes, which share their arrays, their width and their bounds. */
     static void ohlc(Arena arena, long plot) {
         // Four sessions at x = 0, 1, 2, 3. The default width is 70% of the
@@ -855,6 +921,8 @@ public final class PhotonSmokeTest {
             pieAndStem(arena, plot);
             step("errorBarsAndBoxes");
             errorBarsAndBoxes(arena, plot);
+            step("fields");
+            fields(arena, plot);
             step("ohlc");
             ohlc(arena, plot);
             step("grids");

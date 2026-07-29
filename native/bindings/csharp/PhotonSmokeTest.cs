@@ -470,6 +470,73 @@ internal static class PhotonSmokeTest
             "ph_plot_add_box");
     }
 
+    /// Binned hexagons and a vector field — the two layers that colour themselves.
+    private static void Fields(ulong plot)
+    {
+        // Nine points in a 3x3 block, all inside one hex at this radius.
+        var xs = new double[9];
+        var ys = new double[9];
+        for (int i = 0; i < 9; i++)
+        {
+            xs[i] = (i % 3) * 0.1;
+            ys[i] = (i / 3) * 0.1;
+        }
+        // Two arrows of length 1 and 3 from the origin, scale 1, so the tips
+        // land at x = 1 and x = 3.
+        var au = new double[] { 1.0, 3.0 };
+        var av = new double[] { 0.0, -2.0 };
+        var ax = new double[] { 0.0, 0.0 };
+        var ay = new double[] { 0.0, 0.0 };
+        var pins = new[]
+        {
+            GCHandle.Alloc(xs, GCHandleType.Pinned), GCHandle.Alloc(ys, GCHandleType.Pinned),
+            GCHandle.Alloc(ax, GCHandleType.Pinned), GCHandle.Alloc(ay, GCHandleType.Pinned),
+            GCHandle.Alloc(au, GCHandleType.Pinned), GCHandle.Alloc(av, GCHandleType.Pinned),
+        };
+        try
+        {
+            ph_hexbin_desc_init(out var hex);
+            hex.x = pins[0].AddrOfPinnedObject();
+            hex.y = pins[1].AddrOfPinnedObject();
+            hex.count = xs.Length;
+            hex.radius = 5.0;
+            CheckEq(ph_plot_add_hexbin(plot, in hex, out var hexLayer), PH_OK,
+                "ph_plot_add_hexbin");
+            CheckEq(ph_layer_bounds(hexLayer, out var hexX, out _), PH_OK, "hexbin bounds");
+            Check(hexX.lo == 0.0 && Math.Abs(hexX.hi - 0.2) < 1e-9,
+                "the bounds are the points, not the hexagons");
+            CheckEq(ph_layer_destroy(hexLayer), PH_OK, "the hexbin layer is destroyed");
+
+            ph_quiver_desc_init(out var quiver);
+            quiver.x = pins[2].AddrOfPinnedObject();
+            quiver.y = pins[3].AddrOfPinnedObject();
+            quiver.u = pins[4].AddrOfPinnedObject();
+            quiver.v = pins[5].AddrOfPinnedObject();
+            quiver.count = au.Length;
+            quiver.scale = 1.0;
+            quiver.color_by = 1;
+            CheckEq(ph_plot_add_quiver(plot, in quiver, out var quiverLayer), PH_OK,
+                "ph_plot_add_quiver");
+            CheckEq(ph_layer_bounds(quiverLayer, out var quiverX, out var quiverY), PH_OK,
+                "quiver bounds");
+            Check(quiverX.hi == 3.0 && quiverY.lo == -2.0,
+                "the bounds reach the arrow tips");
+            CheckEq(ph_layer_destroy(quiverLayer), PH_OK, "the quiver layer is destroyed");
+
+            // Four arrays and a count, and all four are required.
+            quiver.v = IntPtr.Zero;
+            CheckEq(ph_plot_add_quiver(plot, in quiver, out _), PH_E_INVALID_ARGUMENT,
+                "u and v are both required");
+        }
+        finally
+        {
+            foreach (var pin in pins) pin.Free();
+        }
+
+        Ran("ph_hexbin_desc_init", "ph_quiver_desc_init", "ph_plot_add_hexbin",
+            "ph_plot_add_quiver");
+    }
+
     /// The two OHLC shapes, which share their arrays, their width and their bounds.
     private static void Ohlc(ulong plot)
     {
@@ -763,6 +830,7 @@ internal static class PhotonSmokeTest
         AreaAndBars(plot);
         PieAndStem(plot);
         ErrorBarsAndBoxes(plot);
+        Fields(plot);
         Ohlc(plot);
         Grids(plot);
         Patches(plot);

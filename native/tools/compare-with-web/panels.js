@@ -1,5 +1,5 @@
 /**
- * The fourteen demo charts, built with @photonviz/core.
+ * The sixteen demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -21,6 +21,8 @@ const FIELD_COLS = 96;
 const FIELD_ROWS = 72;
 const SPRITE = 16;
 const SESSIONS = 34;
+const DENSE_POINTS = 24000;
+const FLOW = 14;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -397,6 +399,66 @@ function bars(container) {
   return plot;
 }
 
+function density(container) {
+  const xs = new Float64Array(DENSE_POINTS);
+  const ys = new Float64Array(DENSE_POINTS);
+  let seed = 13572468;
+  const next = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216.0;
+  };
+  for (let i = 0; i < DENSE_POINTS; i++) {
+    const u = next();
+    const v = next();
+    const radius = Math.sqrt(-2 * Math.log(u + 1e-12));
+    const angle = 6.283185307179586 * v;
+    const cx = i % 3 === 0 ? 2.2 : -1.4;
+    const cy = i % 3 === 0 ? 1.1 : -0.7;
+    xs[i] = cx + radius * Math.cos(angle) * 1.15;
+    ys[i] = cy + radius * Math.sin(angle) * 0.85;
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Density",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+    // No colorbar in the native core yet — see the Field panel.
+    colorbar: false,
+  });
+  plot.addHexbin({ x: xs, y: ys, radius: 0.16, colormap: "magma" });
+  return plot;
+}
+
+function flow(container) {
+  const n = FLOW * FLOW;
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  const us = new Float64Array(n);
+  const vs = new Float64Array(n);
+  for (let row = 0; row < FLOW; row++) {
+    for (let col = 0; col < FLOW; col++) {
+      const x = -3 + col * (6 / (FLOW - 1));
+      const y = -3 + row * (6 / (FLOW - 1));
+      const r2 = x * x + y * y + 0.6;
+      const i = row * FLOW + col;
+      xs[i] = x;
+      ys[i] = y;
+      us[i] = ((-y - x * 0.35) / r2) * 4;
+      vs[i] = ((x - y * 0.35) / r2) * 4;
+    }
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Flow",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+    colorbar: false,
+  });
+  // No values given, so the colour follows each arrow's own magnitude.
+  plot.addQuiver({ x: xs, y: ys, u: us, v: vs, width: 2, colorBy: { colormap: "turbo" } });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
-                       candles, bars];
+                       candles, bars, density, flow];

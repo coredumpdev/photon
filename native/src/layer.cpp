@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <unordered_map>
 
 #include "color/colormap.hpp"
 #include "geo/earcut.hpp"
@@ -2175,6 +2176,22 @@ void BoxLayer::release_gl(Api& api) {
 
 namespace {
 
+/// Turn a descriptor's colormap fields into the internal spec. NULL is viridis.
+photon::color::Spec colormap_spec(const ph_colormap_spec* desc) {
+  photon::color::Spec spec;
+  if (!desc) return spec;
+  if (desc->name) spec.name = desc->name;
+  if (desc->stops && desc->stop_count > 0) {
+    spec.stops.reserve(static_cast<size_t>(desc->stop_count));
+    for (int32_t i = 0; i < desc->stop_count; ++i) {
+      spec.stops.push_back(photon::color::to_rgb(desc->stops[i]));
+    }
+  }
+  spec.reverse = desc->reverse != 0;
+  spec.discrete_steps = desc->discrete_steps;
+  return spec;
+}
+
 /// The six vertices of the extent quad: (x, y, u, v), with v following the
 /// texture's row order. `flip_v` puts the first row at the top instead.
 std::array<float, 24> extent_quad(const ph_range& x, const ph_range& y, double x_ref,
@@ -2306,18 +2323,7 @@ HeatmapLayer::HeatmapLayer(const ph_heatmap_desc& desc) {
     return;
   }
 
-  photon::color::Spec spec;
-  if (desc.colormap) {
-    if (desc.colormap->name) spec.name = desc.colormap->name;
-    if (desc.colormap->stops && desc.colormap->stop_count > 0) {
-      spec.stops.reserve(static_cast<size_t>(desc.colormap->stop_count));
-      for (int32_t i = 0; i < desc.colormap->stop_count; ++i) {
-        spec.stops.push_back(photon::color::to_rgb(desc.colormap->stops[i]));
-      }
-    }
-    spec.reverse = desc.colormap->reverse != 0;
-    spec.discrete_steps = desc.colormap->discrete_steps;
-  }
+  const photon::color::Spec spec = colormap_spec(desc.colormap);
   const photon::color::Lut& table = photon::color::lut(spec);
 
   double lo = desc.domain.lo;
@@ -2768,6 +2774,500 @@ bool OhlcLayer::draw(const DrawState& state, std::string& error) {
   api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(segments_.size() / 4));
   api.BindVertexArray(0);
   return true;
+}
+
+// -- HexbinLayer ------------------------------------------------------------
+
+namespace {
+
+/// A pointy-top unit hexagon as six triangles fanned from the centre. Written
+/// out rather than computed at startup so it is a constant the linker can put
+/// in rodata, and so the vertex order is visible.
+std::array<float, 36> unit_hexagon() {
+  std::array<float, 36> out{};
+  for (int i = 0; i < 6; ++i) {
+    const double a0 = (kPi / 3.0) * i + kPi / 6.0;
+    const double a1 = (kPi / 3.0) * (i + 1) + kPi / 6.0;
+    out[static_cast<size_t>(i) * 6] = 0.0f;
+    out[static_cast<size_t>(i) * 6 + 1] = 0.0f;
+    out[static_cast<size_t>(i) * 6 + 2] = static_cast<float>(std::cos(a0));
+    out[static_cast<size_t>(i) * 6 + 3] = static_cast<float>(std::sin(a0));
+    out[static_cast<size_t>(i) * 6 + 4] = static_cast<float>(std::cos(a1));
+    out[static_cast<size_t>(i) * 6 + 5] = static_cast<float>(std::sin(a1));
+  }
+  return out;
+}
+
+/// Hexagon: an instanced lattice cell scaled by a shared radius.
+const char* const kHexVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec2 aCenter;
+layout(location = 2) in vec4 aColor;
+uniform float uRadius;
+)";
+
+const char* const kHexVertMain = R"(
+out vec4 vColor;
+void main() {
+  vColor = aColor;
+  gl_Position = vec4(dataToClip(aCenter + aCorner * uRadius), 0.0, 1.0);
+})";
+
+/// Quiver shaft: the OHLC segment quad by another name.
+const char* const kQuiverShaftVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aArrow;
+layout(location = 2) in vec4 aColor;
+uniform vec2 uResolution;
+uniform float uWidth;
+)";
+
+const char* const kQuiverShaftVertMain = R"(
+out vec4 vColor;
+void main() {
+  vec2 s0 = (dataToClip(aArrow.xy) * 0.5 + 0.5) * uResolution;
+  vec2 s1 = (dataToClip(aArrow.zw) * 0.5 + 0.5) * uResolution;
+  vec2 d = s1 - s0;
+  float len = length(d);
+  vec2 dir = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  vec2 pos = mix(s0, s1, aCorner.x) + nrm * (aCorner.y * uWidth * 0.5);
+  vColor = aColor;
+  gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+/// Quiver head: three vertices from gl_VertexID, no corner buffer at all.
+const char* const kQuiverHeadVertBody = R"(
+precision highp float;
+layout(location = 1) in vec4 aArrow;
+layout(location = 2) in vec4 aColor;
+uniform vec2 uResolution;
+uniform float uHeadSize;
+)";
+
+const char* const kQuiverHeadVertMain = R"(
+out vec4 vColor;
+void main() {
+  vec2 s0 = (dataToClip(aArrow.xy) * 0.5 + 0.5) * uResolution;
+  vec2 s1 = (dataToClip(aArrow.zw) * 0.5 + 0.5) * uResolution;
+  vec2 d = s1 - s0;
+  float len = length(d);
+  vec2 dir = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  float w = uHeadSize * 0.6;
+  vec2 pos;
+  if (gl_VertexID == 0) pos = s1;
+  else if (gl_VertexID == 1) pos = s1 - dir * uHeadSize + nrm * w;
+  else pos = s1 - dir * uHeadSize - nrm * w;
+  vColor = aColor;
+  gl_Position = vec4((pos / uResolution) * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+/// One colour source or the other, chosen by a uniform rather than a program.
+const char* const kVertexOrUniformFrag = R"(#version 300 es
+precision highp float;
+in vec4 vColor;
+uniform vec4 uColor;
+uniform float uUseVertexColor;
+out vec4 outColor;
+void main() {
+  vec4 c = uUseVertexColor > 0.5 ? vColor : uColor;
+  outColor = vec4(c.rgb * c.a, c.a);
+})";
+
+}  // namespace
+
+HexbinLayer::HexbinLayer(const ph_hexbin_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  render_type_ = desc.render_type;
+
+  const size_t n = (desc.count > 0 && desc.x && desc.y) ? static_cast<size_t>(desc.count) : 0;
+  if (n == 0) return;
+
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+  for (size_t i = 0; i < n; ++i) {
+    if (!finite(desc.x[i]) || !finite(desc.y[i])) continue;
+    min_x = std::min(min_x, desc.x[i]);
+    max_x = std::max(max_x, desc.x[i]);
+    min_y = std::min(min_y, desc.y[i]);
+    max_y = std::max(max_y, desc.y[i]);
+    hex_bounds_ = true;
+  }
+  if (!hex_bounds_) return;
+  hex_x_ = ph_range{min_x, max_x};
+  hex_y_ = ph_range{min_y, max_y};
+
+  radius_ = desc.radius > 0.0 ? desc.radius : ((max_x - min_x) / 30.0);
+  if (!(radius_ > 0.0)) radius_ = 1.0;
+  const double dx = radius_ * 2.0 * std::sin(kPi / 3.0);
+  const double dy = radius_ * 1.5;
+
+  // Insertion-ordered so the instance order is the order cells were first
+  // touched — deterministic across runs and platforms, which a hash order
+  // would not be, and which the cross-host pixel comparison depends on.
+  struct Cell {
+    double cx;
+    double cy;
+    int64_t count;
+  };
+  std::unordered_map<int64_t, size_t> index;
+  std::vector<Cell> cells;
+  int64_t max_count = 1;
+  for (size_t i = 0; i < n; ++i) {
+    const double px = desc.x[i];
+    const double py = desc.y[i];
+    if (!finite(px) || !finite(py)) continue;
+    const int64_t pj = static_cast<int64_t>(std::llround(py / dy));
+    const int64_t odd = pj & 1;
+    const int64_t pi =
+        static_cast<int64_t>(std::llround(px / dx - static_cast<double>(odd) / 2.0));
+    // Two 32-bit lattice coordinates packed into one key, which is what the
+    // TypeScript's `${pi},${pj}` string is doing more expensively.
+    const int64_t key = (pi << 32) ^ (pj & 0xFFFFFFFF);
+    const auto found = index.find(key);
+    size_t slot;
+    if (found == index.end()) {
+      slot = cells.size();
+      index.emplace(key, slot);
+      cells.push_back(Cell{(static_cast<double>(pi) + static_cast<double>(odd) / 2.0) * dx,
+                           static_cast<double>(pj) * dy, 0});
+    } else {
+      slot = found->second;
+    }
+    ++cells[slot].count;
+    max_count = std::max(max_count, cells[slot].count);
+  }
+
+  x_ref_ = min_x;
+  y_ref_ = min_y;
+  double lo = desc.domain.lo;
+  double hi = desc.domain.hi;
+  if (!(hi > lo)) {
+    lo = 1.0;
+    hi = static_cast<double>(max_count);
+  }
+  count_domain_ = ph_range{lo, hi};
+  const double span = (hi - lo) != 0.0 ? (hi - lo) : 1.0;
+
+  const photon::color::Spec spec = colormap_spec(desc.colormap);
+  const photon::color::Lut& table = photon::color::lut(spec);
+  centers_.resize(cells.size() * 2);
+  colors_.resize(cells.size() * 4);
+  for (size_t k = 0; k < cells.size(); ++k) {
+    centers_[k * 2] = static_cast<float>(cells[k].cx - x_ref_);
+    centers_[k * 2 + 1] = static_cast<float>(cells[k].cy - y_ref_);
+    const photon::color::Rgb c =
+        photon::color::sample(table, (static_cast<double>(cells[k].count) - lo) / span);
+    colors_[k * 4] = c.r;
+    colors_[k * 4 + 1] = c.g;
+    colors_[k * 4 + 2] = c.b;
+    colors_[k * 4 + 3] = 1.0f;
+  }
+}
+
+bool HexbinLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!hex_bounds_) return false;
+  x = hex_x_;
+  y = hex_y_;
+  return true;
+}
+
+bool HexbinLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &hex_buffer_);
+    api.GenBuffers(1, &center_buffer_);
+    api.GenBuffers(1, &color_buffer_);
+    if (vao_ == 0) {
+      error = "failed to create hexbin vertex array";
+      return false;
+    }
+    const std::array<float, 36> hexagon = unit_hexagon();
+    api.BindVertexArray(vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, hex_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(hexagon.size() * sizeof(float)),
+                   hexagon.data(), GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, center_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 2, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.EnableVertexAttribArray(2);
+    api.VertexAttribPointer(2, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(2, 1);
+    api.BindVertexArray(0);
+  }
+
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, center_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(centers_.size() * sizeof(float)),
+                   centers_.empty() ? nullptr : centers_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(colors_.size() * sizeof(float)),
+                   colors_.empty() ? nullptr : colors_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool HexbinLayer::draw(const DrawState& state, std::string& error) {
+  if (centers_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms = with_transform_uniforms({"uRadius"});
+  const Program* program = get_program(api, "hexbin", vertex_source(kHexVertBody, kHexVertMain),
+                                       kBarFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform1f(program->uniform("uRadius"), static_cast<GLfloat>(radius_));
+  api.BindVertexArray(vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 18, static_cast<GLsizei>(centers_.size() / 2));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void HexbinLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  const GLuint buffers[] = {hex_buffer_, center_buffer_, color_buffer_};
+  api.DeleteBuffers(3, buffers);
+  vao_ = 0;
+  hex_buffer_ = center_buffer_ = color_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- QuiverLayer ------------------------------------------------------------
+
+QuiverLayer::QuiverLayer(const ph_quiver_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  vertex_color_ = desc.color_by != 0;
+  if (desc.width > 0.0f) width_ = desc.width;
+  if (desc.head_size > 0.0f) head_size_ = desc.head_size;
+
+  const size_t n = (desc.count > 0 && desc.x && desc.y && desc.u && desc.v)
+                       ? static_cast<size_t>(desc.count)
+                       : 0;
+  if (n == 0) return;
+  x_ref_ = desc.x[0];
+  y_ref_ = desc.y[0];
+  if (!finite(x_ref_)) x_ref_ = 0.0;
+  if (!finite(y_ref_)) y_ref_ = 0.0;
+
+  double scale = desc.scale;
+  if (!(scale > 0.0)) {
+    // Auto-fit: the longest arrow spans about 90% of a nominal grid cell, where
+    // the cell is the field's diagonal divided by the square root of the count.
+    // Without it a field in metres per second over a domain in kilometres draws
+    // one arrow across the whole plot.
+    double max_mag = 0.0;
+    double min_x = std::numeric_limits<double>::infinity();
+    double max_x = -min_x;
+    double min_y = min_x;
+    double max_y = -min_x;
+    for (size_t i = 0; i < n; ++i) {
+      max_mag = std::max(max_mag, std::hypot(desc.u[i], desc.v[i]));
+      min_x = std::min(min_x, desc.x[i]);
+      max_x = std::max(max_x, desc.x[i]);
+      min_y = std::min(min_y, desc.y[i]);
+      max_y = std::max(max_y, desc.y[i]);
+    }
+    double diag = std::hypot(max_x - min_x, max_y - min_y);
+    if (!(diag > 0.0) || !finite(diag)) diag = 1.0;
+    const double cell = diag / std::max(1.0, std::sqrt(static_cast<double>(n)));
+    scale = max_mag > 0.0 ? (0.9 * cell) / max_mag : 1.0;
+  }
+
+  double lo = desc.color_domain.lo;
+  double hi = desc.color_domain.hi;
+  if (vertex_color_ && !(hi > lo)) {
+    lo = std::numeric_limits<double>::infinity();
+    hi = -lo;
+    for (size_t i = 0; i < n; ++i) {
+      const double value = desc.color_values ? desc.color_values[i]
+                                             : std::hypot(desc.u[i], desc.v[i]);
+      if (!finite(value)) continue;
+      lo = std::min(lo, value);
+      hi = std::max(hi, value);
+    }
+    if (!finite(lo) || !finite(hi)) {
+      lo = 0.0;
+      hi = 1.0;
+    }
+  }
+  value_domain_ = ph_range{lo, hi};
+  const double span = (hi - lo) != 0.0 ? (hi - lo) : 1.0;
+  const photon::color::Spec spec = colormap_spec(desc.color_map);
+  const photon::color::Lut& table = photon::color::lut(spec);
+
+  arrows_.resize(n * 4);
+  colors_.resize(n * 4);
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+  for (size_t i = 0; i < n; ++i) {
+    const double xi = desc.x[i];
+    const double yi = desc.y[i];
+    const double tx = xi + desc.u[i] * scale;
+    const double ty = yi + desc.v[i] * scale;
+    arrows_[i * 4] = static_cast<float>(xi - x_ref_);
+    arrows_[i * 4 + 1] = static_cast<float>(yi - y_ref_);
+    arrows_[i * 4 + 2] = static_cast<float>(tx - x_ref_);
+    arrows_[i * 4 + 3] = static_cast<float>(ty - y_ref_);
+    if (vertex_color_) {
+      const double value = desc.color_values ? desc.color_values[i]
+                                             : std::hypot(desc.u[i], desc.v[i]);
+      const photon::color::Rgb c = photon::color::sample(table, (value - lo) / span);
+      colors_[i * 4] = c.r;
+      colors_[i * 4 + 1] = c.g;
+      colors_[i * 4 + 2] = c.b;
+      colors_[i * 4 + 3] = 1.0f;
+    }
+    if (!finite(xi) || !finite(yi) || !finite(tx) || !finite(ty)) continue;
+    min_x = std::min({min_x, xi, tx});
+    max_x = std::max({max_x, xi, tx});
+    min_y = std::min({min_y, yi, ty});
+    max_y = std::max({max_y, yi, ty});
+    quiver_bounds_ = true;
+  }
+  if (quiver_bounds_) {
+    quiver_x_ = ph_range{min_x, max_x};
+    quiver_y_ = ph_range{min_y, max_y};
+  }
+}
+
+bool QuiverLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!quiver_bounds_) return false;
+  x = quiver_x_;
+  y = quiver_y_;
+  return true;
+}
+
+bool QuiverLayer::ensure_gl(Api& api, std::string& error) {
+  if (shaft_vao_ == 0) {
+    api.GenVertexArrays(1, &shaft_vao_);
+    api.GenVertexArrays(1, &head_vao_);
+    api.GenBuffers(1, &corner_buffer_);
+    api.GenBuffers(1, &arrow_buffer_);
+    api.GenBuffers(1, &color_buffer_);
+    if (shaft_vao_ == 0 || head_vao_ == 0) {
+      error = "failed to create quiver vertex arrays";
+      return false;
+    }
+
+    api.BindVertexArray(shaft_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, corner_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(kLineCorners)), kLineCorners,
+                   GL_STATIC_DRAW);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, arrow_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.EnableVertexAttribArray(2);
+    api.VertexAttribPointer(2, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(2, 1);
+
+    // The head has no corner attribute at all — its three vertices come from
+    // gl_VertexID, so attribute 0 stays disabled here on purpose.
+    api.BindVertexArray(head_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, arrow_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(1, 1);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.EnableVertexAttribArray(2);
+    api.VertexAttribPointer(2, 4, GL_FLOAT, 0, 0, nullptr);
+    api.VertexAttribDivisor(2, 1);
+
+    api.BindVertexArray(0);
+  }
+
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, arrow_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(arrows_.size() * sizeof(float)),
+                   arrows_.empty() ? nullptr : arrows_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(colors_.size() * sizeof(float)),
+                   colors_.empty() ? nullptr : colors_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool QuiverLayer::draw(const DrawState& state, std::string& error) {
+  if (arrows_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  const Rgba colour = unpack_color(color_);
+  const GLfloat use_vertex_color = vertex_color_ ? 1.0f : 0.0f;
+  const GLsizei count = static_cast<GLsizei>(arrows_.size() / 4);
+
+  static const std::vector<std::string> kShaftUniforms =
+      with_transform_uniforms({"uColor", "uResolution", "uWidth", "uUseVertexColor"});
+  const Program* shaft = get_program(api, "quiver-shaft",
+                                     vertex_source(kQuiverShaftVertBody, kQuiverShaftVertMain),
+                                     kVertexOrUniformFrag, kShaftUniforms, state.gfx, error);
+  if (!shaft) return false;
+  api.UseProgram(shaft->id);
+  set_transform_uniforms(api, *shaft, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(shaft->uniform("uColor"), colour.r, colour.g, colour.b, colour.a);
+  api.Uniform2f(shaft->uniform("uResolution"), static_cast<GLfloat>(state.pixel_width),
+                static_cast<GLfloat>(state.pixel_height));
+  api.Uniform1f(shaft->uniform("uWidth"), width_ * state.dpr);
+  api.Uniform1f(shaft->uniform("uUseVertexColor"), use_vertex_color);
+  api.BindVertexArray(shaft_vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+  api.BindVertexArray(0);
+
+  if (head_size_ <= 0.0f) return true;
+
+  static const std::vector<std::string> kHeadUniforms =
+      with_transform_uniforms({"uColor", "uResolution", "uHeadSize", "uUseVertexColor"});
+  const Program* head = get_program(api, "quiver-head",
+                                    vertex_source(kQuiverHeadVertBody, kQuiverHeadVertMain),
+                                    kVertexOrUniformFrag, kHeadUniforms, state.gfx, error);
+  if (!head) return false;
+  api.UseProgram(head->id);
+  set_transform_uniforms(api, *head, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(head->uniform("uColor"), colour.r, colour.g, colour.b, colour.a);
+  api.Uniform2f(head->uniform("uResolution"), static_cast<GLfloat>(state.pixel_width),
+                static_cast<GLfloat>(state.pixel_height));
+  api.Uniform1f(head->uniform("uHeadSize"), head_size_ * state.dpr);
+  api.Uniform1f(head->uniform("uUseVertexColor"), use_vertex_color);
+  api.BindVertexArray(head_vao_);
+  api.DrawArraysInstanced(GL_TRIANGLES, 0, 3, count);
+  api.BindVertexArray(0);
+  return true;
+}
+
+void QuiverLayer::release_gl(Api& api) {
+  if (shaft_vao_ == 0) return;
+  const GLuint vaos[] = {shaft_vao_, head_vao_};
+  api.DeleteVertexArrays(2, vaos);
+  const GLuint buffers[] = {corner_buffer_, arrow_buffer_, color_buffer_};
+  api.DeleteBuffers(3, buffers);
+  shaft_vao_ = head_vao_ = 0;
+  corner_buffer_ = arrow_buffer_ = color_buffer_ = 0;
+  dirty_ = true;
 }
 
 }  // namespace photon

@@ -708,6 +708,69 @@ typedef struct ph_box_desc {
 } ph_box_desc;
 
 /**
+ * Mirrors core `HexbinOptions`.
+ *
+ * A million-point scatter turned into a few thousand hexagons: the points are
+ * binned on a hex lattice and each cell is coloured by how many landed in it.
+ * The answer to overplotting, and the reason the layer counts rather than draws.
+ */
+typedef struct ph_hexbin_desc {
+  uint32_t                struct_size;
+  const double*           x;
+  const double*           y;
+  int32_t                 count;
+  /** Hex radius in data units. 0 = about a thirtieth of the x extent. */
+  double                  radius;
+  /** NULL is viridis, the core's default. */
+  const ph_colormap_spec* colormap;
+  /** Count range mapped across the colormap. Empty means [1, the busiest cell]. */
+  ph_range                domain;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_hexbin_desc;
+
+/**
+ * Mirrors core `QuiverOptions`.
+ *
+ * An arrow per sample: a pixel-thick shaft to the tip and a screen-space head,
+ * so the arrowheads stay the same size at any zoom while the field itself
+ * scales with the data.
+ */
+typedef struct ph_quiver_desc {
+  uint32_t                struct_size;
+  const double*           x;
+  const double*           y;
+  /** The vector components at each anchor. */
+  const double*           u;
+  const double*           v;
+  int32_t                 count;
+  /**
+   * Multiplier applied to (u, v) in data units. 0 auto-fits so the longest
+   * arrow spans about 90% of a nominal grid cell.
+   */
+  double                  scale;
+  ph_color                color;
+  /** Shaft thickness in logical px. 0 = 1.5. */
+  float                   width;
+  /** Arrowhead length in logical px. 0 = 9. */
+  float                   head_size;
+  /**
+   * Colour each arrow through a colormap instead of one flat colour. Off
+   * unless `color_by` is set; the values default to each arrow's magnitude.
+   */
+  ph_bool                 color_by;
+  /** Per-arrow values for `color_by`. NULL uses the magnitude. */
+  const double*           color_values;
+  const ph_colormap_spec* color_map;
+  /** Value range mapped across the colormap. Empty means fit to the values. */
+  ph_range                color_domain;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_quiver_desc;
+
+/**
  * Mirrors core `CandlestickOptions`.
  *
  * One body rectangle and one low-to-high wick per period, coloured by
@@ -976,6 +1039,8 @@ PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
 PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
+PH_API void PH_CALL ph_hexbin_desc_init(ph_hexbin_desc* out);
+PH_API void PH_CALL ph_quiver_desc_init(ph_quiver_desc* out);
 PH_API void PH_CALL ph_candlestick_desc_init(ph_candlestick_desc* out);
 PH_API void PH_CALL ph_ohlc_desc_init(ph_ohlc_desc* out);
 PH_API void PH_CALL ph_heatmap_desc_init(ph_heatmap_desc* out);
@@ -1065,6 +1130,8 @@ PH_API ph_result PH_CALL ph_plot_add_pie(ph_plot plot, const ph_pie_desc* desc, 
 PH_API ph_result PH_CALL ph_plot_add_stem(ph_plot plot, const ph_stem_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_errorbar(ph_plot plot, const ph_errorbar_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_box(ph_plot plot, const ph_box_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_hexbin(ph_plot plot, const ph_hexbin_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_quiver(ph_plot plot, const ph_quiver_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_candlestick(ph_plot plot, const ph_candlestick_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_ohlc(ph_plot plot, const ph_ohlc_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_heatmap(ph_plot plot, const ph_heatmap_desc* desc, ph_layer* out);

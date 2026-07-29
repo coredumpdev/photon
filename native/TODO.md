@@ -74,9 +74,9 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (4 remaining of 17)
+### Layers with their own shaders (2 remaining of 17)
 
-`contour` `graph` `hexbin` `quiver`
+`contour` `graph` — both blocked on a pure-function port, not on a shader.
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
       under it.
@@ -100,7 +100,12 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       heatmap bakes its colours on the CPU at build time, so it costs one draw
       call at any resolution; `image` takes RGBA8 the caller already has,
       because fetching and decoding belongs to the host.
-- [ ] `hexbin` and `contour` still want the colormaps, which are now ported.
+- [x] ~~`hexbin` and `quiver`~~ — both colour themselves through the colormaps.
+      The hexbin's cells are insertion-ordered rather than hash-ordered, so the
+      instance order is the same on every run and platform; the cross-host
+      pixel comparison depends on that.
+- [ ] `contour` needs `geo/delaunay.ts`; `graph` needs `graph/force.ts` and
+      `graph/quadtree.ts`. Neither is a shader problem.
 - [x] ~~`candlestick` + `ohlc`~~ — one base class holding the five arrays and
       the median-spacing width, two shapes over it. Both demo panels sit on the
       ordinal-time axis, which is what makes the weekends disappear.

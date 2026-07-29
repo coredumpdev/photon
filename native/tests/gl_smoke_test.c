@@ -705,6 +705,103 @@ int main(void) {
   CHECK(bar_red > 300 && bar_red < 900);
 
   CHECK_EQ(ph_plot_destroy(ohlc_plot), PH_OK);
+
+  /* ---- hexbin and quiver: the two layers that colour themselves ---- */
+
+  ph_plot field_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &field_plot), PH_OK);
+
+  /* Three points at the same place and one far away: two cells, and with a
+   * black-to-white ramp over a [1,3] count domain the busy one comes out white
+   * and the lonely one nearly black. That checks the binning and the colouring
+   * together — a wrong bin would give two grey cells or one. */
+  const double hex_x[4] = {3.0, 3.0, 3.0, 7.0};
+  const double hex_y[4] = {5.0, 5.0, 5.0, 5.0};
+  ph_colormap_spec hex_map;
+  ph_colormap_spec_init(&hex_map);
+  hex_map.stops = ramp;
+  hex_map.stop_count = 2;
+
+  ph_hexbin_desc hexes;
+  ph_hexbin_desc_init(&hexes);
+  hexes.x = hex_x;
+  hexes.y = hex_y;
+  hexes.count = 4;
+  hexes.radius = 1.0;
+  hexes.colormap = &hex_map;
+  hexes.domain.lo = 1.0;
+  hexes.domain.hi = 3.0;
+  ph_layer hex_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_hexbin(field_plot, &hexes, &hex_layer) != PH_OK) {
+    printf("  FAIL add_hexbin: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* hex_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!hex_pixels) return 1;
+  if (ph_plot_render_pixels(field_plot, patch_w, patch_h, 1.0f, hex_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL hexbin render: %s\n", ph_last_error());
+    return 1;
+  }
+  long white = 0, dark_cell = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = hex_pixels + (size_t)i * 4;
+    if (p[3] < 200) continue;
+    if (p[0] > 240 && p[1] > 240 && p[2] > 240) white++;
+    /* Opaque but nearly black is the one-point cell, not the background —
+     * the background is transparent here. */
+    if (p[0] < 20 && p[1] < 20 && p[2] < 20) dark_cell++;
+  }
+  free(hex_pixels);
+  /* A radius-1 hexagon is 2.598 square data units; the region is 128x144 px
+   * over a 10x10 view, so each cell is about 479 px. */
+  printf("  hexbin busy=%ld lonely=%ld (expect ~479 each)\n", white, dark_cell);
+  CHECK(white > 380 && white < 580);
+  CHECK(dark_cell > 380 && dark_cell < 580);
+  CHECK_EQ(ph_layer_destroy(hex_layer), PH_OK);
+
+  /* Two arrows from the same base, one twice as long. Flat colour, so the ink
+   * is countable: shafts of 4 and 8 data units at 4px wide, plus two heads. */
+  const double arrow_x[2] = {1.0, 1.0};
+  const double arrow_y[2] = {2.0, 7.0};
+  const double arrow_u[2] = {4.0, 8.0};
+  const double arrow_v[2] = {0.0, 0.0};
+  ph_quiver_desc arrows;
+  ph_quiver_desc_init(&arrows);
+  arrows.x = arrow_x;
+  arrows.y = arrow_y;
+  arrows.u = arrow_u;
+  arrows.v = arrow_v;
+  arrows.count = 2;
+  arrows.scale = 1.0;
+  arrows.width = 4.0f;
+  arrows.head_size = 12.0f;
+  CHECK_EQ(ph_color_parse("#ffff00", &arrows.color), PH_OK);
+  ph_layer quiver_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_quiver(field_plot, &arrows, &quiver_layer) != PH_OK) {
+    printf("  FAIL add_quiver: %s\n", ph_last_error());
+    return 1;
+  }
+  unsigned char* quiver_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!quiver_pixels) return 1;
+  if (ph_plot_render_pixels(field_plot, patch_w, patch_h, 1.0f, quiver_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL quiver render: %s\n", ph_last_error());
+    return 1;
+  }
+  long yellow_px = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = quiver_pixels + (size_t)i * 4;
+    if (p[3] > 200 && p[0] > 200 && p[1] > 200 && p[2] < 40) yellow_px++;
+  }
+  free(quiver_pixels);
+  /* Shafts: (4 + 8) data units is 12/10 of 128 px = 154 px of length at 4 px
+   * wide, so about 614; two heads of 12x14 px add roughly 170. */
+  printf("  quiver ink=%ld px\n", yellow_px);
+  CHECK(yellow_px > 600 && yellow_px < 950);
+
+  CHECK_EQ(ph_plot_destroy(field_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

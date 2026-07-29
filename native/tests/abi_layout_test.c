@@ -269,6 +269,39 @@ PH_ASSERT_LAYOUT(offsetof(ph_box_desc, name) == 40, "ph_box_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, y_axis) == 48, "ph_box_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, render_type) == 56, "ph_box_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_hexbin_desc) == 88, "ph_hexbin_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_hexbin_desc) == 8, "ph_hexbin_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, struct_size) == 0, "ph_hexbin_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, x) == 8, "ph_hexbin_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, y) == 16, "ph_hexbin_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, count) == 24, "ph_hexbin_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, radius) == 32, "ph_hexbin_desc.radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, colormap) == 40, "ph_hexbin_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, domain) == 48, "ph_hexbin_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, name) == 64, "ph_hexbin_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, y_axis) == 72, "ph_hexbin_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, render_type) == 80, "ph_hexbin_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_quiver_desc) == 128, "ph_quiver_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_quiver_desc) == 8, "ph_quiver_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, struct_size) == 0, "ph_quiver_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, x) == 8, "ph_quiver_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, y) == 16, "ph_quiver_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, u) == 24, "ph_quiver_desc.u offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, v) == 32, "ph_quiver_desc.v offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, count) == 40, "ph_quiver_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, scale) == 48, "ph_quiver_desc.scale offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, color) == 56, "ph_quiver_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, width) == 60, "ph_quiver_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, head_size) == 64, "ph_quiver_desc.head_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, color_by) == 68, "ph_quiver_desc.color_by offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, color_values) == 72, "ph_quiver_desc.color_values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, color_map) == 80, "ph_quiver_desc.color_map offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, color_domain) == 88, "ph_quiver_desc.color_domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, name) == 104, "ph_quiver_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, y_axis) == 112, "ph_quiver_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver_desc, render_type) == 120, "ph_quiver_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_candlestick_desc) == 104, "ph_candlestick_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_candlestick_desc) == 8, "ph_candlestick_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_candlestick_desc, struct_size) == 0, "ph_candlestick_desc.struct_size offset");
@@ -370,7 +403,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 25);
+  printf("%d struct layouts match the generated bindings\n", 27);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");
