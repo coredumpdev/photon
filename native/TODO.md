@@ -179,11 +179,11 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
 
 ## Cross-cutting / risks
 
-- [ ] **The same zoom collapse is still in the web core.** `plot.ts`'s
-      `zoomAround` has no bound, so a few thousand wheel notches out and back
-      leaves a blank chart there exactly as it did here — see the divergence
-      note in DESIGN.md. The native fix is `Plot::zoom_fits`; porting it back
-      to TypeScript is a handful of lines and wants its own release.
+- [x] ~~The same zoom collapse is still in the web core.~~ Fixed there too:
+      `zoomFits` in `packages/core/src/plot.ts`, same two constants, same
+      reasoning, applied to both the wheel and box zoom. `packages/core/test/
+      zoom.test.ts` covers it, including a control that shows the unguarded
+      arithmetic still destroys the view. Not yet released to npm.
 
 - [ ] **Only Linux has ever been compiled.** Windows (MSVC) and macOS are
       unverified. The `msvc` preset exists but has never run. Expect the first

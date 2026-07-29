@@ -372,6 +372,62 @@ function clampAxis(domain: Range, bounds: Range): Range {
 }
 
 /**
+ * How far a view may be zoomed out, as a multiple of the data's own extent.
+ *
+ * A chart a billion times wider than its data is already a blank rectangle with
+ * a hairline in it, so nothing readable is lost. What is gained is the way back.
+ */
+const MAX_ZOOM_OUT = 1e9;
+
+/**
+ * How narrow a view may get, as a fraction of its own magnitude.
+ *
+ * Doubles near a value v are spaced about `v * 2.2e-16` apart, so this leaves
+ * some forty distinct values across the view — far past being able to see
+ * anything, and still nowhere near a legitimate deep zoom. One millisecond on
+ * an epoch-ms time axis is 6e-13 of its magnitude, comfortably above.
+ */
+const MIN_ZOOM_IN = 1e-14;
+
+/**
+ * Whether `[lo, hi]` is a view the user can get back out of.
+ *
+ * Zooming used to run until the numbers gave out, and both ends of that are a
+ * one-way trip, because `invert(t) = lo + t * (hi - lo)` cannot climb back out
+ * of either:
+ *
+ * - **Out.** Each wheel notch multiplies the span, so a few thousand of them
+ *   take it past 1e130. Zooming about the cursor keeps that point fixed — and
+ *   keeps the rounding error in it too, as an absolute offset that later
+ *   zoom-ins cannot shrink. Measured on a real chart, the domain reached 1e133
+ *   wide with a centre that had drifted to 1e117; when the span finally came
+ *   back down to something readable, both ends had rounded onto the same
+ *   number and the chart was blank for good.
+ * - **In.** The mirror image: below about an eps of the view's own magnitude
+ *   both ends are the same double, and every later `invert` returns it.
+ *
+ * Bounding the span at what a float can hold is not enough — that leaves the
+ * collapse intact at 1e133. The bound has to be relative to what is being
+ * looked at, which is what `data` is for; pass `undefined` when there is none,
+ * since a view of nothing cannot be wrong.
+ */
+export function zoomFits(scale: Scale, lo: number, hi: number, data?: Range): boolean {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || !Number.isFinite(hi - lo)) return false;
+
+  const span = Math.abs(hi - lo);
+  const magnitude = Math.max(Math.abs(lo), Math.abs(hi));
+  if (!(span > magnitude * MIN_ZOOM_IN)) return false;
+
+  // A log axis zooms in log space, where the numbers stay within a few hundred
+  // and precision is not the problem. Its failure mode is the exponential
+  // overflowing, which the finite check above already catches.
+  if (scale.log || !data) return true;
+  const extent = data[1] - data[0];
+  if (!(extent > 0)) return true;
+  return span <= MAX_ZOOM_OUT * extent;
+}
+
+/**
  * The imperative core plot. Owns a stack of three canvases (grid / WebGL data /
  * axis overlay), a shared x scale, and one-or-more named y axes.
  */
@@ -2692,8 +2748,12 @@ export class Plot {
       const nB = clamp01((Math.max(x0, x1) - region.left) / region.width);
       const a = this.scaleX.invert(nA);
       const b = this.scaleX.invert(nB);
-      this.scaleX.domain = [Math.min(a, b), Math.max(a, b)];
-      this.autoX = false;
+      // Guarded for the same reason as the wheel: box zoom shrinks the view too,
+      // and repeated boxes reach the same floor a repeated wheel does.
+      if (zoomFits(this.scaleX, Math.min(a, b), Math.max(a, b), this.layerBoundsX() ?? undefined)) {
+        this.scaleX.domain = [Math.min(a, b), Math.max(a, b)];
+        this.autoX = false;
+      }
     }
     if (lock.y) {
       const nTop = clamp01(1 - (Math.min(y0, y1) - region.top) / region.height);
@@ -2701,8 +2761,11 @@ export class Plot {
       for (const ya of this.yAxes.values()) {
         const a = ya.scale.invert(nTop);
         const b = ya.scale.invert(nBot);
-        ya.scale.domain = [Math.min(a, b), Math.max(a, b)];
-        ya.auto = false;
+        const bounds = this.layerBoundsY(ya.id) ?? undefined;
+        if (zoomFits(ya.scale, Math.min(a, b), Math.max(a, b), bounds)) {
+          ya.scale.domain = [Math.min(a, b), Math.max(a, b)];
+          ya.auto = false;
+        }
       }
     }
     this.requestRender();
@@ -2711,16 +2774,27 @@ export class Plot {
   private zoomAround(nx: number, ny: number, factor: number): void {
     const lock = this.axisLock();
     // Zoom about the cursor in transformed space (log-safe; see panX/panY).
+    // A step that would leave a view nothing can zoom back out of is dropped
+    // rather than applied — see zoomFits. The furthest zoom is a wall, and
+    // holding still is the only sensible thing to do at one.
     if (lock.x) {
       const t = nx * (1 - factor);
-      this.scaleX.domain = [this.scaleX.invert(t), this.scaleX.invert(t + factor)];
-      this.autoX = false;
+      const lo = this.scaleX.invert(t);
+      const hi = this.scaleX.invert(t + factor);
+      if (zoomFits(this.scaleX, lo, hi, this.layerBoundsX() ?? undefined)) {
+        this.scaleX.domain = [lo, hi];
+        this.autoX = false;
+      }
     }
     if (lock.y) {
       const t = ny * (1 - factor);
       for (const ya of this.yAxes.values()) {
-        ya.scale.domain = [ya.scale.invert(t), ya.scale.invert(t + factor)];
-        ya.auto = false;
+        const lo = ya.scale.invert(t);
+        const hi = ya.scale.invert(t + factor);
+        if (zoomFits(ya.scale, lo, hi, this.layerBoundsY(ya.id) ?? undefined)) {
+          ya.scale.domain = [lo, hi];
+          ya.auto = false;
+        }
       }
     }
     this.requestRender();
