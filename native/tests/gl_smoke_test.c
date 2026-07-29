@@ -802,6 +802,106 @@ int main(void) {
   CHECK(yellow_px > 600 && yellow_px < 950);
 
   CHECK_EQ(ph_plot_destroy(field_plot), PH_OK);
+
+  /* ---- contour and graph: the last two, and the two that derive geometry ---- */
+
+  ph_plot iso_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &iso_plot), PH_OK);
+
+  /* A 2x2 grid rising left to right over the whole 10x10 view. One explicit
+   * level at 0.5 crosses exactly halfway, so the iso-line is a single vertical
+   * at x = 5 — a contour whose position is arithmetic rather than a guess. */
+  const double iso_values[4] = {0.0, 1.0, 0.0, 1.0};
+  const double iso_levels[1] = {0.5};
+  ph_contour_desc iso;
+  ph_contour_desc_init(&iso);
+  iso.values = iso_values;
+  iso.cols = 2;
+  iso.rows = 2;
+  iso.x.lo = 0.0;
+  iso.x.hi = 10.0;
+  iso.y.lo = 0.0;
+  iso.y.hi = 10.0;
+  iso.levels = iso_levels;
+  iso.level_count = 1;
+  CHECK_EQ(ph_color_parse("#00ff00", &iso.color), PH_OK);
+  ph_layer iso_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_contour(iso_plot, &iso, &iso_layer) != PH_OK) {
+    printf("  FAIL add_contour: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* iso_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!iso_pixels) return 1;
+  if (ph_plot_render_pixels(iso_plot, patch_w, patch_h, 1.0f, iso_pixels, patch_w * 4) != PH_OK) {
+    printf("  FAIL contour render: %s\n", ph_last_error());
+    return 1;
+  }
+  long iso_px = 0;
+  int iso_min_col = patch_w, iso_max_col = -1;
+  for (int row = 0; row < patch_h; row++) {
+    for (int col = 0; col < patch_w; col++) {
+      const unsigned char* p = iso_pixels + ((size_t)row * patch_w + col) * 4;
+      if (p[3] < 200 || p[1] < 200 || p[0] > 40 || p[2] > 40) continue;
+      iso_px++;
+      if (col < iso_min_col) iso_min_col = col;
+      if (col > iso_max_col) iso_max_col = col;
+    }
+  }
+  free(iso_pixels);
+  /* The region is x 56..184, so the halfway point is column 120. */
+  printf("  contour ink=%ld px, columns %d..%d\n", iso_px, iso_min_col, iso_max_col);
+  CHECK(iso_px > 100);
+  CHECK(iso_min_col >= 118 && iso_max_col <= 122);
+  CHECK_EQ(ph_layer_destroy(iso_layer), PH_OK);
+
+  /* A triangle of three nodes. The node discs are drawn with gl_PointSize, the
+   * same desktop-versus-WebGL2 gate the box outliers need — so counting them
+   * is what proves the enable is there. */
+  const double node_x[3] = {2.0, 8.0, 5.0};
+  const double node_y[3] = {2.0, 2.0, 8.0};
+  const ph_edge triangle[3] = {{0, 1}, {1, 2}, {2, 0}};
+  ph_graph_desc graph;
+  ph_graph_desc_init(&graph);
+  graph.x = node_x;
+  graph.y = node_y;
+  graph.node_count = 3;
+  graph.edges = triangle;
+  graph.edge_count = 3;
+  graph.node_size = 20.0f;
+  CHECK_EQ(ph_color_parse("#ff00ff", &graph.node_color), PH_OK);
+  CHECK_EQ(ph_color_parse("#00ffff", &graph.edge_color), PH_OK);
+  ph_layer graph_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_graph(iso_plot, &graph, &graph_layer) != PH_OK) {
+    printf("  FAIL add_graph: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* graph_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!graph_pixels) return 1;
+  if (ph_plot_render_pixels(iso_plot, patch_w, patch_h, 1.0f, graph_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL graph render: %s\n", ph_last_error());
+    return 1;
+  }
+  long node_px = 0, edge_px = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = graph_pixels + (size_t)i * 4;
+    if (p[3] < 200) continue;
+    if (p[0] > 200 && p[1] < 40 && p[2] > 200) node_px++;
+    if (p[0] < 40 && p[1] > 200 && p[2] > 200) edge_px++;
+  }
+  free(graph_pixels);
+  /* Three discs 20 px across is about 3 * pi * 100 = 942 px, less the
+   * antialiased rim the smoothstep fades out. A missing GL_PROGRAM_POINT_SIZE
+   * would give 3 pixels, which is the point of counting. The edges are
+   * one-pixel lines with their ends under those discs, so a triangle of about
+   * 460 px of perimeter shows rather less than that. */
+  printf("  graph nodes=%ld px edges=%ld px\n", node_px, edge_px);
+  CHECK(node_px > 700 && node_px < 1100);
+  CHECK(edge_px > 150 && edge_px < 460);
+
+  CHECK_EQ(ph_plot_destroy(iso_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

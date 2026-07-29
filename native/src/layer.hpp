@@ -370,6 +370,75 @@ class BoxLayer : public Layer {
 };
 
 /**
+ * Iso-lines through a scalar field, by marching squares.
+ *
+ * Sixteen corner cases, each naming which cell edges to join; the crossing on
+ * each edge is linearly interpolated. Plain line segments out, so the layer is
+ * a lookup table and a loop rather than a shader.
+ */
+class ContourLayer : public Layer {
+ public:
+  explicit ContourLayer(const ph_contour_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  /// Position + colour, six floats per vertex, two vertices per segment.
+  std::vector<float> vertices_;
+  ph_range extent_x_{0.0, 1.0};
+  ph_range extent_y_{0.0, 1.0};
+  bool has_extent_ = false;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  /// The value range the level colours span — what a colorbar would caption.
+  ph_range value_domain_{0.0, 1.0};
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+};
+
+/**
+ * A node-link graph: edges as segments, nodes as round points.
+ *
+ * When the caller gives no positions the layer lays the graph out itself with
+ * the core's force algorithm, which is deterministic — so the same graph is the
+ * same picture in every host.
+ */
+class GraphLayer : public Layer {
+ public:
+  explicit GraphLayer(const ph_graph_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<float> nodes_;
+  std::vector<float> edges_;
+  Rgba node_color_{};
+  Rgba edge_color_{};
+  float node_size_ = 10.0f;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  ph_range graph_x_{0.0, 0.0};
+  ph_range graph_y_{0.0, 0.0};
+  bool graph_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint node_vao_ = 0;
+  gl::GLuint edge_vao_ = 0;
+  gl::GLuint node_buffer_ = 0;
+  gl::GLuint edge_buffer_ = 0;
+};
+
+/**
  * Points binned onto a hex lattice, each cell coloured by its count.
  *
  * The binning is d3-hexbin's, simplified: round to the nearest lattice row,

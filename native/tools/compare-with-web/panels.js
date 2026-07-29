@@ -1,5 +1,5 @@
 /**
- * The sixteen demo charts, built with @photonviz/core.
+ * The eighteen demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -23,6 +23,9 @@ const SPRITE = 16;
 const SESSIONS = 34;
 const DENSE_POINTS = 24000;
 const FLOW = 14;
+const ISO_LEVELS = 9;
+const NODES = 48;
+const GRAPH_EDGES = 72;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -459,6 +462,63 @@ function flow(container) {
   return plot;
 }
 
+function contour(container) {
+  const values = new Float64Array(FIELD_COLS * FIELD_ROWS);
+  for (let row = 0; row < FIELD_ROWS; row++) {
+    for (let col = 0; col < FIELD_COLS; col++) {
+      const x = (col - FIELD_COLS * 0.5) * 0.12;
+      const y = (row - FIELD_ROWS * 0.5) * 0.12;
+      const r1 = Math.sqrt((x + 2) * (x + 2) + y * y);
+      const r2 = Math.sqrt((x - 2) * (x - 2) + y * y);
+      values[row * FIELD_COLS + col] = Math.sin(r1 * 3) + Math.sin(r2 * 3);
+    }
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Contour",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+    colorbar: false,
+  });
+  // No `color`, so each level takes its own from the colormap.
+  plot.addContour({
+    values, cols: FIELD_COLS, rows: FIELD_ROWS,
+    extent: { x: [-6, 6], y: [-4.5, 4.5] },
+    levels: ISO_LEVELS,
+    colormap: "turbo",
+  });
+  return plot;
+}
+
+function network(container) {
+  const edges = [];
+  let seed = 99887766;
+  const nextInt = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return (seed >>> 8) & 0xffffff;
+  };
+  for (let i = 0; i < NODES; i++) edges.push([i, (i + 1) % NODES]);
+  for (let i = NODES; i < GRAPH_EDGES; i++) {
+    const a = nextInt() % NODES;
+    const b = nextInt() % NODES;
+    edges.push([a, b === a ? (a + NODES / 2) % NODES : b]);
+  }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Network",
+    // A force layout's axes are arbitrary units, so the numbers mean nothing.
+    axes: { x: { showTicks: false, showGrid: false }, y: { showTicks: false, showGrid: false } },
+  });
+  // No x/y: the layer lays it out from the edges alone, the same way the
+  // native one does when no positions are given.
+  plot.addGraph({
+    edges, nodes: NODES,
+    nodeColor: "#f472b6", edgeColor: "rgba(148,163,184,0.4)", nodeSize: 9,
+  });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
-                       candles, bars, density, flow];
+                       candles, bars, density, flow, contour, network];

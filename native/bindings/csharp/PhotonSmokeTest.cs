@@ -470,6 +470,75 @@ internal static class PhotonSmokeTest
             "ph_plot_add_box");
     }
 
+    /// Iso-lines and a node-link graph — the only two layers whose geometry the
+    /// core derives rather than receives.
+    private static void IsoAndGraph(ulong plot)
+    {
+        // A 3x3 grid rising left to right, and three nodes in a line.
+        var values = new double[] { 0, 1, 2, 0, 1, 2, 0, 1, 2 };
+        var nx = new double[] { 0, 2, 4 };
+        var ny = new double[] { 0, 5, 0 };
+        var edges = new[] { new ph_edge { a = 0, b = 1 }, new ph_edge { a = 1, b = 2 } };
+        var pins = new[]
+        {
+            GCHandle.Alloc(values, GCHandleType.Pinned), GCHandle.Alloc(nx, GCHandleType.Pinned),
+            GCHandle.Alloc(ny, GCHandleType.Pinned), GCHandle.Alloc(edges, GCHandleType.Pinned),
+        };
+        try
+        {
+            ph_contour_desc_init(out var contour);
+            contour.values = pins[0].AddrOfPinnedObject();
+            contour.cols = 3;
+            contour.rows = 3;
+            contour.x = new ph_range { lo = 0.0, hi = 8.0 };
+            contour.y = new ph_range { lo = 1.0, hi = 5.0 };
+            CheckEq(ph_plot_add_contour(plot, in contour, out var contourLayer), PH_OK,
+                "ph_plot_add_contour");
+            CheckEq(ph_layer_bounds(contourLayer, out var isoX, out var isoY), PH_OK,
+                "contour bounds");
+            // The bounds are the grid's extent, whatever the lines inside it do.
+            Check(isoX.hi == 8.0 && isoY.lo == 1.0, "the contour bounds are its extent");
+            CheckEq(ph_layer_destroy(contourLayer), PH_OK, "the contour layer is destroyed");
+
+            ph_graph_desc_init(out var graph);
+            graph.x = pins[1].AddrOfPinnedObject();
+            graph.y = pins[2].AddrOfPinnedObject();
+            graph.node_count = nx.Length;
+            graph.edges = pins[3].AddrOfPinnedObject();
+            graph.edge_count = edges.Length;
+            CheckEq(ph_plot_add_graph(plot, in graph, out var graphLayer), PH_OK,
+                "ph_plot_add_graph");
+            CheckEq(ph_layer_bounds(graphLayer, out var graphX, out var graphY), PH_OK,
+                "graph bounds");
+            Check(graphX.hi == 4.0 && graphY.hi == 5.0, "the graph bounds are its nodes");
+            CheckEq(ph_layer_destroy(graphLayer), PH_OK, "the graph layer is destroyed");
+
+            // No positions at all: the layer lays the graph out itself.
+            graph.x = IntPtr.Zero;
+            graph.y = IntPtr.Zero;
+            graph.layout_iterations = 40;
+            CheckEq(ph_plot_add_graph(plot, in graph, out var laidLayer), PH_OK,
+                "a graph with no positions");
+            CheckEq(ph_layer_bounds(laidLayer, out var laidX, out _), PH_OK,
+                "laid-out bounds");
+            Check(Math.Abs(laidX.lo) < 10.0 && Math.Abs(laidX.hi) < 10.0,
+                "the layout stays near the origin");
+            CheckEq(ph_layer_destroy(laidLayer), PH_OK, "the laid-out layer is destroyed");
+
+            // One position array without the other is a mistake, not a request.
+            graph.x = pins[1].AddrOfPinnedObject();
+            CheckEq(ph_plot_add_graph(plot, in graph, out _), PH_E_INVALID_ARGUMENT,
+                "x without y is rejected");
+        }
+        finally
+        {
+            foreach (var pin in pins) pin.Free();
+        }
+
+        Ran("ph_contour_desc_init", "ph_graph_desc_init", "ph_plot_add_contour",
+            "ph_plot_add_graph");
+    }
+
     /// Binned hexagons and a vector field — the two layers that colour themselves.
     private static void Fields(ulong plot)
     {
@@ -830,6 +899,7 @@ internal static class PhotonSmokeTest
         AreaAndBars(plot);
         PieAndStem(plot);
         ErrorBarsAndBoxes(plot);
+        IsoAndGraph(plot);
         Fields(plot);
         Ohlc(plot);
         Grids(plot);

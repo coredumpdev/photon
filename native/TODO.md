@@ -74,9 +74,10 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (2 remaining of 17)
+### Layers with their own shaders — all 17 done
 
-`contour` `graph` — both blocked on a pure-function port, not on a shader.
+Every 2-D layer the web core has is ported. What is left in this section is the
+convenience wrappers above the ABI and the streaming setters below it.
 
 - [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
       under it.
@@ -104,8 +105,12 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       The hexbin's cells are insertion-ordered rather than hash-ordered, so the
       instance order is the same on every run and platform; the cross-host
       pixel comparison depends on that.
-- [ ] `contour` needs `geo/delaunay.ts`; `graph` needs `graph/force.ts` and
-      `graph/quadtree.ts`. Neither is a shader problem.
+- [x] ~~`contour` and `graph`~~ — the last two. Contour is marching squares
+      over the same grid layout the heatmap takes, so the two overlay without
+      the caller reshaping anything. Graph brought `graph/force.cpp` and
+      `graph/quadtree.cpp` with it; given no positions the layer lays the graph
+      out itself, and the layout is deterministic — the web comparison draws
+      the same 48 nodes in the same places.
 - [x] ~~`candlestick` + `ohlc`~~ — one base class holding the five arrays and
       the median-spacing width, two shapes over it. Both demo panels sit on the
       ordinal-time axis, which is what makes the weekends disappear.
@@ -145,8 +150,12 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
       `src/stats/stats.cpp`, with `tests/stats_test.cpp` over them)
 - [x] ~~`geo/earcut.ts`~~ — ported with its vitest suite transcribed, plus two
       cases the TypeScript does not have (winding independence, two holes).
-- [ ] `geo/delaunay.ts` (needed by contour)
-- [ ] `graph/force.ts` + `graph/quadtree.ts` (needed by the graph layer)
+- [ ] `geo/delaunay.ts` — not needed by any ported layer after all; contour is
+      marching squares over a regular grid.
+- [x] ~~`graph/force.ts` + `graph/quadtree.ts`~~ — with `tests/force_test.cpp`
+      checking the Barnes-Hut approximation against the exact all-pairs sum it
+      replaces. An optimisation that changes the picture is a bug wearing a
+      performance argument.
 - [ ] `data/csv.ts` + `data/downsample.ts`
 
 All of the above are pure functions with existing unit tests in

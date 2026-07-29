@@ -6,9 +6,11 @@
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
+#include <utility>
 
 #include "color/colormap.hpp"
 #include "geo/earcut.hpp"
+#include "graph/force.hpp"
 #include "stats/stats.hpp"
 #include "gl/program.hpp"
 
@@ -3267,6 +3269,415 @@ void QuiverLayer::release_gl(Api& api) {
   api.DeleteBuffers(3, buffers);
   shaft_vao_ = head_vao_ = 0;
   corner_buffer_ = arrow_buffer_ = color_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- ContourLayer -----------------------------------------------------------
+
+namespace {
+
+/// Marching squares: corner mask -> the cell edges to join. Edge 0 is the
+/// bottom, 1 the right, 2 the top, 3 the left. Cases 5 and 10 are the saddles,
+/// and the pair of segments they list is the choice this table makes about
+/// which way the ridge runs.
+struct MarchingCase {
+  int8_t count;
+  int8_t edges[4];
+};
+
+constexpr MarchingCase kMarchingCases[16] = {
+    {0, {0, 0, 0, 0}}, {1, {3, 0, 0, 0}}, {1, {0, 1, 0, 0}}, {1, {3, 1, 0, 0}},
+    {1, {1, 2, 0, 0}}, {2, {3, 0, 1, 2}}, {1, {0, 2, 0, 0}}, {1, {3, 2, 0, 0}},
+    {1, {2, 3, 0, 0}}, {1, {2, 0, 0, 0}}, {2, {0, 1, 2, 3}}, {1, {2, 1, 0, 0}},
+    {1, {1, 3, 0, 0}}, {1, {1, 0, 0, 0}}, {1, {0, 3, 0, 0}}, {0, {0, 0, 0, 0}},
+};
+
+/// Nodes: a round point sized in device pixels.
+const char* const kNodeVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aPos;
+uniform float uSize;
+)";
+
+const char* const kNodeVertMain = R"(
+void main() {
+  gl_Position = vec4(dataToClip(aPos), 0.0, 1.0);
+  gl_PointSize = uSize;
+})";
+
+const char* const kNodeFrag = R"(#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 outColor;
+void main() {
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  float r = length(p);
+  if (r > 1.0) discard;
+  float a = smoothstep(1.0, 0.82, r);
+  outColor = vec4(uColor.rgb * uColor.a * a, uColor.a * a);
+})";
+
+/// The core's graph defaults: a blue node and a translucent slate edge.
+constexpr ph_color kNodeColor = 0x60a5faffu;
+constexpr ph_color kEdgeColor = 0x94a3b880u;
+
+}  // namespace
+
+ContourLayer::ContourLayer(const ph_contour_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  render_type_ = desc.render_type;
+
+  const int32_t cols = desc.cols;
+  const int32_t rows = desc.rows;
+  const size_t cells = (cols > 1 && rows > 1 && desc.values)
+                           ? static_cast<size_t>(cols) * static_cast<size_t>(rows)
+                           : 0;
+  extent_x_ = desc.x;
+  extent_y_ = desc.y;
+  if (!(extent_x_.hi > extent_x_.lo)) extent_x_ = ph_range{0.0, static_cast<double>(cols)};
+  if (!(extent_y_.hi > extent_y_.lo)) extent_y_ = ph_range{0.0, static_cast<double>(rows)};
+  x_ref_ = extent_x_.lo;
+  y_ref_ = extent_y_.lo;
+  // Even an empty grid has a rectangle it would occupy, which is what the web
+  // core reports too — a contour of a flat field draws nothing but is still
+  // somewhere.
+  has_extent_ = cells > 0;
+  if (cells == 0) return;
+
+  double vmin = std::numeric_limits<double>::infinity();
+  double vmax = -vmin;
+  for (size_t i = 0; i < cells; ++i) {
+    const double v = desc.values[i];
+    if (!finite(v)) continue;
+    vmin = std::min(vmin, v);
+    vmax = std::max(vmax, v);
+  }
+  if (!finite(vmin) || !finite(vmax)) {
+    vmin = 0.0;
+    vmax = 1.0;
+  }
+  value_domain_ = ph_range{vmin, vmax};
+
+  std::vector<double> levels;
+  if (desc.levels && desc.level_count > 0) {
+    levels.assign(desc.levels, desc.levels + desc.level_count);
+  } else {
+    // Evenly spaced *between* the extremes, not including them: a level exactly
+    // at the minimum traces the grid's border and says nothing.
+    const int32_t count = desc.level_count > 0 ? desc.level_count : 8;
+    levels.reserve(static_cast<size_t>(count));
+    for (int32_t i = 0; i < count; ++i) {
+      levels.push_back(vmin + (vmax - vmin) * static_cast<double>(i + 1) /
+                                  static_cast<double>(count + 1));
+    }
+  }
+
+  const bool fixed_color = desc.color != PH_COLOR_AUTO;
+  const Rgba fixed = unpack_color_exact(desc.color);
+  const photon::color::Spec spec = colormap_spec(desc.colormap);
+  const photon::color::Lut& table = photon::color::lut(spec);
+  const double level_span = (vmax - vmin) != 0.0 ? (vmax - vmin) : 1.0;
+
+  const double x_step = (extent_x_.hi - extent_x_.lo) / static_cast<double>(cols - 1);
+  const double y_step = (extent_y_.hi - extent_y_.lo) / static_cast<double>(rows - 1);
+  const auto gx = [&](int32_t c) {
+    return extent_x_.lo + static_cast<double>(c) * x_step - x_ref_;
+  };
+  const auto gy = [&](int32_t r) {
+    return extent_y_.lo + static_cast<double>(r) * y_step - y_ref_;
+  };
+  const auto at = [&](int32_t c, int32_t r) {
+    return desc.values[static_cast<size_t>(r) * static_cast<size_t>(cols) +
+                       static_cast<size_t>(c)];
+  };
+
+  for (const double level : levels) {
+    Rgba colour = fixed;
+    if (!fixed_color) {
+      const photon::color::Rgb c =
+          photon::color::sample(table, (level - vmin) / level_span);
+      colour = Rgba{c.r, c.g, c.b, 1.0f};
+    }
+    for (int32_t r = 0; r + 1 < rows; ++r) {
+      for (int32_t c = 0; c + 1 < cols; ++c) {
+        const double v0 = at(c, r);
+        const double v1 = at(c + 1, r);
+        const double v2 = at(c + 1, r + 1);
+        const double v3 = at(c, r + 1);
+        const int index = (v0 >= level ? 1 : 0) | (v1 >= level ? 2 : 0) |
+                          (v2 >= level ? 4 : 0) | (v3 >= level ? 8 : 0);
+        const MarchingCase& segments = kMarchingCases[index];
+        if (segments.count == 0) continue;
+
+        // Where the level crosses each of the cell's four edges. The 1e-9 guard
+        // is for a flat edge, where the crossing is undefined and any point on
+        // it is as good as another.
+        const auto crossing = [&](int8_t edge) -> std::pair<double, double> {
+          const auto lerp = [](double t, double ax, double ay, double bx, double by) {
+            return std::pair<double, double>{ax + (bx - ax) * t, ay + (by - ay) * t};
+          };
+          switch (edge) {
+            case 0:
+              return lerp((level - v0) / ((v1 - v0) != 0.0 ? (v1 - v0) : 1e-9), gx(c), gy(r),
+                          gx(c + 1), gy(r));
+            case 1:
+              return lerp((level - v1) / ((v2 - v1) != 0.0 ? (v2 - v1) : 1e-9), gx(c + 1),
+                          gy(r), gx(c + 1), gy(r + 1));
+            case 2:
+              return lerp((level - v2) / ((v3 - v2) != 0.0 ? (v3 - v2) : 1e-9), gx(c + 1),
+                          gy(r + 1), gx(c), gy(r + 1));
+            default:
+              return lerp((level - v3) / ((v0 - v3) != 0.0 ? (v0 - v3) : 1e-9), gx(c),
+                          gy(r + 1), gx(c), gy(r));
+          }
+        };
+
+        for (int8_t s = 0; s < segments.count; ++s) {
+          const std::pair<double, double> pa = crossing(segments.edges[s * 2]);
+          const std::pair<double, double> pb = crossing(segments.edges[s * 2 + 1]);
+          for (const auto& point : {pa, pb}) {
+            vertices_.push_back(static_cast<float>(point.first));
+            vertices_.push_back(static_cast<float>(point.second));
+            vertices_.push_back(colour.r);
+            vertices_.push_back(colour.g);
+            vertices_.push_back(colour.b);
+            vertices_.push_back(colour.a);
+          }
+        }
+      }
+    }
+  }
+}
+
+bool ContourLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!has_extent_) return false;
+  x = extent_x_;
+  y = extent_y_;
+  return true;
+}
+
+bool ContourLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &buffer_);
+    if (vao_ == 0) {
+      error = "failed to create contour vertex array";
+      return false;
+    }
+    api.BindVertexArray(vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+    const GLsizei stride = 6 * static_cast<GLsizei>(sizeof(float));
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, stride, nullptr);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, stride,
+                            reinterpret_cast<const void*>(2 * sizeof(float)));
+    api.BindVertexArray(0);
+  }
+  if (dirty_) {
+    api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+                   vertices_.empty() ? nullptr : vertices_.data(), buffer_usage(render_type_));
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool ContourLayer::draw(const DrawState& state, std::string& error) {
+  if (vertices_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms = with_transform_uniforms({});
+  const Program* program = get_program(api, "fill", vertex_source(kFillVertBody, kFillVertMain),
+                                       kFillFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref_, y_ref_);
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size() / 6));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void ContourLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  vao_ = 0;
+  buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- GraphLayer -------------------------------------------------------------
+
+GraphLayer::GraphLayer(const ph_graph_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  render_type_ = desc.render_type;
+  node_color_ =
+      unpack_color_exact(desc.node_color != PH_COLOR_AUTO ? desc.node_color : kNodeColor);
+  edge_color_ =
+      unpack_color_exact(desc.edge_color != PH_COLOR_AUTO ? desc.edge_color : kEdgeColor);
+  if (desc.node_size > 0.0f) node_size_ = desc.node_size;
+
+  const size_t n = desc.node_count > 0 ? static_cast<size_t>(desc.node_count) : 0;
+  if (n == 0) return;
+
+  std::vector<std::pair<int32_t, int32_t>> edges;
+  if (desc.edges && desc.edge_count > 0) {
+    edges.reserve(static_cast<size_t>(desc.edge_count));
+    for (int32_t i = 0; i < desc.edge_count; ++i) {
+      edges.emplace_back(desc.edges[i].a, desc.edges[i].b);
+    }
+  }
+
+  // No positions means "lay it out". The force layout is deterministic, so this
+  // is a chart the caller can reproduce rather than one that moves each run.
+  std::vector<double> laid_x;
+  std::vector<double> laid_y;
+  const double* xs = desc.x;
+  const double* ys = desc.y;
+  if (!xs || !ys) {
+    photon::graph::ForceOptions opts;
+    if (desc.layout_iterations > 0) opts.iterations = desc.layout_iterations;
+    photon::graph::Layout layout = photon::graph::force_layout(n, edges, opts);
+    laid_x = std::move(layout.x);
+    laid_y = std::move(layout.y);
+    xs = laid_x.data();
+    ys = laid_y.data();
+  }
+
+  x_ref_ = xs[0];
+  y_ref_ = ys[0];
+  if (!finite(x_ref_)) x_ref_ = 0.0;
+  if (!finite(y_ref_)) y_ref_ = 0.0;
+
+  nodes_.resize(n * 2);
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+  for (size_t i = 0; i < n; ++i) {
+    nodes_[i * 2] = static_cast<float>(xs[i] - x_ref_);
+    nodes_[i * 2 + 1] = static_cast<float>(ys[i] - y_ref_);
+    if (!finite(xs[i]) || !finite(ys[i])) continue;
+    min_x = std::min(min_x, xs[i]);
+    max_x = std::max(max_x, xs[i]);
+    min_y = std::min(min_y, ys[i]);
+    max_y = std::max(max_y, ys[i]);
+    graph_bounds_ = true;
+  }
+  if (graph_bounds_) {
+    graph_x_ = ph_range{min_x, max_x};
+    graph_y_ = ph_range{min_y, max_y};
+  }
+
+  // An edge naming a node that does not exist is skipped rather than rejected:
+  // graphs arrive from data, and one dangling reference should not lose the
+  // other ten thousand.
+  edges_.reserve(edges.size() * 4);
+  for (const auto& edge : edges) {
+    const size_t a = static_cast<size_t>(edge.first);
+    const size_t b = static_cast<size_t>(edge.second);
+    if (edge.first < 0 || edge.second < 0 || a >= n || b >= n) continue;
+    edges_.push_back(static_cast<float>(xs[a] - x_ref_));
+    edges_.push_back(static_cast<float>(ys[a] - y_ref_));
+    edges_.push_back(static_cast<float>(xs[b] - x_ref_));
+    edges_.push_back(static_cast<float>(ys[b] - y_ref_));
+  }
+}
+
+bool GraphLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!graph_bounds_) return false;
+  x = graph_x_;
+  y = graph_y_;
+  return true;
+}
+
+bool GraphLayer::ensure_gl(Api& api, std::string& error) {
+  if (node_vao_ == 0) {
+    api.GenVertexArrays(1, &node_vao_);
+    api.GenVertexArrays(1, &edge_vao_);
+    api.GenBuffers(1, &node_buffer_);
+    api.GenBuffers(1, &edge_buffer_);
+    if (node_vao_ == 0 || edge_vao_ == 0) {
+      error = "failed to create graph vertex arrays";
+      return false;
+    }
+    api.BindVertexArray(node_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, node_buffer_);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindVertexArray(edge_vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, edge_buffer_);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindVertexArray(0);
+  }
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, node_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(nodes_.size() * sizeof(float)),
+                   nodes_.empty() ? nullptr : nodes_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, edge_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(edges_.size() * sizeof(float)),
+                   edges_.empty() ? nullptr : edges_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool GraphLayer::draw(const DrawState& state, std::string& error) {
+  if (nodes_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  // Edges first, nodes on top — a node is a thing and an edge is a relation
+  // between things, so the thing wins where they overlap.
+  if (!edges_.empty()) {
+    static const std::vector<std::string> kEdgeUniforms = with_transform_uniforms({"uColor"});
+    const Program* edge = get_program(api, "area", vertex_source(kAreaVertBody, kAreaVertMain),
+                                      kAreaFrag, kEdgeUniforms, state.gfx, error);
+    if (!edge) return false;
+    api.UseProgram(edge->id);
+    set_transform_uniforms(api, *edge, state.x, state.y, x_ref_, y_ref_);
+    api.Uniform4f(edge->uniform("uColor"), edge_color_.r, edge_color_.g, edge_color_.b,
+                  edge_color_.a);
+    api.BindVertexArray(edge_vao_);
+    api.DrawArrays(GL_LINES, 0, static_cast<GLsizei>(edges_.size() / 2));
+    api.BindVertexArray(0);
+  }
+
+  static const std::vector<std::string> kNodeUniforms =
+      with_transform_uniforms({"uColor", "uSize"});
+  const Program* node = get_program(api, "graph-node",
+                                    vertex_source(kNodeVertBody, kNodeVertMain), kNodeFrag,
+                                    kNodeUniforms, state.gfx, error);
+  if (!node) return false;
+  api.UseProgram(node->id);
+  set_transform_uniforms(api, *node, state.x, state.y, x_ref_, y_ref_);
+  api.Uniform4f(node->uniform("uColor"), node_color_.r, node_color_.g, node_color_.b,
+                node_color_.a);
+  api.Uniform1f(node->uniform("uSize"), node_size_ * state.dpr);
+  // Same desktop-versus-WebGL2 gate the box layer's outliers need.
+  api.Enable(GL_PROGRAM_POINT_SIZE);
+  api.BindVertexArray(node_vao_);
+  api.DrawArrays(GL_POINTS, 0, static_cast<GLsizei>(nodes_.size() / 2));
+  api.BindVertexArray(0);
+  api.Disable(GL_PROGRAM_POINT_SIZE);
+  return true;
+}
+
+void GraphLayer::release_gl(Api& api) {
+  if (node_vao_ == 0) return;
+  const GLuint vaos[] = {node_vao_, edge_vao_};
+  api.DeleteVertexArrays(2, vaos);
+  const GLuint buffers[] = {node_buffer_, edge_buffer_};
+  api.DeleteBuffers(2, buffers);
+  node_vao_ = edge_vao_ = 0;
+  node_buffer_ = edge_buffer_ = 0;
   dirty_ = true;
 }
 

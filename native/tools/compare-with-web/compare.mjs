@@ -209,9 +209,12 @@ if (nativeImage.width !== webImage.width || nativeImage.height !== webImage.heig
 
 const PANELS = [
   ["Waves", 0, 0], ["Log decay", 640, 0], ["Scatter", 1280, 0], ["Streaming", 1920, 0],
-  ["Revenue", 0, 420], ["Funnel", 640, 420], ["Share", 1280, 420], ["Impulse", 1920, 420],
-  ["Yield", 0, 840], ["Latency", 640, 840], ["Field", 1280, 840], ["Sprite", 1920, 840],
-  ["Candles", 0, 1260], ["Bars", 640, 1260], ["Density", 1280, 1260], ["Flow", 1920, 1260],
+  ["Revenue", 2560, 0],
+  ["Funnel", 0, 420], ["Share", 640, 420], ["Impulse", 1280, 420], ["Yield", 1920, 420],
+  ["Latency", 2560, 420],
+  ["Field", 0, 840], ["Sprite", 640, 840], ["Candles", 1280, 840], ["Bars", 1920, 840],
+  ["Density", 2560, 840],
+  ["Flow", 0, 1260], ["Contour", 640, 1260], ["Network", 1280, 1260],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

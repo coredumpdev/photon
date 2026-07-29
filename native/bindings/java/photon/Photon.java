@@ -812,6 +812,116 @@ public final class Photon {
         }
     }
 
+    /** ph_contour_desc — 104 bytes, alignment 8. */
+    public static final class ph_contour_desc {
+        private ph_contour_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y"),
+            ValueLayout.ADDRESS.withName("levels"),
+            ValueLayout.JAVA_INT.withName("level_count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_contour_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Y = 40L;
+        public static final long OFFSET_LEVELS = 56L;
+        public static final long OFFSET_LEVEL_COUNT = 64L;
+        public static final long OFFSET_COLOR = 68L;
+        public static final long OFFSET_COLORMAP = 72L;
+        public static final long OFFSET_NAME = 80L;
+        public static final long OFFSET_Y_AXIS = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_edge — 8 bytes, alignment 4. */
+    public static final class ph_edge {
+        private ph_edge() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("a"),
+            ValueLayout.JAVA_INT.withName("b")
+        ).withName("ph_edge");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_A = 0L;
+        public static final long OFFSET_B = 4L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_graph_desc — 88 bytes, alignment 8. */
+    public static final class ph_graph_desc {
+        private ph_graph_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.JAVA_INT.withName("node_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("edges"),
+            ValueLayout.JAVA_INT.withName("edge_count"),
+            ValueLayout.JAVA_INT.withName("node_color"),
+            ValueLayout.JAVA_INT.withName("edge_color"),
+            ValueLayout.JAVA_FLOAT.withName("node_size"),
+            ValueLayout.JAVA_INT.withName("layout_iterations"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_graph_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_NODE_COUNT = 24L;
+        public static final long OFFSET_EDGES = 32L;
+        public static final long OFFSET_EDGE_COUNT = 40L;
+        public static final long OFFSET_NODE_COLOR = 44L;
+        public static final long OFFSET_EDGE_COLOR = 48L;
+        public static final long OFFSET_NODE_SIZE = 52L;
+        public static final long OFFSET_LAYOUT_ITERATIONS = 56L;
+        public static final long OFFSET_NAME = 64L;
+        public static final long OFFSET_Y_AXIS = 72L;
+        public static final long OFFSET_RENDER_TYPE = 80L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_hexbin_desc — 88 bytes, alignment 8. */
     public static final class ph_hexbin_desc {
         private ph_hexbin_desc() {}
@@ -1226,6 +1336,8 @@ public final class Photon {
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_contour_desc_init",
+        "ph_graph_desc_init",
         "ph_hexbin_desc_init",
         "ph_quiver_desc_init",
         "ph_candlestick_desc_init",
@@ -1257,6 +1369,8 @@ public final class Photon {
         "ph_plot_add_stem",
         "ph_plot_add_errorbar",
         "ph_plot_add_box",
+        "ph_plot_add_contour",
+        "ph_plot_add_graph",
         "ph_plot_add_hexbin",
         "ph_plot_add_quiver",
         "ph_plot_add_candlestick",
@@ -1316,6 +1430,8 @@ public final class Photon {
     private static final MethodHandle PH_STEM_DESC_INIT = handle("ph_stem_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_ERRORBAR_DESC_INIT = handle("ph_errorbar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_BOX_DESC_INIT = handle("ph_box_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_CONTOUR_DESC_INIT = handle("ph_contour_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_GRAPH_DESC_INIT = handle("ph_graph_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_HEXBIN_DESC_INIT = handle("ph_hexbin_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_QUIVER_DESC_INIT = handle("ph_quiver_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_CANDLESTICK_DESC_INIT = handle("ph_candlestick_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
@@ -1347,6 +1463,8 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_STEM = handle("ph_plot_add_stem", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_ERRORBAR = handle("ph_plot_add_errorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_BOX = handle("ph_plot_add_box", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_CONTOUR = handle("ph_plot_add_contour", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_GRAPH = handle("ph_plot_add_graph", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_HEXBIN = handle("ph_plot_add_hexbin", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_QUIVER = handle("ph_plot_add_quiver", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_CANDLESTICK = handle("ph_plot_add_candlestick", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -1615,6 +1733,22 @@ public final class Photon {
         }
     }
 
+    public static void ph_contour_desc_init(MemorySegment out) {
+        try {
+            PH_CONTOUR_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_contour_desc_init failed", photonFailure);
+        }
+    }
+
+    public static void ph_graph_desc_init(MemorySegment out) {
+        try {
+            PH_GRAPH_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_graph_desc_init failed", photonFailure);
+        }
+    }
+
     public static void ph_hexbin_desc_init(MemorySegment out) {
         try {
             PH_HEXBIN_DESC_INIT.invokeExact(out);
@@ -1860,6 +1994,22 @@ public final class Photon {
             return (int) PH_PLOT_ADD_BOX.invokeExact(plot, desc, out);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_add_box failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_contour(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_CONTOUR.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_contour failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_graph(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_GRAPH.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_graph failed", photonFailure);
         }
     }
 

@@ -796,6 +796,84 @@ extern "C" ph_result PH_CALL ph_plot_add_stem(ph_plot handle, const ph_stem_desc
                                                        "ph_stem_desc");
 }
 
+extern "C" void PH_CALL ph_contour_desc_init(ph_contour_desc* out) {
+  if (!out) return;
+  *out = ph_contour_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_contour_desc));
+  out->render_type = PH_RENDER_STATIC;
+  // color stays PH_COLOR_AUTO, which the layer reads as "colour each level
+  // through the colormap" — the same thing an omitted `color` means in the
+  // TypeScript.
+}
+
+extern "C" void PH_CALL ph_graph_desc_init(ph_graph_desc* out) {
+  if (!out) return;
+  *out = ph_graph_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_graph_desc));
+  out->node_size = 10.0f;
+  out->layout_iterations = 300;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_contour(ph_plot handle, const ph_contour_desc* desc,
+                                                 ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_contour_desc.struct_size is larger than this build's");
+  }
+  const ph_contour_desc normalized = normalize(desc, ph_contour_desc_init);
+  if (normalized.cols < 0 || normalized.rows < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "cols and rows must be non-negative");
+  }
+  if (normalized.cols > 0 && normalized.rows > 0 && !normalized.values) {
+    return fail(PH_E_INVALID_ARGUMENT, "values must be non-null when cols and rows are > 0");
+  }
+  if (normalized.level_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "level_count must be non-negative");
+  }
+  if (normalized.colormap && !desc_size_ok(normalized.colormap)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_colormap_spec.struct_size is larger than this build's");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::ContourLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating contour layer");
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_graph(ph_plot handle, const ph_graph_desc* desc,
+                                               ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_graph_desc.struct_size is larger than this build's");
+  }
+  const ph_graph_desc normalized = normalize(desc, ph_graph_desc_init);
+  if (normalized.node_count < 0 || normalized.edge_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "node_count and edge_count must be non-negative");
+  }
+  // One position array without the other is a mistake; neither means "lay the
+  // graph out for me", which is a legitimate and useful request.
+  if ((normalized.x == nullptr) != (normalized.y == nullptr)) {
+    return fail(PH_E_INVALID_ARGUMENT, "x and y must both be given, or both omitted");
+  }
+  if (normalized.edge_count > 0 && !normalized.edges) {
+    return fail(PH_E_INVALID_ARGUMENT, "edges must be non-null when edge_count > 0");
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::GraphLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating graph layer");
+  }
+}
+
 extern "C" void PH_CALL ph_hexbin_desc_init(ph_hexbin_desc* out) {
   if (!out) return;
   *out = ph_hexbin_desc{};

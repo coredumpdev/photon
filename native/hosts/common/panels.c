@@ -29,6 +29,13 @@
 /* A 14x14 lattice of arrows: dense enough to read as a field, sparse enough
  * that the individual arrowheads are still visible. */
 #define FLOW 14
+/* The contour shares the Field panel's grid resolution on purpose: the two are
+ * the same data drawn two ways, which is what makes them worth putting side by
+ * side. */
+#define ISO_LEVELS 9
+/* A small-world graph: enough nodes to need a layout, few enough to read. */
+#define NODES 48
+#define GRAPH_EDGES 72
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -84,12 +91,15 @@ struct ph_panels {
   double flow_y[FLOW * FLOW];
   double flow_u[FLOW * FLOW];
   double flow_v[FLOW * FLOW];
+
+  ph_edge graph_edges[GRAPH_EDGES];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatter", "Streaming",
                                               "Revenue", "Funnel",       "Share",   "Impulse",
                                               "Yield",   "Latency",      "Field",   "Sprite",
-                                              "Candles", "Bars",         "Density", "Flow"};
+                                              "Candles", "Bars",         "Density", "Flow",
+                                              "Contour", "Network"};
 
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
@@ -320,6 +330,22 @@ ph_panels* ph_panels_create(void) {
       p->flow_u[i] = (-y - x * 0.35) / r2 * 4.0;
       p->flow_v[i] = (x - y * 0.35) / r2 * 4.0;
     }
+  }
+
+  /* A ring plus chords: every node has two neighbours and some have a shortcut,
+   * which is the shape a force layout actually has something to say about. */
+  seed = 99887766u;
+  for (int i = 0; i < NODES; i++) {
+    p->graph_edges[i].a = i;
+    p->graph_edges[i].b = (i + 1) % NODES;
+  }
+  for (int i = NODES; i < GRAPH_EDGES; i++) {
+    seed = seed * 1664525u + 1013904223u;
+    const int a = (int)((seed >> 8) % NODES);
+    seed = seed * 1664525u + 1013904223u;
+    const int b = (int)((seed >> 8) % NODES);
+    p->graph_edges[i].a = a;
+    p->graph_edges[i].b = b == a ? (a + NODES / 2) % NODES : b;
   }
 
   return p;
@@ -728,6 +754,59 @@ static void build_flow(ph_panels* p, ph_plot plot) {
   ph_plot_add_quiver(plot, &arrows, &layer);
 }
 
+/* Panel 16 — the Field panel's scalar field again, as iso-lines. */
+static void build_contour(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Contour");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_colormap_spec cmap;
+  ph_colormap_spec_init(&cmap);
+  cmap.name = "turbo";
+
+  ph_contour_desc iso;
+  ph_contour_desc_init(&iso);
+  iso.values = p->field;
+  iso.cols = FIELD_COLS;
+  iso.rows = FIELD_ROWS;
+  iso.x.lo = -6.0;
+  iso.x.hi = 6.0;
+  iso.y.lo = -4.5;
+  iso.y.hi = 4.5;
+  iso.level_count = ISO_LEVELS;
+  /* color left at PH_COLOR_AUTO, so each level takes its own colour and the
+   * lines can be read without a key beside them. */
+  iso.colormap = &cmap;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_contour(plot, &iso, &layer);
+}
+
+/* Panel 17 — a graph with no positions, laid out by the core. */
+static void build_network(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Network");
+  /* A force layout's axes are arbitrary units, so the numbers on them mean
+   * nothing; the grid would only be decoration. */
+  ph_axis_config bare;
+  ph_axis_config_init(&bare);
+  bare.no_ticks = 1;
+  bare.no_grid = 1;
+  ph_plot_set_axis_config(plot, "x", &bare);
+  ph_plot_set_axis_config(plot, "y", &bare);
+
+  ph_graph_desc graph;
+  ph_graph_desc_init(&graph);
+  /* No x or y: the layer lays it out, deterministically, so this panel is the
+   * same picture in every host and on every run. */
+  graph.node_count = NODES;
+  graph.edges = p->graph_edges;
+  graph.edge_count = GRAPH_EDGES;
+  graph.node_size = 9.0f;
+  graph.node_color = parse("#f472b6");
+  graph.edge_color = parse("#94a3b866");
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_graph(plot, &graph, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -747,7 +826,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 12: build_candles(panels, plot); break;
     case 13: build_bars(panels, plot); break;
     case 14: build_density(panels, plot); break;
-    default: build_flow(panels, plot); break;
+    case 15: build_flow(panels, plot); break;
+    case 16: build_contour(panels, plot); break;
+    default: build_network(panels, plot); break;
   }
 }
 

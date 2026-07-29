@@ -578,6 +578,80 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_contour_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_contour_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range y;
+        /// <summary>offset 56</summary>
+        public IntPtr levels;
+        /// <summary>offset 64</summary>
+        public int level_count;
+        /// <summary>offset 68</summary>
+        public uint color;
+        /// <summary>offset 72</summary>
+        public IntPtr colormap;
+        /// <summary>offset 80</summary>
+        public IntPtr name;
+        /// <summary>offset 88</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_edge — 8 bytes, alignment 4.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_edge
+    {
+        /// <summary>offset 0</summary>
+        public int a;
+        /// <summary>offset 4</summary>
+        public int b;
+    }
+
+    /// <summary>ph_graph_desc — 88 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_graph_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public int node_count;
+        /// <summary>offset 32</summary>
+        public IntPtr edges;
+        /// <summary>offset 40</summary>
+        public int edge_count;
+        /// <summary>offset 44</summary>
+        public uint node_color;
+        /// <summary>offset 48</summary>
+        public uint edge_color;
+        /// <summary>offset 52</summary>
+        public float node_size;
+        /// <summary>offset 56</summary>
+        public int layout_iterations;
+        /// <summary>offset 64</summary>
+        public IntPtr name;
+        /// <summary>offset 72</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 80</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_hexbin_desc — 88 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_hexbin_desc
@@ -873,6 +947,8 @@ public static partial class Ph
         "ph_stem_desc_init",
         "ph_errorbar_desc_init",
         "ph_box_desc_init",
+        "ph_contour_desc_init",
+        "ph_graph_desc_init",
         "ph_hexbin_desc_init",
         "ph_quiver_desc_init",
         "ph_candlestick_desc_init",
@@ -904,6 +980,8 @@ public static partial class Ph
         "ph_plot_add_stem",
         "ph_plot_add_errorbar",
         "ph_plot_add_box",
+        "ph_plot_add_contour",
+        "ph_plot_add_graph",
         "ph_plot_add_hexbin",
         "ph_plot_add_quiver",
         "ph_plot_add_candlestick",
@@ -1028,6 +1106,12 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_box_desc_init")]
     public static extern void ph_box_desc_init(out ph_box_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_contour_desc_init")]
+    public static extern void ph_contour_desc_init(out ph_contour_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_graph_desc_init")]
+    public static extern void ph_graph_desc_init(out ph_graph_desc @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_hexbin_desc_init")]
     public static extern void ph_hexbin_desc_init(out ph_hexbin_desc @out);
@@ -1163,6 +1247,18 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_box")]
     public static extern int ph_plot_add_box(ulong plot, in ph_box_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_contour")]
+    public static extern int ph_plot_add_contour(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_contour")]
+    public static extern int ph_plot_add_contour(ulong plot, in ph_contour_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_graph")]
+    public static extern int ph_plot_add_graph(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_graph")]
+    public static extern int ph_plot_add_graph(ulong plot, in ph_graph_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_hexbin")]
     public static extern int ph_plot_add_hexbin(ulong plot, IntPtr desc, out ulong @out);

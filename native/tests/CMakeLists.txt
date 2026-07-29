@@ -31,7 +31,7 @@ endif()
 
 # Scales, ticks, the layout math and the font are all internal, so these link the
 # static twin rather than the ph_*-only shared library.
-foreach(name scale overlay text earcut stats colormap)
+foreach(name scale overlay text earcut stats colormap force)
   add_executable(photon_${name}_test ${name}_test.cpp)
   target_link_libraries(photon_${name}_test PRIVATE photon_internal)
   target_include_directories(photon_${name}_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -70,6 +70,7 @@ add_test(NAME text COMMAND photon_text_test)
 add_test(NAME earcut COMMAND photon_earcut_test)
 add_test(NAME stats COMMAND photon_stats_test)
 add_test(NAME colormap COMMAND photon_colormap_test)
+add_test(NAME force COMMAND photon_force_test)
 
 # The only test that compiles a shader. It needs a real GL 3.3 core context,
 # which it gets surfacelessly through EGL — no display server, so it runs in CI.

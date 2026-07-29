@@ -269,6 +269,43 @@ PH_ASSERT_LAYOUT(offsetof(ph_box_desc, name) == 40, "ph_box_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, y_axis) == 48, "ph_box_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_box_desc, render_type) == 56, "ph_box_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_contour_desc) == 104, "ph_contour_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_contour_desc) == 8, "ph_contour_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, struct_size) == 0, "ph_contour_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, values) == 8, "ph_contour_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, cols) == 16, "ph_contour_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, rows) == 20, "ph_contour_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, x) == 24, "ph_contour_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, y) == 40, "ph_contour_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, levels) == 56, "ph_contour_desc.levels offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, level_count) == 64, "ph_contour_desc.level_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, color) == 68, "ph_contour_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, colormap) == 72, "ph_contour_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, name) == 80, "ph_contour_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, y_axis) == 88, "ph_contour_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour_desc, render_type) == 96, "ph_contour_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_edge) == 8, "ph_edge size");
+PH_ASSERT_LAYOUT(_Alignof(ph_edge) == 4, "ph_edge alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_edge, a) == 0, "ph_edge.a offset");
+PH_ASSERT_LAYOUT(offsetof(ph_edge, b) == 4, "ph_edge.b offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_graph_desc) == 88, "ph_graph_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_graph_desc) == 8, "ph_graph_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, struct_size) == 0, "ph_graph_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, x) == 8, "ph_graph_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, y) == 16, "ph_graph_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, node_count) == 24, "ph_graph_desc.node_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, edges) == 32, "ph_graph_desc.edges offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, edge_count) == 40, "ph_graph_desc.edge_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, node_color) == 44, "ph_graph_desc.node_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, edge_color) == 48, "ph_graph_desc.edge_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, node_size) == 52, "ph_graph_desc.node_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, layout_iterations) == 56, "ph_graph_desc.layout_iterations offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, name) == 64, "ph_graph_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, y_axis) == 72, "ph_graph_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_graph_desc, render_type) == 80, "ph_graph_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_hexbin_desc) == 88, "ph_hexbin_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_hexbin_desc) == 8, "ph_hexbin_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_hexbin_desc, struct_size) == 0, "ph_hexbin_desc.struct_size offset");
@@ -403,7 +440,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 27);
+  printf("%d struct layouts match the generated bindings\n", 30);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

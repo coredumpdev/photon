@@ -538,6 +538,85 @@ public final class PhotonSmokeTest {
             "ph_plot_add_box");
     }
 
+    /** Iso-lines and a node-link graph — the last two layers, and the only two
+     * whose geometry the core derives rather than receives. */
+    static void isoAndGraph(Arena arena, long plot) {
+        // A 3x3 grid rising left to right. A level at 1.5 crosses every row
+        // between the middle and right columns, so there are lines to find.
+        MemorySegment values = arena.allocate(ValueLayout.JAVA_DOUBLE, 9);
+        for (int i = 0; i < 9; i++) values.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i % 3);
+
+        MemorySegment contour = ph_contour_desc.allocate(arena);
+        ph_contour_desc_init(contour);
+        contour.set(ValueLayout.ADDRESS, ph_contour_desc.OFFSET_VALUES, values);
+        contour.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_COLS, 3);
+        contour.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_ROWS, 3);
+        contour.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_X + ph_range.OFFSET_LO, 0.0);
+        contour.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_X + ph_range.OFFSET_HI, 8.0);
+        contour.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_Y + ph_range.OFFSET_LO, 1.0);
+        contour.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_Y + ph_range.OFFSET_HI, 5.0);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_contour(plot, contour, handle), PH_OK, "ph_plot_add_contour");
+        long contourLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(contourLayer, bx, by), PH_OK, "contour bounds");
+        // The bounds are the grid's extent, whatever the lines inside it do.
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 8.0, "contour x hi");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 1.0, "contour y lo");
+
+        // Three nodes in a line, two edges. Explicit positions, so the bounds
+        // are arithmetic rather than whatever the layout settles on.
+        MemorySegment nx = arena.allocate(ValueLayout.JAVA_DOUBLE, 3);
+        MemorySegment ny = arena.allocate(ValueLayout.JAVA_DOUBLE, 3);
+        for (int i = 0; i < 3; i++) {
+            nx.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i * 2.0);
+            ny.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i == 1 ? 5.0 : 0.0);
+        }
+        MemorySegment edges = arena.allocate(ph_edge.LAYOUT, 2);
+        edges.set(ValueLayout.JAVA_INT, ph_edge.OFFSET_A, 0);
+        edges.set(ValueLayout.JAVA_INT, ph_edge.OFFSET_B, 1);
+        edges.set(ValueLayout.JAVA_INT, ph_edge.SIZE + ph_edge.OFFSET_A, 1);
+        edges.set(ValueLayout.JAVA_INT, ph_edge.SIZE + ph_edge.OFFSET_B, 2);
+
+        MemorySegment graph = ph_graph_desc.allocate(arena);
+        ph_graph_desc_init(graph);
+        graph.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_X, nx);
+        graph.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_Y, ny);
+        graph.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_NODE_COUNT, 3);
+        graph.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_EDGES, edges);
+        graph.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_EDGE_COUNT, 2);
+        checkEq(ph_plot_add_graph(plot, graph, handle), PH_OK, "ph_plot_add_graph");
+        long graphLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(graphLayer, bx, by), PH_OK, "graph bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 4.0, "graph x hi");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 5.0, "graph y hi");
+        checkEq(ph_layer_destroy(graphLayer), PH_OK, "the graph layer is destroyed");
+
+        // No positions at all: the layer lays the graph out itself, and the
+        // seed circle puts everything inside a unit box around the origin.
+        graph.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_X, MemorySegment.NULL);
+        graph.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_Y, MemorySegment.NULL);
+        graph.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_LAYOUT_ITERATIONS, 40);
+        checkEq(ph_plot_add_graph(plot, graph, handle), PH_OK, "a graph with no positions");
+        long laidLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(laidLayer, bx, by), PH_OK, "laid-out bounds");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO)) < 10.0
+              && Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI)) < 10.0,
+              "the layout stays near the origin");
+        checkEq(ph_layer_destroy(laidLayer), PH_OK, "the laid-out layer is destroyed");
+
+        // One position array without the other is a mistake, not a request.
+        graph.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_X, nx);
+        checkEq(ph_plot_add_graph(plot, graph, handle), PH_E_INVALID_ARGUMENT,
+                "x without y is rejected");
+
+        checkEq(ph_layer_destroy(contourLayer), PH_OK, "the contour layer is destroyed");
+        ran("ph_contour_desc_init", "ph_graph_desc_init", "ph_plot_add_contour",
+            "ph_plot_add_graph");
+    }
+
     /** Binned hexagons and a vector field — the two layers that colour themselves. */
     static void fields(Arena arena, long plot) {
         // Nine points in a 3x3 block, all inside one hex when the radius is
@@ -921,6 +1000,8 @@ public final class PhotonSmokeTest {
             pieAndStem(arena, plot);
             step("errorBarsAndBoxes");
             errorBarsAndBoxes(arena, plot);
+            step("isoAndGraph");
+            isoAndGraph(arena, plot);
             step("fields");
             fields(arena, plot);
             step("ohlc");

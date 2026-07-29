@@ -1,4 +1,4 @@
-// The Java gallery: the same sixteen charts as the GLFW and Qt ones, in a window.
+// The Java gallery: the same eighteen charts as the GLFW and Qt ones, in a window.
 //
 // This is a host, not a binding test — bindings/java/PhotonSmokeTest.java is
 // that. What it adds is the part of the ABI a headless test cannot reach: a
@@ -40,8 +40,8 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 16;
-    private static final int COLUMNS = 4;
+    private static final int PANELS = 18;
+    private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
     private static final int FUNNEL_STAGES = 5;
@@ -58,6 +58,9 @@ public final class PhotonGallery {
     private static final int SESSIONS = 34;
     private static final int DENSE_POINTS = 24000;
     private static final int FLOW = 14;
+    private static final int ISO_LEVELS = 9;
+    private static final int NODES = 48;
+    private static final int GRAPH_EDGES = 72;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -103,7 +106,7 @@ public final class PhotonGallery {
     }
 
     // -----------------------------------------------------------------------
-    // The charts — the same sixteen as hosts/common/panels.c, through the binding
+    // The charts — the same eighteen as hosts/common/panels.c, through the binding
     // -----------------------------------------------------------------------
 
     private static MemorySegment doubles(int count) {
@@ -806,6 +809,92 @@ public final class PhotonGallery {
         }
     }
 
+    /** Panel 16 — the Field panel's scalar field again, as iso-lines. */
+    private static void buildContour(long plot) {
+        MemorySegment values = doubles(FIELD_COLS * FIELD_ROWS);
+        for (int row = 0; row < FIELD_ROWS; row++) {
+            for (int col = 0; col < FIELD_COLS; col++) {
+                double x = (col - FIELD_COLS * 0.5) * 0.12;
+                double y = (row - FIELD_ROWS * 0.5) * 0.12;
+                double r1 = Math.sqrt((x + 2.0) * (x + 2.0) + y * y);
+                double r2 = Math.sqrt((x - 2.0) * (x - 2.0) + y * y);
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, row * FIELD_COLS + col,
+                                  Math.sin(r1 * 3.0) + Math.sin(r2 * 3.0));
+            }
+        }
+
+        setTitle(plot, "Contour");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment cmap = ph_colormap_spec.allocate(ARENA);
+        ph_colormap_spec_init(cmap);
+        cmap.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_NAME, ARENA.allocateFrom("turbo"));
+
+        MemorySegment desc = ph_contour_desc.allocate(ARENA);
+        ph_contour_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_contour_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_COLS, FIELD_COLS);
+        desc.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_ROWS, FIELD_ROWS);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_X + ph_range.OFFSET_LO, -6.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_X + ph_range.OFFSET_HI, 6.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_Y + ph_range.OFFSET_LO, -4.5);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_contour_desc.OFFSET_Y + ph_range.OFFSET_HI, 4.5);
+        desc.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_LEVEL_COUNT, ISO_LEVELS);
+        // color left at PH_COLOR_AUTO, so each level takes its own colour.
+        desc.set(ValueLayout.ADDRESS, ph_contour_desc.OFFSET_COLORMAP, cmap);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_contour(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 17 — a graph with no positions, laid out by the core. */
+    private static void buildNetwork(long plot) {
+        MemorySegment edges = ARENA.allocate(ph_edge.LAYOUT, GRAPH_EDGES);
+        int seed = 99887766;
+        for (int i = 0; i < NODES; i++) {
+            edges.set(ValueLayout.JAVA_INT, i * ph_edge.SIZE + ph_edge.OFFSET_A, i);
+            edges.set(ValueLayout.JAVA_INT, i * ph_edge.SIZE + ph_edge.OFFSET_B, (i + 1) % NODES);
+        }
+        for (int i = NODES; i < GRAPH_EDGES; i++) {
+            seed = seed * 1664525 + 1013904223;
+            int a = (int) (((seed >>> 8) & 0xFFFFFF) % NODES);
+            seed = seed * 1664525 + 1013904223;
+            int b = (int) (((seed >>> 8) & 0xFFFFFF) % NODES);
+            edges.set(ValueLayout.JAVA_INT, i * ph_edge.SIZE + ph_edge.OFFSET_A, a);
+            edges.set(ValueLayout.JAVA_INT, i * ph_edge.SIZE + ph_edge.OFFSET_B,
+                      b == a ? (a + NODES / 2) % NODES : b);
+        }
+
+        setTitle(plot, "Network");
+        // A force layout's axes are arbitrary units, so the numbers on them
+        // mean nothing; the grid would only be decoration.
+        try (Arena scratch = Arena.ofConfined()) {
+            for (String axis : new String[] {"x", "y"}) {
+                MemorySegment bare = ph_axis_config.allocate(scratch);
+                ph_axis_config_init(bare);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_TICKS, 1);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_GRID, 1);
+                ph_plot_set_axis_config(plot, scratch.allocateFrom(axis), bare);
+            }
+        }
+
+        MemorySegment desc = ph_graph_desc.allocate(ARENA);
+        ph_graph_desc_init(desc);
+        // No x or y: the layer lays it out, deterministically.
+        desc.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_NODE_COUNT, NODES);
+        desc.set(ValueLayout.ADDRESS, ph_graph_desc.OFFSET_EDGES, edges);
+        desc.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_EDGE_COUNT, GRAPH_EDGES);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_graph_desc.OFFSET_NODE_SIZE, 9.0f);
+        desc.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_NODE_COLOR, color("#f472b6"));
+        desc.set(ValueLayout.JAVA_INT, ph_graph_desc.OFFSET_EDGE_COLOR, color("#94a3b866"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_graph(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         for (int i = 0; i < STREAM_POINTS; i++) {
             double phase = seconds * 2.0 + i * 0.035;
@@ -1032,6 +1121,8 @@ public final class PhotonGallery {
         buildBars(plots[13], bars);
         buildDensity(plots[14]);
         buildFlow(plots[15]);
+        buildContour(plots[16]);
+        buildNetwork(plots[17]);
 
         installCallbacks();
 

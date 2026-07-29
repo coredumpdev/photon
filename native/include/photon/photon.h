@@ -708,6 +708,71 @@ typedef struct ph_box_desc {
 } ph_box_desc;
 
 /**
+ * Mirrors core `ContourOptions`.
+ *
+ * Iso-lines through a scalar field by marching squares, drawn as plain
+ * segments. Same grid layout as the heatmap — row-major, row 0 at the bottom —
+ * so the two layer over each other without the caller reshaping anything.
+ */
+typedef struct ph_contour_desc {
+  uint32_t                struct_size;
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  /** The data-space rectangle the grid spans. */
+  ph_range                x;
+  ph_range                y;
+  /** Explicit iso levels. NULL spaces `level_count` of them evenly. */
+  const double*           levels;
+  /** How many evenly-spaced levels, when `levels` is NULL. 0 = 8. */
+  int32_t                 level_count;
+  /**
+   * One colour for every line. PH_COLOR_AUTO colours each level through the
+   * colormap instead, which is what makes a contour plot readable without a
+   * key beside it.
+   */
+  ph_color                color;
+  /** Used when `color` is PH_COLOR_AUTO. NULL is viridis. */
+  const ph_colormap_spec* colormap;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_contour_desc;
+
+/** One graph edge: two indices into the node arrays. */
+typedef struct ph_edge {
+  int32_t a;
+  int32_t b;
+} ph_edge;
+
+/**
+ * Mirrors core `GraphOptions`.
+ *
+ * Edges as line segments, nodes as round points. When `x` and `y` are NULL the
+ * layer runs the core's force layout over `node_count` and the edges — seeded
+ * on a unit circle rather than at random, so the same graph comes out the same
+ * way in every host.
+ */
+typedef struct ph_graph_desc {
+  uint32_t       struct_size;
+  /** Node positions. Both NULL runs the force layout instead. */
+  const double*  x;
+  const double*  y;
+  int32_t        node_count;
+  const ph_edge* edges;
+  int32_t        edge_count;
+  ph_color       node_color;
+  ph_color       edge_color;
+  /** Node diameter in logical px. 0 = 10. */
+  float          node_size;
+  /** Force-layout relaxation steps, when the layer is laying out. 0 = 300. */
+  int32_t        layout_iterations;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_graph_desc;
+
+/**
  * Mirrors core `HexbinOptions`.
  *
  * A million-point scatter turned into a few thousand hexagons: the points are
@@ -1039,6 +1104,8 @@ PH_API void PH_CALL ph_pie_desc_init(ph_pie_desc* out);
 PH_API void PH_CALL ph_stem_desc_init(ph_stem_desc* out);
 PH_API void PH_CALL ph_errorbar_desc_init(ph_errorbar_desc* out);
 PH_API void PH_CALL ph_box_desc_init(ph_box_desc* out);
+PH_API void PH_CALL ph_contour_desc_init(ph_contour_desc* out);
+PH_API void PH_CALL ph_graph_desc_init(ph_graph_desc* out);
 PH_API void PH_CALL ph_hexbin_desc_init(ph_hexbin_desc* out);
 PH_API void PH_CALL ph_quiver_desc_init(ph_quiver_desc* out);
 PH_API void PH_CALL ph_candlestick_desc_init(ph_candlestick_desc* out);
@@ -1130,6 +1197,8 @@ PH_API ph_result PH_CALL ph_plot_add_pie(ph_plot plot, const ph_pie_desc* desc, 
 PH_API ph_result PH_CALL ph_plot_add_stem(ph_plot plot, const ph_stem_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_errorbar(ph_plot plot, const ph_errorbar_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_box(ph_plot plot, const ph_box_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_contour(ph_plot plot, const ph_contour_desc* desc, ph_layer* out);
+PH_API ph_result PH_CALL ph_plot_add_graph(ph_plot plot, const ph_graph_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_hexbin(ph_plot plot, const ph_hexbin_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_quiver(ph_plot plot, const ph_quiver_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_candlestick(ph_plot plot, const ph_candlestick_desc* desc, ph_layer* out);
@@ -1138,11 +1207,10 @@ PH_API ph_result PH_CALL ph_plot_add_heatmap(ph_plot plot, const ph_heatmap_desc
 PH_API ph_result PH_CALL ph_plot_add_image(ph_plot plot, const ph_image_desc* desc, ph_layer* out);
 
 /*
- * The remaining layer types (heatmap, hexbin, contour, quiver, candlestick,
- * ohlc, image, graph, and the plot3d family) follow this exact shape: one
- * `ph_<name>_desc` struct, one `ph_<name>_desc_init`, one `ph_plot_add_<name>`.
- * They land in Faz 4 and are additive — appending them does not change this ABI
- * version.
+ * Every 2-D layer the web core has is here. The plot3d and polar families
+ * follow the same shape when they land — one `ph_<name>_desc` struct, one
+ * `ph_<name>_desc_init`, one `ph_plot_add_<name>` — and are additive, so
+ * appending them will not change this ABI version.
  */
 
 /** Replace a layer's x/y data in place. Cheap on PH_RENDER_DYNAMIC layers. */
