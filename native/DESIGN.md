@@ -1,39 +1,42 @@
-# Photon native — Faz 0 design
+# Photon native — design
 
 The native port of `@photonviz/core`, built so that one C++ engine drives GLFW,
 Qt/QML, C# and Java hosts through a single C ABI.
 
-This document is the Faz 0 deliverable: the ABI, the host contract, and the
-decisions that are expensive to change later. It records *why*, not just what —
-the what is in [`include/photon/photon.h`](include/photon/photon.h).
+This document records the ABI, the host contract, and the decisions that are
+expensive to change later. It says *why*, not just what — the what is in
+[`include/photon/photon.h`](include/photon/photon.h).
 
 ## Status
 
-Faz 0 is complete. Faz 1 is in progress: the GL backend renders series, and the
-axis furniture around them is what is left.
+Faz 0 and Faz 1 are complete: a chart drawn natively is a chart, not a series
+floating in a void. Faz 2 is the Qt/QML host.
 
 | Area | State |
 | --- | --- |
-| C ABI (48 entry points) | complete for plot, axes, view, input, events, line + scatter |
+| C ABI (52 entry points) | plot, axes, styling, ticks, view, input, events, line + scatter |
 | Handle safety | generation-tagged, double-free and use-after-free tested |
 | Scales | all five projections, ticks and label formatting — checked against the vitest suite |
-| Interaction | pan, wheel zoom, box zoom, axis lock, bounded pan — verified against `plot.ts` |
+| Interaction | pan, wheel zoom, box zoom, axis lock, bounded pan, equal aspect — verified against `plot.ts` |
 | Autoscale | `padDomain` + non-finite skipping, verified against `plot.ts` |
 | Event queue | polled, coalescing, bounded |
 | GL loader | OpenGL 3.3 core, ~65 entry points, resolved via the host's `get_proc_address` |
 | Line layer | ported incl. min/max decimation, dashes, miter/bevel joins |
 | Scatter layer | ported incl. per-point size and colour, all six markers |
+| Text | SDF atlas on stb_truetype, kerned, rotated, batched into one draw call |
+| Grid, axes, labels, title | ported from `render/overlay.ts`, down to the half-pixel snapping |
+| Theme and axis styling | `lightTheme` / `darkTheme` / `resolveAxisStyle`, exposed as `ph_axis_config` |
 | Rendering | draws to the host's framebuffer, scissored to the plot region — **verified headless on a real GL 3.3 context** |
-| Font pipeline | Inter subset to 418 codepoints (29 KB), stb_truetype parses it, SDFs rasterize |
-| Text renderer | **next** — SDF atlas and the glyph shader |
-| Grid, axes, labels | **next** — needs the text renderer |
-| Offscreen readback | not started (`ph_plot_render_pixels`) |
-| GLFW host | not started |
+| Offscreen readback | `ph_plot_render_pixels`, top-row-first RGBA8 |
+| GLFW host | window, input, dpr, and a four-panel gallery |
+| Qt/QML host | not started (Faz 2) |
 
 `tests/gl_smoke_test.c` is the one that matters most here: it creates a
-surfaceless EGL context, renders a line and a scatter through the public ABI,
-and reads the pixels back. It is the only test that compiles a shader, so it is
-the only thing that can catch a broken GLSL ES 3.00 → 3.30 translation.
+surfaceless EGL context, renders a chart through the public ABI, and reads the
+pixels back — checking not just that something was drawn, but that the series
+stayed inside the scissor while the tick labels landed outside it. It is the
+only test that compiles a shader, so it is the only thing that can catch a
+broken GLSL ES 3.00 → 3.30 translation.
 
 ## Layering
 
@@ -150,7 +153,7 @@ some inline template instantiations with explicit default visibility, and they
 leak as weak symbols the dynamic linker may interpose. Since this `.so` gets
 loaded into a JVM, a CLR and a Qt process — each with its own libstdc++ already
 resident — the build adds a version script (`cmake/photon.map`, and
-`cmake/photon.symbols` on macOS). Verified: 48 exports, all `ph_*`.
+`cmake/photon.symbols` on macOS). Verified: 52 exports, all `ph_*`.
 
 ## Threading
 
@@ -184,20 +187,58 @@ menu) does not cross over.
 
 **Deliberately not ported**: `gl/shared.ts`. See above.
 
-**Has no equivalent and must be written**: text. The web core gets fonts free
-from Canvas2D (~200 `ctx.` calls across `render/overlay.ts` and `plot.ts` for
-tick labels, legend, tooltip, title). Natively that is an SDF atlas renderer
-built on stb_truetype.
+**Had no equivalent and had to be written**: text, and the overlay that uses it.
+See the next two sections.
 
-The font is **embedded**, not discovered from the system. A system font would
-mean a chart's tick labels have different metrics on Windows, macOS and Linux —
-different label widths, so different axis margins, so a different plot region
-for the same data. Embedding is what makes a native chart and a web chart line
-up. `third_party/fonts/` holds Inter, instanced to Regular and subset to the
-418 codepoints a chart actually draws: ASCII, Latin-1 and Latin Extended-A (so
+## Text
+
+The web core gets fonts free from Canvas2D — around 200 `ctx.` calls across
+`render/overlay.ts` and `plot.ts` for tick labels, legend, tooltip and title.
+Natively every one of them is a glyph atlas, a shader and a pile of metrics.
+Three decisions shape it.
+
+**The font is embedded, not discovered from the system.** A system font means a
+chart's tick labels have different metrics on Windows, macOS and Linux —
+different label widths, different axis margins, a different plot region for the
+same data. Embedding is what makes a native chart and a web chart line up.
+`third_party/fonts/` holds Inter, instanced to Regular and subset to the 418
+code points a chart actually draws: ASCII, Latin-1 and Latin Extended-A (so
 Turkish, Polish and Czech labels render), Greek, and the maths and currency
-symbols scientific and finance charts need. That is 29 KB, down from 856 KB for
-the full variable face. `tools/make_font.py` regenerates it.
+symbols scientific and finance charts need. That is 51 KB, down from 856 KB for
+the full variable face, and `tools/make_font.py` regenerates it. The subset
+keeps GPOS's `kern` feature: Inter has no legacy `kern` table, so dropping GPOS
+would silently turn kerning off, and `tests/text_test.cpp` asserts it is on.
+The bytes are turned into a C++ array at build time by `cmake/embed_binary.cmake`,
+so the repository holds one small binary rather than 300 KB of hex literals.
+
+**Glyphs are signed distance fields, rasterized at the device size.** SDF because
+a chart rotates text (the y axis title, rotated tick labels) and wants a heavier
+title than a Regular-only subset carries — rotation stays smooth because the
+field is resampled rather than the coverage, and weight is a constant added to
+the distance threshold. But the usual SDF trick of scaling one atlas entry to
+every size is exactly where SDF text earns its reputation for soft corners at
+12px. So the cache is keyed on the *quantized device size*: a chart uses two or
+three text sizes, the field is sampled at 1:1, and the result is as sharp as a
+coverage bitmap. A dpr change adds entries rather than resampling existing ones.
+
+**A frame's text is one draw call.** Glyph quads accumulate into a single vertex
+buffer and are drawn once. Forty short strings is forty draw calls otherwise,
+per chart, per frame.
+
+## The overlay
+
+`render/overlay.ts` strokes a 2D canvas; `src/render/overlay.cpp` fills
+rectangles and queues glyphs. Everything between those two ends is deliberately
+identical, down to the `Math.round(x) + 0.5` that makes a hairline crisp —
+because the acceptance test for this whole port is putting a native chart and a
+web chart side by side.
+
+There is no line primitive. Everything the overlay draws is axis-aligned, so one
+shader that fills quads covers grid lines, axis lines, tick marks, the crosshair,
+the box-select rectangle and the plot background; a dashed line is a run of
+quads. Positions are computed in *logical* pixels, exactly as the web computes
+CSS pixels, and converted to device pixels at the last moment — which is also
+where `ph_frame_target.flip_y` is handled for everything except the layers.
 
 ## Binding mapping
 
@@ -234,26 +275,31 @@ in each binding, or below it as `ph_plot_add_<chart>` — that call is Faz 4's.
 ## Roadmap
 
 - **Faz 0 — done.** ABI, host contract, handle safety, interaction port, build.
-- **Faz 1 — in progress.** Done: GL 3.3 backend, line + scatter, ticks and
-  label formatting, the font pipeline, headless GL verification. Left: the SDF
-  text renderer, grid/axes/labels, offscreen readback, and the GLFW host
-  (`PHOTON_BUILD_GLFW_HOST`).
-- **Faz 2.** Qt/QML host. *The second host is what proves the first host's
-  abstraction was real.* Do not start Faz 3 before this lands.
+- **Faz 1 — done.** GL 3.3 backend, line + scatter, the SDF text renderer,
+  grid/axes/labels/title, theme and axis styling, offscreen readback, and the
+  GLFW host with a four-panel gallery (`-DPHOTON_BUILD_GLFW_HOST=ON`).
+- **Faz 2 — next.** Qt/QML host. *The second host is what proves the first
+  host's abstraction was real.* Do not start Faz 3 before this lands.
 - **Faz 3.** C# and Java bindings, generated from the header rather than
   hand-written.
 - **Faz 4.** The remaining layers and the 3D family.
 
 ## Open questions
 
-- **Colors are `uint32` RGBA, not CSS strings.** `ph_color_parse` handles the hex
-  forms today; `rgb()`/`rgba()`/named colors arrive with the text renderer in
-  Faz 1, which needs a real CSS parser anyway.
-- **Tick generation and label formatting are not in the ABI yet.** They are
-  `Scale`'s remaining half, and their shape depends on how the text renderer
-  wants to be fed. Faz 1.
-- **`equal_aspect` is accepted and stored but not applied.** It needs the
-  layout, which needs the renderer.
+- **Colors are `uint32` RGBA, not CSS strings.** `ph_color_parse` still handles
+  only the hex forms. The text work turned out not to need a CSS parser — a font
+  is a size here, not a `font` shorthand — so `rgb()`, `rgba()` and named colors
+  are still open, and are now plain backlog rather than blocked on anything.
+- **Fonts are a size, not a family.** `ph_axis_config` takes `label_size` in
+  logical pixels where the web takes a CSS `font` string. One family is embedded
+  and no other can be loaded, so a family name would be a promise the library
+  cannot keep. If host-supplied fonts are ever wanted, that is a new ABI call
+  that hands over TTF bytes, not a string.
+- **The left margin is fixed at 56px and does not measure its labels.** That is
+  not an omission — `plot.ts` does the same, and a margin that measured would put
+  the native and web plot regions in different places. It does mean a very wide
+  y label overhangs on both.
 - **Whether ordinal-time's calendar tick logic ports as-is.** It leans on JS
-  `Date` for local-time calendar boundaries; `std::chrono`'s time zone support
-  is the intended replacement, and needs checking on all three platforms.
+  `Date` for local-time calendar boundaries; the C++ side uses `localtime_r` and
+  `mktime`, which are affected by `TZ` and are not thread-safe on every libc.
+  Needs checking near DST boundaries on all three platforms.

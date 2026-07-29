@@ -24,6 +24,7 @@
 #include "layer.hpp"
 #include "plot.hpp"
 #include "registry.hpp"
+#include "text/text.hpp"
 
 using photon::clear_error;
 using photon::fail;
@@ -145,6 +146,7 @@ extern "C" void PH_CALL ph_shutdown(void) {
     for (const uint64_t handle : registry.plots.handles()) {
       if (Plot* plot = registry.plots.get(handle)) plot->release_gl(registry.gl);
     }
+    photon::text::release_atlas_gl(registry.gl);
     photon::gl::clear_program_cache(registry.gl);
   }
   // Layers first: their refs point at plots that are about to go away.
@@ -230,6 +232,15 @@ extern "C" void PH_CALL ph_axis_desc_init(ph_axis_desc* out) {
   out->struct_size = static_cast<uint32_t>(sizeof(ph_axis_desc));
   out->type = PH_SCALE_LINEAR;
   // lo == hi means "autoscale to the data", which is the core's default.
+}
+
+extern "C" void PH_CALL ph_axis_config_init(ph_axis_config* out) {
+  if (!out) return;
+  *out = ph_axis_config{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_axis_config));
+  // Every other field is zero-means-default on purpose: the axis line, the ticks
+  // and the grid are on, the colours come from the theme, and the sizes are the
+  // ones resolve_axis_style() fills in.
 }
 
 extern "C" void PH_CALL ph_plot_desc_init(ph_plot_desc* out) {
@@ -345,6 +356,15 @@ extern "C" ph_result PH_CALL ph_plot_set_theme(ph_plot handle, ph_theme theme) {
   return PH_OK;
 }
 
+extern "C" ph_result PH_CALL ph_plot_set_title(ph_plot handle, const char* title) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_title(title);
+  return PH_OK;
+}
+
 // ---------------------------------------------------------------------------
 // Axes and view
 // ---------------------------------------------------------------------------
@@ -414,6 +434,42 @@ extern "C" ph_result PH_CALL ph_plot_remove_y_axis(ph_plot handle, const char* i
   if (!id) return fail(PH_E_INVALID_ARGUMENT, "id must be non-null");
   if (!plot->remove_y_axis(id)) {
     return fail(PH_E_INVALID_ARGUMENT, std::string("cannot remove y axis: ") + id);
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_set_axis_config(ph_plot handle, const char* axis,
+                                                    const ph_axis_config* desc) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!axis) return fail(PH_E_INVALID_ARGUMENT, "axis must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_axis_config.struct_size is larger than this build's");
+  }
+  if (desc) {
+    const ph_axis_config normalized = normalize(desc, ph_axis_config_init);
+    if (!plot->set_axis_config(axis, &normalized)) {
+      return fail(PH_E_INVALID_ARGUMENT, std::string("no such axis: ") + axis);
+    }
+  } else if (!plot->set_axis_config(axis, nullptr)) {
+    return fail(PH_E_INVALID_ARGUMENT, std::string("no such axis: ") + axis);
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_set_axis_ticks(ph_plot handle, const char* axis,
+                                                    const ph_tick* ticks, int32_t count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!axis) return fail(PH_E_INVALID_ARGUMENT, "axis must be non-null");
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must not be negative");
+  if (count > 0 && !ticks) return fail(PH_E_INVALID_ARGUMENT, "ticks must be non-null when count > 0");
+  if (!plot->set_axis_ticks(axis, ticks, count)) {
+    return fail(PH_E_INVALID_ARGUMENT, std::string("no such axis: ") + axis);
   }
   return PH_OK;
 }
@@ -720,8 +776,21 @@ extern "C" ph_result PH_CALL ph_plot_render_pixels(ph_plot handle, int32_t width
   if (stride_bytes < width * 4) {
     return fail(PH_E_INVALID_ARGUMENT, "stride_bytes must be at least width * 4");
   }
-  (void)dpr;
-  return fail(PH_E_UNSUPPORTED, "offscreen readback arrives with the GL backend in Faz 1");
+  if (plot->owner_thread() != std::this_thread::get_id()) {
+    return fail(PH_E_WRONG_THREAD,
+                "a plot must be rendered on the thread that created it — its GL context is current there");
+  }
+  const ph_result gl = ensure_gl_loaded();
+  if (gl != PH_OK) return gl;
+
+  Registry& registry = Registry::get();
+  std::string error;
+  if (!plot->render_pixels(registry.gl, registry.host.api, width, height, dpr, out_rgba,
+                           stride_bytes, error)) {
+    return fail(PH_E_GL, std::move(error));
+  }
+  plot->mark_drawn();
+  return PH_OK;
 }
 
 extern "C" ph_bool PH_CALL ph_plot_needs_redraw(ph_plot handle) {

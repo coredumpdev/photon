@@ -208,6 +208,50 @@ static void test_color_parsing(void) {
   CHECK_EQ(ph_color_parse("rebeccapurple", &color), PH_E_UNSUPPORTED);
 }
 
+static void test_axis_styling_and_explicit_ticks(void) {
+  ph_plot plot = PH_NULL_HANDLE;
+  ph_axis_config config;
+  ph_tick ticks[3];
+
+  CHECK_EQ(ph_plot_create(NULL, &plot), PH_OK);
+
+  /* Zero means default here too, so a calloc'd config is a valid one. */
+  memset(&config, 0, sizeof(config));
+  CHECK_EQ(ph_plot_set_axis_config(plot, "x", &config), PH_OK);
+
+  ph_axis_config_init(&config);
+  CHECK_EQ(config.struct_size, (uint32_t)sizeof(ph_axis_config));
+  config.title = "time (s)";
+  config.minor_ticks = 4;
+  config.no_grid = 1;
+  CHECK_EQ(ph_plot_set_axis_config(plot, "x", &config), PH_OK);
+  CHECK_EQ(ph_plot_set_axis_config(plot, "y", &config), PH_OK);
+  /* NULL restores the theme defaults rather than being an error. */
+  CHECK_EQ(ph_plot_set_axis_config(plot, "y", NULL), PH_OK);
+  CHECK_EQ(ph_plot_set_axis_config(plot, "nope", &config), PH_E_INVALID_ARGUMENT);
+  CHECK_EQ(ph_plot_set_axis_config(plot, NULL, &config), PH_E_INVALID_ARGUMENT);
+
+  memset(ticks, 0, sizeof(ticks));
+  ticks[0].value = 0.0;
+  ticks[0].label = "start";
+  ticks[1].value = 0.5;
+  ticks[1].minor = 1;
+  ticks[1].grid = PH_TOGGLE_ON; /* a minor tick that does draw a grid line */
+  ticks[2].value = 1.0;
+  CHECK_EQ(ph_plot_set_axis_ticks(plot, "x", ticks, 3), PH_OK);
+  /* Zero restores the automatic ticks, and may pass a null array. */
+  CHECK_EQ(ph_plot_set_axis_ticks(plot, "x", NULL, 0), PH_OK);
+  CHECK_EQ(ph_plot_set_axis_ticks(plot, "x", NULL, 3), PH_E_INVALID_ARGUMENT);
+  CHECK_EQ(ph_plot_set_axis_ticks(plot, "x", ticks, -1), PH_E_INVALID_ARGUMENT);
+  CHECK_EQ(ph_plot_set_axis_ticks(plot, "missing", ticks, 3), PH_E_INVALID_ARGUMENT);
+
+  /* A title, and clearing it again. */
+  CHECK_EQ(ph_plot_set_title(plot, "Portfolio"), PH_OK);
+  CHECK_EQ(ph_plot_set_title(plot, NULL), PH_OK);
+
+  CHECK_EQ(ph_plot_destroy(plot), PH_OK);
+}
+
 static void test_render_without_a_context_is_honest(void) {
   /* This test suite runs headless: ph_init got no get_proc_address, so there is
    * nothing to resolve GL against. Rendering must say exactly that rather than
@@ -226,8 +270,9 @@ static void test_render_without_a_context_is_honest(void) {
   /* The message has to name the missing thing, not just "GL error". */
   CHECK(strstr(ph_last_error(), "get_proc_address") != NULL);
 
-  /* Offscreen readback is still unimplemented; that is a different answer. */
-  CHECK_EQ(ph_plot_render_pixels(plot, 16, 16, 1.0f, pixels, 16 * 4), PH_E_UNSUPPORTED);
+  /* Offscreen readback needs the same context, and fails the same way. */
+  CHECK_EQ(ph_plot_render_pixels(plot, 16, 16, 1.0f, pixels, 16 * 4), PH_E_GL);
+  CHECK(strstr(ph_last_error(), "get_proc_address") != NULL);
   /* Argument validation still runs ahead of both. */
   CHECK_EQ(ph_plot_render_pixels(plot, 16, 16, 1.0f, pixels, 8), PH_E_INVALID_ARGUMENT);
   CHECK_EQ(ph_plot_render_pixels(plot, 0, 16, 1.0f, pixels, 64), PH_E_INVALID_ARGUMENT);
@@ -242,6 +287,7 @@ int main(void) {
   RUN(test_struct_layout_is_pinned);
   RUN(test_handle_safety);
   RUN(test_color_parsing);
+  RUN(test_axis_styling_and_explicit_ticks);
   RUN(test_render_without_a_context_is_honest);
   ph_shutdown();
   return TEST_MAIN_RESULT();

@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "color.hpp"
 #include "gl/gl.hpp"
 #include "gl/transform.hpp"
 
@@ -68,13 +69,6 @@ class Layer {
   ph_color color_ = PH_COLOR_AUTO;
   bool visible_ = true;
 };
-
-/// RGBA 0..1 from the ABI's packed 0xRRGGBBAA, falling back to the core's
-/// default series blue when the caller left the colour unset.
-struct Rgba {
-  float r = 0.0f, g = 0.0f, b = 0.0f, a = 1.0f;
-};
-Rgba unpack_color(ph_color color);
 
 /// A layer whose geometry is a parallel x/y pair — line, scatter, and most of
 /// what follows in Faz 4.

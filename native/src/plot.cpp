@@ -13,6 +13,13 @@ namespace {
 /// the backstop for a host that never drains at all.
 constexpr size_t kMaxQueuedEvents = 256;
 
+/// Horizontal room each extra y axis takes, and the strip a title reserves
+/// above the plot. Both are Y_AXIS_GAP / TITLE_RESERVE from plot.ts.
+constexpr double kYAxisGap = 52.0;
+constexpr double kTitleReserve = 28.0;
+/// Offset from an axis line to its rotated title, from yAxisPositions().
+constexpr double kYTitleOffset = 42.0;
+
 const char* kPrimaryY = "y";
 
 bool same_id(const char* a, const std::string& b) {
@@ -78,6 +85,10 @@ Plot::Plot(const ph_plot_desc& desc) {
   }
   y_axes_.push_back(std::move(primary));
 
+  if (desc.title) title_ = desc.title;
+  background_ = desc.background;
+  border_ = desc.border;
+
   mode_ = desc.mode;
   pick_ = desc.pick;
   equal_aspect_ = desc.equal_aspect != 0;
@@ -101,13 +112,86 @@ void Plot::set_margin(const ph_margin& margin) {
   request_render();
 }
 
+void Plot::set_title(const char* title) {
+  title_ = title ? title : "";
+  request_render();
+}
+
+ph_margin Plot::compute_margin() const {
+  int left_count = 0;
+  int right_count = 0;
+  for (const YAxis& axis : y_axes_) {
+    if (axis.side == 0) {
+      ++left_count;
+    } else {
+      ++right_count;
+    }
+  }
+  // Port of computeMargin(): the first left axis sits on the region's own edge,
+  // so only the ones beyond it widen the margin. The colorbar's share of the
+  // right margin arrives with the colorbar, in Faz 4.
+  ph_margin out = margin_;
+  out.top += title_.empty() ? 0.0f : static_cast<float>(kTitleReserve);
+  out.left += static_cast<float>(std::max(0, left_count - 1) * kYAxisGap);
+  out.right += static_cast<float>(right_count * kYAxisGap);
+  return out;
+}
+
 PlotRegion Plot::region() const {
+  const ph_margin margin = compute_margin();
   PlotRegion r;
-  r.left = margin_.left;
-  r.top = margin_.top;
-  r.width = std::max(0.0, static_cast<double>(width_) - margin_.left - margin_.right);
-  r.height = std::max(0.0, static_cast<double>(height_) - margin_.top - margin_.bottom);
+  r.left = margin.left;
+  r.top = margin.top;
+  r.width = std::max(0.0, static_cast<double>(width_) - margin.left - margin.right);
+  r.height = std::max(0.0, static_cast<double>(height_) - margin.top - margin.bottom);
   return r;
+}
+
+std::vector<render::YAxisPlacement> Plot::y_axis_placements(const PlotRegion& r) const {
+  std::vector<render::YAxisPlacement> out;
+  out.reserve(y_axes_.size());
+  int left_index = 0;
+  int right_index = 0;
+  for (const YAxis& axis : y_axes_) {
+    render::YAxisPlacement place;
+    if (axis.side == 0) {
+      place.x = r.left - left_index * kYAxisGap;
+      place.title_x = place.x - kYTitleOffset;
+      place.right_side = false;
+      ++left_index;
+    } else {
+      place.x = r.left + r.width + right_index * kYAxisGap;
+      place.title_x = place.x + kYTitleOffset;
+      place.right_side = true;
+      ++right_index;
+    }
+    out.push_back(place);
+  }
+  return out;
+}
+
+void Plot::apply_aspect(const PlotRegion& r) {
+  // Port of applyAspect(). A log axis has no constant units-per-pixel, so the
+  // whole idea is undefined there and the web core bails out the same way.
+  if (scale_x_.is_log()) return;
+  YAxis& primary = primary_y();
+  if (primary.scale.is_log()) return;
+  if (r.width <= 0.0 || r.height <= 0.0) return;
+
+  const double upp_x = (scale_x_.hi - scale_x_.lo) / r.width;
+  const double upp_y = (primary.scale.hi - primary.scale.lo) / r.height;
+  if (upp_x <= 0.0 || upp_y <= 0.0) return;
+  if (std::abs(upp_x - upp_y) <= 1e-9 * std::max(upp_x, upp_y)) return;  // already balanced
+
+  if (upp_x > upp_y) {
+    const double target = upp_x * r.height;
+    const double centre = (primary.scale.lo + primary.scale.hi) / 2.0;
+    primary.scale.set_domain(centre - target / 2.0, centre + target / 2.0);
+  } else {
+    const double target = upp_y * r.width;
+    const double centre = (scale_x_.lo + scale_x_.hi) / 2.0;
+    scale_x_.set_domain(centre - target / 2.0, centre + target / 2.0);
+  }
 }
 
 // -- axes -------------------------------------------------------------------
@@ -118,6 +202,44 @@ YAxis* Plot::find_y_axis(const char* id) {
     if (same_id(id, axis.id)) return &axis;
   }
   return nullptr;
+}
+
+Axis* Plot::find_axis(const char* id) {
+  if (!id || !*id) return nullptr;
+  if (std::strcmp(id, "x") == 0) return &axis_x_;
+  YAxis* y = find_y_axis(id);
+  return y ? &y->axis : nullptr;
+}
+
+bool Plot::set_axis_config(const char* axis, const ph_axis_config* desc) {
+  Axis* target = find_axis(axis);
+  if (!target) return false;
+  target->set_config(desc ? render::AxisConfig::from(*desc) : render::AxisConfig{});
+  request_render();
+  return true;
+}
+
+bool Plot::set_axis_ticks(const char* axis, const ph_tick* ticks, int32_t count) {
+  Axis* target = find_axis(axis);
+  if (!target) return false;
+  std::vector<Tick> out;
+  if (ticks && count > 0) {
+    out.reserve(static_cast<size_t>(count));
+    for (int32_t i = 0; i < count; ++i) {
+      Tick tick;
+      tick.value = ticks[i].value;
+      if (ticks[i].label) tick.label = ticks[i].label;
+      tick.minor = ticks[i].minor != 0;
+      // The default follows the tick's own weight, which is what `?? !t.minor`
+      // does in the web core; the toggle exists to override it either way.
+      tick.grid = ticks[i].grid == PH_TOGGLE_DEFAULT ? !tick.minor
+                                                     : ticks[i].grid == PH_TOGGLE_ON;
+      out.push_back(std::move(tick));
+    }
+  }
+  target->set_explicit_ticks(std::move(out));
+  request_render();
+  return true;
 }
 
 Scale* Plot::find_scale(const char* axis) {
@@ -520,11 +642,44 @@ bool Plot::render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, s
 
   api.Viewport(vx, vy, vw, vh);
   api.Disable(GL_DEPTH_TEST);
+  api.Disable(GL_SCISSOR_TEST);
   api.Enable(GL_BLEND);
   // Premultiplied alpha, matching begin2D() in the web core's gl/shared.ts.
   api.BlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-  const PlotRegion r = region();
+  // Same order as render() in plot.ts: aspect, bounds clamp, then ticks and
+  // styles resolved once and reused by the grid and the axes.
+  PlotRegion r = region();
+  if (equal_aspect_) {
+    apply_aspect(r);
+    r = region();
+  }
+  if (bounded_pan_) apply_bounds_clamp();
+
+  YAxis& primary = primary_y();
+  const std::vector<Tick>& ticks_x = axis_x_.resolve(scale_x_);
+  const std::vector<Tick>& ticks_y = primary.axis.resolve(primary.scale);
+  const render::AxisStyle style_x = render::resolve_axis_style(axis_x_.config, theme_);
+  const render::AxisStyle style_y = render::resolve_axis_style(primary.axis.config, theme_);
+
+  const render::Rect rect{r.left, r.top, r.width, r.height};
+  const PixelTransform pixels = PixelTransform::of(vw, vh, target.flip_y != 0);
+  render::Painter painter(shapes_, labels_, dpr);
+
+  // 1. Behind the data: the two fills and the grid.
+  if (border_ != PH_COLOR_AUTO) {
+    painter.fill(0.0, 0.0, static_cast<double>(width_), static_cast<double>(height_),
+                 unpack_color_exact(border_));
+  }
+  if (background_ != PH_COLOR_AUTO) {
+    painter.fill(r.left, r.top, r.width, r.height, unpack_color_exact(background_));
+  }
+  // Only the x and primary-y grids are drawn, so a secondary axis does not
+  // double the lines — the same choice the web core makes.
+  render::draw_grid(painter, rect, scale_x_, primary.scale, ticks_x, ticks_y, style_x, style_y);
+  if (!shapes_.flush(api, gfx, pixels, error)) return false;
+
+  // 2. The data itself, scissored to the plot region.
   const int rx = vx + static_cast<int>(std::lround(r.left * dpr));
   const int rw = static_cast<int>(std::lround(r.width * dpr));
   const int rh = static_cast<int>(std::lround(r.height * dpr));
@@ -532,50 +687,167 @@ bool Plot::render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, s
   const int ry = target.flip_y
                      ? vy + static_cast<int>(std::lround(r.top * dpr))
                      : vy + vh - static_cast<int>(std::lround((r.top + r.height) * dpr));
-  if (rw <= 0 || rh <= 0) return true;
-
-  // Layers draw in normalized device coords over the plot region only; the
-  // scissor is what keeps a panned series out of the axis margins.
-  api.Viewport(rx, ry, rw, rh);
-  api.Enable(GL_SCISSOR_TEST);
-  api.Scissor(rx, ry, rw, rh);
-
-  DrawState state;
-  state.api = &api;
-  state.gfx = gfx;
-  state.pixel_width = static_cast<double>(rw);
-  state.pixel_height = static_cast<double>(rh);
-  state.dpr = dpr;
-  state.x = gl::AxisFrame{scale_x_.lo, scale_x_.hi, scale_x_.is_log()};
-
   bool ok = true;
-  for (auto& layer : layers_) {
-    if (!layer->visible()) continue;
-    // Each layer projects against the y axis it is bound to, which is what
-    // makes a secondary axis mean anything.
-    const YAxis* axis = &primary_y();
-    if (!layer->y_axis().empty()) {
-      for (const YAxis& candidate : y_axes_) {
-        if (candidate.id == layer->y_axis()) {
-          axis = &candidate;
-          break;
+  if (rw > 0 && rh > 0) {
+    // Layers draw in normalized device coords over the plot region only; the
+    // scissor is what keeps a panned series out of the axis margins.
+    api.Viewport(rx, ry, rw, rh);
+    api.Enable(GL_SCISSOR_TEST);
+    api.Scissor(rx, ry, rw, rh);
+
+    DrawState state;
+    state.api = &api;
+    state.gfx = gfx;
+    state.pixel_width = static_cast<double>(rw);
+    state.pixel_height = static_cast<double>(rh);
+    state.dpr = dpr;
+    state.x = gl::AxisFrame{scale_x_.lo, scale_x_.hi, scale_x_.is_log()};
+
+    for (auto& layer : layers_) {
+      if (!layer->visible()) continue;
+      // Each layer projects against the y axis it is bound to, which is what
+      // makes a secondary axis mean anything.
+      const YAxis* axis = &primary;
+      if (!layer->y_axis().empty()) {
+        for (const YAxis& candidate : y_axes_) {
+          if (candidate.id == layer->y_axis()) {
+            axis = &candidate;
+            break;
+          }
         }
       }
+      state.y = gl::AxisFrame{axis->scale.lo, axis->scale.hi, axis->scale.is_log()};
+      if (!layer->draw(state, error)) {
+        ok = false;
+        break;  // the error names the layer; carrying on would overwrite it
+      }
     }
-    state.y = gl::AxisFrame{axis->scale.lo, axis->scale.hi, axis->scale.is_log()};
-    if (!layer->draw(state, error)) {
-      ok = false;
-      break;  // the error names the layer; carrying on would overwrite it
+
+    api.Disable(GL_SCISSOR_TEST);
+    api.Viewport(vx, vy, vw, vh);
+  }
+  if (!ok) return false;
+
+  // 3. Over the data: axes, guides and the title.
+  render::draw_x_axis(painter, rect, scale_x_, ticks_x, style_x, axis_x_.config.title);
+
+  const std::vector<render::YAxisPlacement> placements = y_axis_placements(r);
+  for (size_t i = 0; i < y_axes_.size(); ++i) {
+    YAxis& axis = y_axes_[i];
+    const std::vector<Tick>& ticks = axis.axis.resolve(axis.scale);
+    const render::AxisStyle style =
+        &axis == &primary ? style_y : render::resolve_axis_style(axis.axis.config, theme_);
+    render::draw_y_axis(painter, rect, axis.scale, ticks, style, axis.axis.config.title,
+                        placements[i]);
+  }
+
+  if (selecting_) {
+    const AxisLock lock = axis_lock();
+    render::draw_selection(painter, rect, select_x0_, select_y0_, last_px_, last_py_, lock.x,
+                           lock.y);
+  } else if (crosshair_ && panning_) {
+    render::draw_crosshair_xy(painter, rect, last_px_, last_py_, theme_);
+  }
+
+  render::draw_title(painter, rect, title_, theme_);
+
+  if (!shapes_.flush(api, gfx, pixels, error)) return false;
+  if (!labels_.flush(api, gfx, pixels, error)) return false;
+  return true;
+}
+
+bool Plot::render_pixels(gl::Api& api, ph_gfx_api gfx, int32_t width, int32_t height, float dpr,
+                         uint8_t* out_rgba, int32_t stride_bytes, std::string& error) {
+  using namespace photon::gl;
+
+  const float scale = dpr > 0.0f ? dpr : 1.0f;
+  if (offscreen_fbo_ == 0) {
+    api.GenFramebuffers(1, &offscreen_fbo_);
+    api.GenTextures(1, &offscreen_texture_);
+    if (offscreen_fbo_ == 0 || offscreen_texture_ == 0) {
+      error = "failed to create the offscreen framebuffer";
+      return false;
     }
   }
 
+  if (width != offscreen_width_ || height != offscreen_height_) {
+    api.BindTexture(GL_TEXTURE_2D, offscreen_texture_);
+    api.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA8), width, height, 0, GL_RGBA,
+                   GL_UNSIGNED_BYTE, nullptr);
+    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_NEAREST));
+    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_NEAREST));
+    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+    api.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+    api.BindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
+    api.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                             offscreen_texture_, 0);
+    // No depth or stencil: the 2D path disables the depth test, and a renderbuffer
+    // nobody reads is a few megabytes of nothing at 4K.
+    if (api.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+      api.BindFramebuffer(GL_FRAMEBUFFER, 0);
+      offscreen_width_ = offscreen_height_ = 0;
+      error = "the offscreen framebuffer is incomplete — RGBA8 render targets may be unsupported";
+      return false;
+    }
+    offscreen_width_ = width;
+    offscreen_height_ = height;
+  }
+
+  // The layout runs at the logical size the caller implied, then is restored:
+  // asking for an image must not resize the plot the host is interacting with.
+  const int32_t saved_width = width_;
+  const int32_t saved_height = height_;
+  width_ = static_cast<int32_t>(std::lround(static_cast<double>(width) / scale));
+  height_ = static_cast<int32_t>(std::lround(static_cast<double>(height) / scale));
+
+  api.BindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
   api.Disable(GL_SCISSOR_TEST);
-  api.Viewport(vx, vy, vw, vh);
-  return ok;
+  api.Viewport(0, 0, width, height);
+  api.ClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+  api.Clear(GL_COLOR_BUFFER_BIT);
+
+  ph_frame_target target{};
+  target.struct_size = static_cast<uint32_t>(sizeof(ph_frame_target));
+  target.framebuffer = offscreen_fbo_;
+  target.width = width;
+  target.height = height;
+  target.dpr = scale;
+  target.flip_y = 0;  // a plain GL target; the rows are flipped on the way out
+  const bool ok = render(api, gfx, target, error);
+
+  width_ = saved_width;
+  height_ = saved_height;
+  if (!ok) {
+    api.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    return false;
+  }
+
+  const size_t row_bytes = static_cast<size_t>(width) * 4;
+  std::vector<uint8_t> pixels(row_bytes * static_cast<size_t>(height));
+  api.PixelStorei(GL_PACK_ALIGNMENT, 1);
+  api.ReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+  api.BindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  // GL hands back the bottom row first; every image consumer wants the top one.
+  for (int32_t y = 0; y < height; ++y) {
+    const size_t source = static_cast<size_t>(height - 1 - y) * row_bytes;
+    std::memcpy(out_rgba + static_cast<size_t>(y) * static_cast<size_t>(stride_bytes),
+                pixels.data() + source, row_bytes);
+  }
+  return true;
 }
 
 void Plot::release_gl(gl::Api& api) {
   for (auto& layer : layers_) layer->release_gl(api);
+  shapes_.release_gl(api);
+  labels_.release_gl(api);
+  if (offscreen_fbo_ != 0) {
+    api.DeleteFramebuffers(1, &offscreen_fbo_);
+    api.DeleteTextures(1, &offscreen_texture_);
+    offscreen_fbo_ = 0;
+    offscreen_texture_ = 0;
+    offscreen_width_ = offscreen_height_ = 0;
+  }
 }
 
 void Plot::request_render() {

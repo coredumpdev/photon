@@ -17,7 +17,9 @@
 #include <thread>
 #include <vector>
 
+#include "axes/axis.hpp"
 #include "layer.hpp"
+#include "render/overlay.hpp"
 #include "scale.hpp"
 
 namespace photon {
@@ -34,6 +36,8 @@ struct PlotRegion {
 struct YAxis {
   std::string id;
   Scale scale;
+  /// Ticks and styling for this axis.
+  Axis axis;
   /// 0 = left, 1 = right. Secondary axes default to the right.
   int32_t side = 0;
   /// True while the axis re-fits itself to the data; any explicit domain clears it.
@@ -51,7 +55,12 @@ class Plot {
   void set_size(int32_t width, int32_t height);
   void set_margin(const ph_margin& margin);
   void set_theme(ph_theme theme) { theme_ = theme; request_render(); }
+  void set_title(const char* title);
   PlotRegion region() const;
+  /// The base margin grown for the title strip and any extra y axes.
+  ph_margin compute_margin() const;
+  /// Where each y axis line sits, parallel to the axis list.
+  std::vector<render::YAxisPlacement> y_axis_placements(const PlotRegion& r) const;
 
   // -- axes --------------------------------------------------------------
   /// Look up "x", "y", or a named y axis. nullptr when there is no such axis.
@@ -62,6 +71,10 @@ class Plot {
   bool get_domain(const char* axis, ph_range& out) const;
   bool add_y_axis(const char* id, const ph_axis_desc& desc, int32_t side);
   bool remove_y_axis(const char* id);
+  /// Style one axis. A null descriptor restores the theme defaults.
+  bool set_axis_config(const char* axis, const ph_axis_config* desc);
+  /// Replace an axis's automatic ticks. `count == 0` restores automatic ticks.
+  bool set_axis_ticks(const char* axis, const ph_tick* ticks, int32_t count);
   void autoscale();
   void reset_view();
 
@@ -96,6 +109,15 @@ class Plot {
    * current and loaded `api`. Returns false with `error` set on a GL failure.
    */
   bool render(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& target, std::string& error);
+  /**
+   * Render into a private framebuffer and read the pixels back, top row first.
+   *
+   * `width`/`height` are the output image in pixels; the layout runs at
+   * width/dpr by height/dpr logical pixels, so a 2x readback of a 400x300 chart
+   * asks for 800x600 with dpr 2.
+   */
+  bool render_pixels(gl::Api& api, ph_gfx_api gfx, int32_t width, int32_t height, float dpr,
+                     uint8_t* out_rgba, int32_t stride_bytes, std::string& error);
   /// Release every layer's GL objects. Requires the context to be current.
   void release_gl(gl::Api& api);
   bool needs_redraw() const { return needs_redraw_; }
@@ -118,6 +140,11 @@ class Plot {
   };
   AxisLock axis_lock() const;
 
+  /// "x", "y" or a named y axis, as an Axis rather than a Scale.
+  Axis* find_axis(const char* id);
+  /// Equalize the data-units-per-pixel of both axes. Port of applyAspect().
+  void apply_aspect(const PlotRegion& r);
+
   YAxis& primary_y() { return y_axes_.front(); }
   const YAxis& primary_y() const { return y_axes_.front(); }
 
@@ -136,8 +163,13 @@ class Plot {
   int32_t height_ = 400;
   ph_margin margin_{16.0f, 16.0f, 40.0f, 56.0f};
   ph_theme theme_ = PH_THEME_DARK;
+  std::string title_;
+  /// Plot-region fill and full-canvas fill. PH_COLOR_AUTO leaves both clear.
+  ph_color background_ = PH_COLOR_AUTO;
+  ph_color border_ = PH_COLOR_AUTO;
 
   Scale scale_x_;
+  Axis axis_x_;
   bool auto_x_ = true;
   bool has_initial_x_ = false;
   ph_range initial_x_{0.0, 1.0};
@@ -160,6 +192,18 @@ class Plot {
   double last_py_ = 0.0;
   double select_x0_ = 0.0;
   double select_y0_ = 0.0;
+
+  /// The overlay's GL buffers. Per-plot because the vertex data is per-frame;
+  /// the programs and the glyph atlas behind them are process-wide.
+  render::Primitives shapes_;
+  text::Batch labels_;
+
+  /// The offscreen target for render_pixels, reallocated only when the size
+  /// changes — a host that streams frames to an image view calls this per frame.
+  gl::GLuint offscreen_fbo_ = 0;
+  gl::GLuint offscreen_texture_ = 0;
+  int32_t offscreen_width_ = 0;
+  int32_t offscreen_height_ = 0;
 
   bool needs_redraw_ = true;
   std::deque<ph_event> events_;

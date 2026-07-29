@@ -8,8 +8,12 @@ add a line, feed input, render, poll events, destroy — which is enough to
 exercise every marshalling shape the ABI uses: handles, descriptor structs,
 array arguments, UTF-8 strings, and out-parameters.
 
+They are a slice on purpose and they do not track the ABI as it grows — the
+axis-styling and explicit-tick calls Faz 1 added are not here, and should not be
+added by hand.
+
 The real bindings land in Faz 3 and should be **generated from
-`include/photon/photon.h`**, not hand-written. Four hand-maintained copies of 48
+`include/photon/photon.h`**, not hand-written. Four hand-maintained copies of 52
 signatures is four places for a struct field to drift out of order, and a struct
 field in the wrong order is a silent data corruption rather than a compile error.
 

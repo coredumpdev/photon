@@ -301,6 +301,74 @@ typedef struct ph_axis_desc {
   int32_t       time_count;
 } ph_axis_desc;
 
+/**
+ * Three-state flag for fields whose default is neither on nor off but
+ * "whatever the context implies". Zero is still the default, so the
+ * zero-initialized rule holds.
+ */
+typedef int32_t ph_toggle;
+enum {
+  PH_TOGGLE_DEFAULT = 0,
+  PH_TOGGLE_ON      = 1,
+  PH_TOGGLE_OFF     = -1
+};
+
+/** One explicit axis tick. Mirrors core `Tick`. */
+typedef struct ph_tick {
+  double      value;
+  /** UTF-8. NULL means "format with the scale's own formatter". */
+  const char* label;
+  ph_bool     minor;
+  /** Grid line. Default is on for a major tick and off for a minor one. */
+  ph_toggle   grid;
+} ph_tick;
+
+/**
+ * How one axis is drawn. Mirrors the style half of core `AxisConfig`.
+ *
+ * Every field is zero-means-default, so an axis left alone looks exactly like
+ * the web core's. Two consequences of that rule worth knowing: a zero `width`
+ * or `length` reads as "use the default", so the smallest hairline you can ask
+ * for is a fractional value rather than 0; and PH_COLOR_AUTO means "take the
+ * theme's colour", which is why it is not spelled as transparent.
+ *
+ * Fonts are a size in logical pixels rather than a CSS `font` string: the
+ * library embeds one family (see DESIGN.md) and cannot honour a family name.
+ */
+typedef struct ph_axis_config {
+  uint32_t     struct_size;
+  /* The axis line, its ticks and its grid are all ON in the core, so — as with
+   * ph_plot_desc — the descriptor spells the negation. */
+  ph_bool      no_axis_line;
+  ph_bool      no_ticks;
+  ph_bool      no_grid;
+
+  ph_color     axis_line_color;
+  float        axis_line_width;    /* 0 = 1  */
+  ph_color     tick_color;
+  float        tick_length;        /* 0 = 5  */
+  float        tick_width;         /* 0 = 1  */
+
+  ph_color     label_color;
+  float        label_size;         /* 0 = 12 */
+  float        label_rotation;     /* degrees, clockwise; x axis only */
+  float        label_standoff;     /* 0 = 3  */
+
+  const char*  title;              /* UTF-8, may be NULL */
+  ph_color     title_color;
+  float        title_size;         /* 0 = 12 */
+
+  ph_color     grid_color;
+  ph_color     grid_minor_color;
+  float        grid_width;         /* 0 = 1 */
+  /** Dash pattern in logical px, alternating on/off. NULL = solid. Max 8. */
+  const float* grid_dash;
+  int32_t      grid_dash_count;
+
+  /** Minor ticks between each pair of majors. 0 = none; linear scales only. */
+  int32_t      minor_ticks;
+} ph_axis_config;
+
 /** Mirrors core `PlotOptions` — the subset that is not host-specific. */
 typedef struct ph_plot_desc {
   uint32_t     struct_size;
@@ -484,6 +552,7 @@ PH_API void PH_CALL ph_host_desc_init(ph_host_desc* out);
 PH_API void PH_CALL ph_frame_target_init(ph_frame_target* out);
 PH_API void PH_CALL ph_plot_desc_init(ph_plot_desc* out);
 PH_API void PH_CALL ph_axis_desc_init(ph_axis_desc* out);
+PH_API void PH_CALL ph_axis_config_init(ph_axis_config* out);
 PH_API void PH_CALL ph_line_desc_init(ph_line_desc* out);
 PH_API void PH_CALL ph_scatter_desc_init(ph_scatter_desc* out);
 
@@ -506,6 +575,9 @@ PH_API ph_result PH_CALL ph_plot_set_size(ph_plot plot, int32_t width, int32_t h
 PH_API ph_result PH_CALL ph_plot_set_margin(ph_plot plot, const ph_margin* margin);
 PH_API ph_result PH_CALL ph_plot_set_theme(ph_plot plot, ph_theme theme);
 
+/** Set (or clear, with NULL) the plot title drawn in the reserved top strip. */
+PH_API ph_result PH_CALL ph_plot_set_title(ph_plot plot, const char* title);
+
 /* ------------------------------------------------------------------------ */
 /* Axes and view                                                              */
 /* ------------------------------------------------------------------------ */
@@ -522,6 +594,26 @@ PH_API ph_result PH_CALL ph_plot_get_domain(ph_plot plot, const char* axis, ph_r
 PH_API ph_result PH_CALL ph_plot_add_y_axis(ph_plot plot, const char* id, const ph_axis_desc* desc, int32_t side);
 
 PH_API ph_result PH_CALL ph_plot_remove_y_axis(ph_plot plot, const char* id);
+
+/**
+ * Style one axis. `desc` may be NULL to restore the theme defaults. The pointers
+ * inside it (title, grid_dash) are copied during the call, like every other
+ * descriptor's.
+ */
+PH_API ph_result PH_CALL ph_plot_set_axis_config(ph_plot plot, const char* axis,
+                                                 const ph_axis_config* desc);
+
+/**
+ * Replace an axis's automatic ticks with an explicit list, or restore automatic
+ * ticks with `count == 0`.
+ *
+ * The web core also accepts a generator callback here. This does not: calling
+ * back into a managed runtime is exactly what the polled event queue exists to
+ * avoid, and a host that wants generated ticks can generate them and pass the
+ * array.
+ */
+PH_API ph_result PH_CALL ph_plot_set_axis_ticks(ph_plot plot, const char* axis,
+                                                const ph_tick* ticks, int32_t count);
 
 /** Re-fit every auto axis to the union of its layers' bounds. */
 PH_API ph_result PH_CALL ph_plot_autoscale(ph_plot plot);
@@ -611,6 +703,14 @@ PH_API ph_result PH_CALL ph_plot_render(ph_plot plot, const ph_frame_target* tar
  * Fallback for hosts with no GL interop (JavaFX, classic WPF): render offscreen
  * and read back into `out_rgba`, which must hold at least
  * `stride_bytes * height` bytes with `stride_bytes >= width * 4`.
+ *
+ * `width` and `height` are the output image in pixels, top row first, RGBA8
+ * with premultiplied alpha. The chart is laid out at `width / dpr` by
+ * `height / dpr` logical pixels — so a 2x image of a 400x300 chart is
+ * `(800, 600, dpr = 2)`. The plot's own size is not changed.
+ *
+ * The host's GL context must still be current: this renders, it does not
+ * rasterize on the CPU.
  *
  * This is the native descendant of the browser core's shared-context blit: on
  * the web that readback is mandatory, here it is the compatibility path.

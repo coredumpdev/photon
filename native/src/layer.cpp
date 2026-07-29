@@ -12,9 +12,6 @@ namespace {
 
 using namespace photon::gl;
 
-/// The core's default series colour, `#3b82f6`.
-constexpr ph_color kDefaultSeriesColor = 0x3b82f6ffu;
-
 /// Non-finite samples are holes in a series, not data — the web core skips them
 /// when autoscaling and so must this, or one NaN collapses the whole domain.
 bool finite(double v) {
@@ -344,16 +341,6 @@ const float kLineCorners[12] = {0, -1, 1, -1, 1, 1, 0, -1, 1, 1, 0, 1};
 const float kQuadCorners[12] = {-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1};
 
 }  // namespace
-
-Rgba unpack_color(ph_color color) {
-  const ph_color c = color == PH_COLOR_AUTO ? kDefaultSeriesColor : color;
-  Rgba out;
-  out.r = static_cast<float>((c >> 24) & 0xffu) / 255.0f;
-  out.g = static_cast<float>((c >> 16) & 0xffu) / 255.0f;
-  out.b = static_cast<float>((c >> 8) & 0xffu) / 255.0f;
-  out.a = static_cast<float>(c & 0xffu) / 255.0f;
-  return out;
-}
 
 // -- XYLayer ----------------------------------------------------------------
 

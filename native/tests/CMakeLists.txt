@@ -29,20 +29,24 @@ else()
   target_compile_options(photon_interaction_test PRIVATE -Wall -Wextra)
 endif()
 
-# Scales and ticks are internal, so this one links the static twin rather than
-# the ph_*-only shared library.
-add_executable(photon_scale_test scale_test.cpp)
-target_link_libraries(photon_scale_test PRIVATE photon_internal)
-target_include_directories(photon_scale_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-if(MSVC)
-  target_compile_options(photon_scale_test PRIVATE /W4 /utf-8)
-else()
-  target_compile_options(photon_scale_test PRIVATE -Wall -Wextra)
-endif()
+# Scales, ticks, the layout math and the font are all internal, so these link the
+# static twin rather than the ph_*-only shared library.
+foreach(name scale overlay text)
+  add_executable(photon_${name}_test ${name}_test.cpp)
+  target_link_libraries(photon_${name}_test PRIVATE photon_internal)
+  target_include_directories(photon_${name}_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  if(MSVC)
+    target_compile_options(photon_${name}_test PRIVATE /W4 /utf-8)
+  else()
+    target_compile_options(photon_${name}_test PRIVATE -Wall -Wextra)
+  endif()
+endforeach()
 
 add_test(NAME abi_c COMMAND photon_abi_c_test)
 add_test(NAME interaction COMMAND photon_interaction_test)
 add_test(NAME scales COMMAND photon_scale_test)
+add_test(NAME overlay COMMAND photon_overlay_test)
+add_test(NAME text COMMAND photon_text_test)
 
 # The only test that compiles a shader. It needs a real GL 3.3 core context,
 # which it gets surfacelessly through EGL — no display server, so it runs in CI.

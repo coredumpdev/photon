@@ -138,28 +138,75 @@ int main(void) {
   memset(pixels, 0, (size_t)WIDTH * HEIGHT * 4);
   read_pixels(0, 0, WIDTH, HEIGHT, 0x1908 /* GL_RGBA */, 0x1401 /* GL_UNSIGNED_BYTE */, pixels);
 
-  long opaque = 0, reds = 0, greens = 0, in_margin = 0;
+  /* The default margins are top 16, right 16, bottom 40, left 56, so the plot
+   * region's bottom edge is 40 logical px up — framebuffer row 40, since row 0
+   * is the bottom. The x tick labels sit just below the tick marks, entirely
+   * inside rows 0..33; the y tick labels sit left of column 45. */
+  const int region_bottom_row = 40;
+  const int x_label_rows = 34;
+  const int y_label_columns = 45;
+
+  long opaque = 0, reds = 0, greens = 0;
+  long series_bleed = 0, x_labels = 0, y_labels = 0;
   for (int y = 0; y < HEIGHT; y++) {
     for (int x = 0; x < WIDTH; x++) {
       const unsigned char* p = pixels + ((size_t)y * WIDTH + x) * 4;
       if (p[3] == 0) continue;
       opaque++;
-      if (p[0] > 120 && p[1] < 100) reds++;
-      if (p[1] > 120 && p[0] < 120) greens++;
-      /* Row 0 is the bottom of the framebuffer; the plot region starts 40
-       * logical px up, so anything drawn below that escaped the scissor. */
-      if (y < 30) in_margin++;
+      /* One dominant channel, not just a majority: the tick labels are a pale
+       * slate blue whose green component alone would pass a looser test. */
+      const int red = p[0] > 120 && p[1] < 40 && p[2] < 40;
+      const int green = p[1] > 120 && p[0] < 40 && p[2] < 40;
+      if (red) reds++;
+      if (green) greens++;
+      /* A series pixel outside the plot region means the scissor let it out. */
+      if ((red || green) && (y < region_bottom_row || x < 56)) series_bleed++;
+      if (y < x_label_rows) x_labels++;
+      if (x < y_label_columns && y >= region_bottom_row && y < HEIGHT - 16) y_labels++;
     }
   }
   free(pixels);
 
-  printf("  opaque=%ld red(line)=%ld green(markers)=%ld margin-bleed=%ld\n",
-         opaque, reds, greens, in_margin);
+  printf("  opaque=%ld red(line)=%ld green(markers)=%ld bleed=%ld x-labels=%ld y-labels=%ld\n",
+         opaque, reds, greens, series_bleed, x_labels, y_labels);
 
-  CHECK(opaque > 500);   /* something was drawn at all */
-  CHECK(reds > 100);     /* the line layer                */
-  CHECK(greens > 100);   /* the scatter layer             */
-  CHECK_EQ(in_margin, 0); /* the scissor kept it inside the plot region */
+  CHECK(opaque > 500);      /* something was drawn at all           */
+  CHECK(reds > 100);        /* the line layer                       */
+  CHECK(greens > 100);      /* the scatter layer                    */
+  CHECK_EQ(series_bleed, 0); /* the scissor kept the data inside     */
+  /* Nothing but tick labels reaches those bands, so a non-zero count is the
+   * whole text pipeline — atlas upload, glyph shader and all — proving itself. */
+  CHECK(x_labels > 50);
+  CHECK(y_labels > 50);
+
+  /* ---- the offscreen path, which is all JavaFX and WPF can use ---- */
+
+  const int small_w = 320, small_h = 200;
+  unsigned char* image = (unsigned char*)malloc((size_t)small_w * small_h * 4);
+  if (!image) return 1;
+  memset(image, 0xAB, (size_t)small_w * small_h * 4);
+  const ph_result read_back =
+      ph_plot_render_pixels(plot, small_w, small_h, 1.0f, image, small_w * 4);
+  if (read_back != PH_OK) {
+    printf("  FAIL render_pixels (%d): %s\n", read_back, ph_last_error());
+    return 1;
+  }
+  long image_opaque = 0, image_top_rows = 0;
+  for (int y = 0; y < small_h; y++) {
+    for (int x = 0; x < small_w; x++) {
+      const unsigned char* p = image + ((size_t)y * small_w + x) * 4;
+      if (p[3] == 0) continue;
+      image_opaque++;
+      if (y < 20) image_top_rows++;
+    }
+  }
+  free(image);
+  printf("  offscreen opaque=%ld top-rows=%ld\n", image_opaque, image_top_rows);
+  CHECK(image_opaque > 200);
+  /* Rows come back top-first. The top 20 rows are inside the 16px top margin
+   * plus the first pixels of the plot, so they must be nearly empty — if the
+   * flip were missing they would hold the x axis and its labels instead. */
+  CHECK(image_top_rows < image_opaque / 8);
 
   CHECK_EQ(ph_plot_destroy(plot), PH_OK);
   ph_shutdown();

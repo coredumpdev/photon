@@ -18,9 +18,9 @@ option(PHOTON_BUILD_SHARED "Build libphoton as a shared library" ON)
 option(PHOTON_BUILD_TESTS  "Build the ABI conformance and interaction tests" ${PHOTON_IS_TOP_LEVEL})
 option(PHOTON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
-# Faz 1 lands the GL backend and a GLFW host; the option exists now so the
-# build graph does not have to be reshaped later.
-option(PHOTON_BUILD_GLFW_HOST "Build the standalone GLFW host (Faz 1)" OFF)
+# Off by default because it fetches GLFW: the library and its tests must build
+# on a machine with no network.
+option(PHOTON_BUILD_GLFW_HOST "Build the GLFW host and the gallery (fetches GLFW)" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,18 +50,54 @@ endif()
 # libphoton
 # ---------------------------------------------------------------------------
 
+# The embedded typeface. Generated at build time so the repository holds a 51 KB
+# .ttf rather than the ~300 KB the same bytes cost written out as C literals —
+# and so replacing the font is a matter of dropping in a new file.
+set(PHOTON_FONT_TTF "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/Inter-Regular-subset.ttf")
+set(PHOTON_FONT_CPP "${CMAKE_CURRENT_BINARY_DIR}/generated/font_data.cpp")
+add_custom_command(
+  OUTPUT  "${PHOTON_FONT_CPP}"
+  COMMAND ${CMAKE_COMMAND}
+          -DINPUT=${PHOTON_FONT_TTF}
+          -DOUTPUT=${PHOTON_FONT_CPP}
+          -DSYMBOL=kInterRegular
+          -DNAMESPACE=photon::text
+          -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_binary.cmake"
+  DEPENDS "${PHOTON_FONT_TTF}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_binary.cmake"
+  COMMENT "Embedding Inter-Regular-subset.ttf"
+  VERBATIM
+)
+
 set(PHOTON_SOURCES
   src/abi.cpp
+  src/color.cpp
   src/error.cpp
   src/layer.cpp
   src/plot.cpp
   src/registry.cpp
   src/scale.cpp
+  src/axes/axis.cpp
   src/axes/ticks.cpp
   src/gl/gl.cpp
   src/gl/program.cpp
   src/gl/transform.cpp
+  src/render/overlay.cpp
+  src/render/primitives.cpp
+  src/render/theme.cpp
+  src/text/font.cpp
+  src/text/stb_impl.cpp
+  src/text/text.cpp
+  "${PHOTON_FONT_CPP}"
 )
+
+# stb_truetype is vendored verbatim and does not compile clean under -Wconversion
+# or /W4. Silencing the one file that instantiates it beats patching a library we
+# want to be able to update by dropping in a new copy.
+if(MSVC)
+  set_source_files_properties(src/text/stb_impl.cpp PROPERTIES COMPILE_OPTIONS "/w")
+else()
+  set_source_files_properties(src/text/stb_impl.cpp PROPERTIES COMPILE_OPTIONS "-w")
+endif()
 
 if(PHOTON_BUILD_SHARED)
   add_library(photon SHARED ${PHOTON_SOURCES})
@@ -76,6 +112,7 @@ target_include_directories(photon
     $<INSTALL_INTERFACE:include>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
 # PHOTON_BUILD_SHARED switches the header's PH_API to dllexport on Windows and
@@ -157,6 +194,7 @@ if(PHOTON_BUILD_TESTS)
     PUBLIC
       ${CMAKE_CURRENT_SOURCE_DIR}/include
       ${CMAKE_CURRENT_SOURCE_DIR}/src
+      ${CMAKE_CURRENT_SOURCE_DIR}/third_party
   )
   target_link_libraries(photon_internal PRIVATE Threads::Threads)
   if(MSVC)
@@ -172,9 +210,7 @@ endif()
 # ---------------------------------------------------------------------------
 
 if(PHOTON_BUILD_GLFW_HOST)
-  message(FATAL_ERROR
-    "PHOTON_BUILD_GLFW_HOST is reserved for Faz 1. The GL backend does not exist yet; "
-    "turning this on now would build a window that renders nothing.")
+  add_subdirectory(hosts/glfw)
 endif()
 
 # ---------------------------------------------------------------------------

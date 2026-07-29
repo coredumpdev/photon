@@ -104,10 +104,12 @@ def main() -> int:
     wanted = codepoints()
     print(f"subsetting to {len(wanted)} codepoints")
     options = subset.Options()
-    # Keep the horizontal metrics and kerning; drop everything a rasterizer that
-    # only reads glyf/cmap/hmtx cannot use anyway.
-    options.layout_features = ["kern", "liga"]
-    options.drop_tables += ["GSUB", "GPOS", "GDEF", "MATH", "BASE", "JSTF"]
+    # Keep GPOS, but only its `kern` feature: Inter has no legacy `kern` table,
+    # so dropping GPOS drops kerning entirely — and stb_truetype reads pair
+    # adjustments straight out of GPOS. GSUB and the rest go, since a rasterizer
+    # that only walks glyf/cmap/hmtx cannot use them.
+    options.layout_features = ["kern"]
+    options.drop_tables += ["GSUB", "MATH", "BASE", "JSTF"]
     options.notdef_outline = True
     options.recalc_bounds = True
     options.glyph_names = False

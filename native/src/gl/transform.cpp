@@ -28,6 +28,20 @@ vec2 dataToClip(vec2 p) {
 }
 )";
 
+PixelTransform PixelTransform::of(int width, int height, bool flip_y) {
+  PixelTransform t;
+  const float w = width > 0 ? static_cast<float>(width) : 1.0f;
+  const float h = height > 0 ? static_cast<float>(height) : 1.0f;
+  t.sx = 2.0f / w;
+  t.ox = -1.0f;
+  // Without flip_y the target's origin is GL's, bottom-left, so pixel y has to
+  // be inverted. With it the host already measures from the top and the two
+  // agree — this is the only place that difference exists for the overlay.
+  t.sy = flip_y ? 2.0f / h : -2.0f / h;
+  t.oy = flip_y ? -1.0f : 1.0f;
+  return t;
+}
+
 const std::vector<std::string>& transform_uniforms() {
   static const std::vector<std::string> names = {
       "uDomainX", "uDomainY", "uXRef", "uYRef", "uLogX", "uLogY",
