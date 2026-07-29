@@ -222,13 +222,17 @@ void test_zooming_out_and_back_returns_the_view() {
   for (int i = 0; i < 3000; i++) {
     CHECK_EQ(ph_plot_wheel(plot, cx, cy, 100.0, PH_MOD_NONE), PH_OK);
   }
-  // Back at the wall, within one notch of it — the step that would cross the
-  // cap is refused, so where it lands depends on where the sequence happened to
-  // be, and one factor of exp(0.1) is the most that can cost.
+  // Back at the wall, within one notch of it. Both bounds are relative to the
+  // cap rather than to where the first pass happened to stop: the sequence
+  // lands wherever the refused step leaves it, and that is not the same value
+  // on every machine — arm64 contracts multiply-adds where x86-64 does not, so
+  // three thousand chained steps end a few ulps apart. `<= span(wide)` held on
+  // Linux and failed on macOS, which is a test asserting an accident.
+  const double cap = 1.0e9 * 10.0;
   const ph_range returned = domain_of(plot, "x");
   CHECK(std::isfinite(span(returned)));
-  CHECK(span(returned) <= span(wide));
-  CHECK(span(returned) > span(wide) / 1.2);
+  CHECK(span(returned) <= cap * 1.001);
+  CHECK(span(returned) > cap / 1.2);
 
   // And reset still works, whatever happened in between: this plot was created
   // without an explicit domain, so it autoscales back over the data with the
