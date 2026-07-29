@@ -24,7 +24,7 @@ been compiled at all.**
       `tools/compare-with-web/` transcribes the demo panels onto the web core,
       renders them in headless Chromium, and compares the plot region and every
       grid line against a native grab. **The layout now matches exactly**, in
-      all six panels.
+      all eighteen panels.
 - [ ] It is not run by CI. It needs Playwright and a Chromium, which the native
       workflow does not install; running it there would make a native change
       that shifts the layout fail immediately rather than at the next manual
@@ -336,11 +336,8 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
 - [ ] The GLFW host's window and plot tables are fixed at 8 and 16. That is a
       deliberate no-allocation choice for a reference host, not a limit anyone
       should inherit; a real host should say so in its own code.
-- [ ] **Nothing has been compared against a browser yet.** `tests/gl_smoke_test.c`
-      proves pixels land in the right *regions* and that the flipped frame is a
-      mirror of the upright one; it does not prove a native chart and a web chart
-      look the same. See the top of this file.
-- [ ] **No host is tested by CI, or at all.** The galleries are run by hand.
+- [ ] **No host is *run* by CI.** The `hosts` job builds the GLFW, Qt and Java
+      galleries; nothing renders a frame from one. The galleries are run by hand.
       A headless Qt run under `QT_QPA_PLATFORM=offscreen` produced an empty
       window here — the offscreen platform gives no usable GL context — so
       testing a host in CI needs Xvfb or a software GL stack, and neither is
