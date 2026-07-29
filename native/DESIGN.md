@@ -24,6 +24,7 @@ generated bindings. Faz 4 is the rest of the layers.
 | GL loader | OpenGL 3.3 core, ~65 entry points, resolved via the host's `get_proc_address` |
 | Line layer | ported incl. min/max decimation, dashes, miter/bevel joins |
 | Scatter layer | ported incl. per-point size and colour, all six markers |
+| Patches layer | ported, with ear-clipping triangulation and hole support |
 | Text | SDF atlas on stb_truetype, kerned, rotated, batched into one draw call |
 | Grid, axes, labels, title | ported from `render/overlay.ts`, down to the half-pixel snapping |
 | Theme and axis styling | `lightTheme` / `darkTheme` / `resolveAxisStyle`, exposed as `ph_axis_config` |

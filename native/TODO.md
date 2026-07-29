@@ -74,16 +74,23 @@ The bindings are generated and the Java one is tested; the samples are not.
 Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 `ph_<name>_desc_init`, one `ph_plot_add_<name>`. No ABI version bump.
 
-### Layers with their own shaders (15 remaining of 17)
+### Layers with their own shaders (14 remaining of 17)
 
 `area` `bar` `box` `candlestick` `contour` `errorbar` `graph` `heatmap`
-`hexbin` `image` `ohlc` `patches` `pie` `quiver` `stem`
+`hexbin` `image` `ohlc` `pie` `quiver` `stem`
 
-- [ ] `patches` first — the diagram and finance chart builders are all composed
-      on top of `addPatches`, so it unblocks the most.
+- [x] ~~`patches` first — it unblocks the most.~~ Done, with `geo/earcut.cpp`
+      under it. `pie` shares its fill program and is the next cheapest.
 - [ ] `heatmap`, `hexbin`, `contour` need `color/colormap.ts` (272 lines) and
       `color/palettes.ts` ported first.
 - [ ] `candlestick` + `ohlc` need the ordinal-time axis, which is already done.
+- [ ] Patches has no choropleth: the web colours a patch by a per-patch `value`
+      through a colormap, and those fields are absent from `ph_patches_desc`
+      rather than accepted and ignored. Adding them is additive once the
+      colormaps land.
+- [ ] Patches has no `setData`. The web layer can be restreamed; here the rings
+      are triangulated once in the constructor. `ph_layer_set_xy` does not fit
+      the shape, so it wants its own call.
 
 ### Colour and the colorbar
 
@@ -104,7 +111,9 @@ Everything below is additive to the ABI: one `ph_<name>_desc` struct, one
 - [ ] `ml/metrics.ts`, `ml/reduce.ts`, `ml/charts.ts`, `ml/model.ts`,
       `ml/model-chart.ts`
 - [ ] `stats/regression.ts`, `signal.ts`, `waterfall.ts`, `charts.ts`
-- [ ] `geo/earcut.ts` + `geo/delaunay.ts` (needed by patches/contour)
+- [x] ~~`geo/earcut.ts`~~ — ported with its vitest suite transcribed, plus two
+      cases the TypeScript does not have (winding independence, two holes).
+- [ ] `geo/delaunay.ts` (needed by contour)
 - [ ] `graph/force.ts` + `graph/quadtree.ts` (needed by the graph layer)
 - [ ] `data/csv.ts` + `data/downsample.ts`
 

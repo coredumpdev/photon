@@ -452,6 +452,49 @@ typedef struct ph_scatter_desc {
   ph_render_type  render_type;
 } ph_scatter_desc;
 
+/**
+ * One filled polygon: a ring of x/y, with optional holes.
+ *
+ * `holes[k]` is the *vertex* index where hole ring k begins — the same
+ * convention earcut and mapbox use, and not a coordinate index. A polygon with
+ * no holes leaves both fields zero.
+ */
+typedef struct ph_patch {
+  const double*  x;
+  const double*  y;
+  int32_t        count;
+  const int32_t* holes;
+  int32_t        hole_count;
+  /** Explicit fill. PH_COLOR_AUTO falls back to the layer's colour. */
+  ph_color       color;
+} ph_patch;
+
+/**
+ * Mirrors core `PatchesOptions`.
+ *
+ * Each ring is triangulated once on the CPU by ear clipping and then drawn as a
+ * per-vertex-coloured triangle soup, so only the transform uniforms change from
+ * frame to frame. Everything the patch arrays point at is copied during the
+ * call, like every other descriptor.
+ *
+ * The web core can also colour patches by a per-patch `value` through a
+ * colormap (choropleth). That needs the colormap tables, which are not ported
+ * yet, so those two fields are absent rather than accepted and ignored —
+ * appending them later does not change this ABI version.
+ */
+typedef struct ph_patches_desc {
+  uint32_t        struct_size;
+  const ph_patch* patches;
+  int32_t         patch_count;
+  /** Fill for patches that do not carry their own colour. */
+  ph_color        color;
+  /** Fill opacity, 0..1. 0 means the core default of 1. */
+  float           opacity;
+  const char*     name;
+  const char*     y_axis;
+  ph_render_type  render_type;
+} ph_patches_desc;
+
 /* ------------------------------------------------------------------------ */
 /* Events                                                                     */
 /* ------------------------------------------------------------------------ */
@@ -555,6 +598,7 @@ PH_API void PH_CALL ph_axis_desc_init(ph_axis_desc* out);
 PH_API void PH_CALL ph_axis_config_init(ph_axis_config* out);
 PH_API void PH_CALL ph_line_desc_init(ph_line_desc* out);
 PH_API void PH_CALL ph_scatter_desc_init(ph_scatter_desc* out);
+PH_API void PH_CALL ph_patches_desc_init(ph_patches_desc* out);
 
 /* ------------------------------------------------------------------------ */
 /* Plot lifecycle                                                             */
@@ -627,6 +671,13 @@ PH_API ph_result PH_CALL ph_plot_reset_view(ph_plot plot);
 
 PH_API ph_result PH_CALL ph_plot_add_line(ph_plot plot, const ph_line_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_scatter(ph_plot plot, const ph_scatter_desc* desc, ph_layer* out);
+
+/**
+ * Filled polygons. The layer every composed chart is built on: the treemaps,
+ * funnels, sankeys and candlestick bodies in the web core are all free
+ * functions over `addPatches` rather than layers of their own.
+ */
+PH_API ph_result PH_CALL ph_plot_add_patches(ph_plot plot, const ph_patches_desc* desc, ph_layer* out);
 
 /*
  * The remaining 24 layer types (bar, area, heatmap, box, hexbin, contour,

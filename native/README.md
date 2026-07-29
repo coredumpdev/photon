@@ -75,11 +75,12 @@ include/photon/photon.h   the entire public surface — the only file bindings s
 src/
   abi.cpp                 C entry points: validate, translate, delegate
   plot.{hpp,cpp}          layout, scale stack, autoscale, pan/zoom/box, frames
-  layer.{hpp,cpp}         the layer contract; line + scatter, shaders and all
+  layer.{hpp,cpp}         the layer contract; line, scatter and patches
   scale.{hpp,cpp}         the five scale projections, ticks and label formats
   color.{hpp,cpp}         packed ABI colours unpacked
   axes/ticks.{hpp,cpp}    nice-number tick generation and number formatting
   axes/axis.{hpp,cpp}     tick configuration resolved against a scale
+  geo/earcut.{hpp,cpp}    ear-clipping triangulation, with holes
   gl/gl.{hpp,cpp}         the GL 3.3 loader — one X-macro list, no glad
   gl/program.{hpp,cpp}    shader compile/link/cache, GLSL ES 3.00 -> 3.30
   gl/transform.{hpp,cpp}  the shared data->clip transform every layer includes
@@ -98,6 +99,7 @@ tests/
   scale_test.cpp          scales and ticks, checked against the vitest suite
   overlay_test.cpp        margins, axis placement, tick resolution, themes
   text_test.cpp           font metrics, kerning and UTF-8 — widths pinned
+  earcut_test.cpp         triangulation, checked by area against a shoelace
   gl_smoke_test.c         a real headless GL context; the only shader compile
   abi_layout_test.c       generated: every field offset, asserted
 hosts/

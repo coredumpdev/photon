@@ -159,6 +159,26 @@ PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, color_by) == 80, "ph_scatter_desc.col
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, color_by_domain) == 88, "ph_scatter_desc.color_by_domain offset");
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, render_type) == 104, "ph_scatter_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_patch) == 40, "ph_patch size");
+PH_ASSERT_LAYOUT(_Alignof(ph_patch) == 8, "ph_patch alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_patch, x) == 0, "ph_patch.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patch, y) == 8, "ph_patch.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patch, count) == 16, "ph_patch.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patch, holes) == 24, "ph_patch.holes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patch, hole_count) == 32, "ph_patch.hole_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patch, color) == 36, "ph_patch.color offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_patches_desc) == 56, "ph_patches_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_patches_desc) == 8, "ph_patches_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, struct_size) == 0, "ph_patches_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, patches) == 8, "ph_patches_desc.patches offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, patch_count) == 16, "ph_patches_desc.patch_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, color) == 20, "ph_patches_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, opacity) == 24, "ph_patches_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, name) == 32, "ph_patches_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, y_axis) == 40, "ph_patches_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, render_type) == 48, "ph_patches_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_event) == 80, "ph_event size");
 PH_ASSERT_LAYOUT(_Alignof(ph_event) == 8, "ph_event alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_event, struct_size) == 0, "ph_event.struct_size offset");
@@ -176,7 +196,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 11);
+  printf("%d struct layouts match the generated bindings\n", 13);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

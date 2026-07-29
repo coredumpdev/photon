@@ -79,6 +79,7 @@ set(PHOTON_SOURCES
   src/scale.cpp
   src/axes/axis.cpp
   src/axes/ticks.cpp
+  src/geo/earcut.cpp
   src/gl/gl.cpp
   src/gl/program.cpp
   src/gl/transform.cpp

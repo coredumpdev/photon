@@ -136,6 +136,42 @@ class LineLayer : public XYLayer {
   long long decimated_segments_ = 0;
 };
 
+/**
+ * Filled polygons — the layer every composed chart is built on.
+ *
+ * Each ring is triangulated once, on the CPU, by ear clipping, and the result
+ * is a per-vertex-coloured triangle soup that never changes again: only the
+ * transform uniforms move between frames. That is why a treemap or a sankey in
+ * the web core is a free function over addPatches rather than a layer of its
+ * own, and why porting this one unblocks the most.
+ */
+class PatchesLayer : public Layer {
+ public:
+  explicit PatchesLayer(const ph_patches_desc& desc);
+  bool bounds(ph_range& x, ph_range& y) const override;
+  bool draw(const DrawState& state, std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  /// Interleaved (x - x_ref, y - y_ref) float32 pairs, one per triangle vertex.
+  std::vector<float> positions_;
+  /// Straight RGBA per vertex; the shader premultiplies on output.
+  std::vector<float> colors_;
+  double x_ref_ = 0.0;
+  double y_ref_ = 0.0;
+  ph_range x_bounds_{0.0, 0.0};
+  ph_range y_bounds_{0.0, 0.0};
+  bool has_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+
+  gl::GLuint vao_ = 0;
+  gl::GLuint position_buffer_ = 0;
+  gl::GLuint color_buffer_ = 0;
+};
+
 class ScatterLayer : public XYLayer {
  public:
   explicit ScatterLayer(const ph_scatter_desc& desc);

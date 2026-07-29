@@ -274,6 +274,60 @@ internal static class PhotonSmokeTest
         return line;
     }
 
+    /// Filled polygons, including the hole path through the triangulator.
+    private static void Patches(ulong plot)
+    {
+        // A 10x10 square with a 4x4 hole: eight vertices, the hole starting at
+        // vertex four.
+        var xs = new double[] { 0, 10, 10, 0, 3, 3, 7, 7 };
+        var ys = new double[] { 0, 0, 10, 10, 3, 7, 7, 3 };
+        var holes = new[] { 4 };
+
+        var xsHandle = GCHandle.Alloc(xs, GCHandleType.Pinned);
+        var ysHandle = GCHandle.Alloc(ys, GCHandleType.Pinned);
+        var holesHandle = GCHandle.Alloc(holes, GCHandleType.Pinned);
+        ulong layer;
+        try
+        {
+            var patch = new ph_patch
+            {
+                x = xsHandle.AddrOfPinnedObject(),
+                y = ysHandle.AddrOfPinnedObject(),
+                count = 8,
+                holes = holesHandle.AddrOfPinnedObject(),
+                hole_count = 1,
+                color = 0x22c55effu,
+            };
+            var patches = new[] { patch };
+            var patchesHandle = GCHandle.Alloc(patches, GCHandleType.Pinned);
+            try
+            {
+                ph_patches_desc_init(out var desc);
+                Check(Math.Abs(desc.opacity - 1.0f) < 1e-6f, "ph_patches_desc_init sets opacity");
+                desc.patches = patchesHandle.AddrOfPinnedObject();
+                desc.patch_count = 1;
+                CheckEq(ph_plot_add_patches(plot, in desc, out layer), PH_OK,
+                        "ph_plot_add_patches");
+            }
+            finally
+            {
+                patchesHandle.Free();
+            }
+        }
+        finally
+        {
+            xsHandle.Free();
+            ysHandle.Free();
+            holesHandle.Free();
+        }
+
+        CheckEq(ph_layer_bounds(layer, out var bx, out _), PH_OK, "patch bounds");
+        Check(bx.lo == 0.0 && bx.hi == 10.0, "the ring crossed intact");
+        CheckEq(ph_layer_destroy(layer), PH_OK, "the patches layer is destroyed");
+
+        Ran("ph_patches_desc_init", "ph_plot_add_patches");
+    }
+
     private static void Interaction(ulong plot)
     {
         CheckEq(ph_plot_set_mode(plot, PH_MODE_BOX), PH_OK, "ph_plot_set_mode");
@@ -372,6 +426,7 @@ internal static class PhotonSmokeTest
         var plot = BuildPlot();
         Axes(plot);
         var line = Layers(plot);
+        Patches(plot);
         Interaction(plot);
         Events(plot);
         RenderingFailsHonestly(plot);

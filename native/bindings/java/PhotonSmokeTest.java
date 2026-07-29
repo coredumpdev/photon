@@ -278,6 +278,56 @@ public final class PhotonSmokeTest {
         return line;
     }
 
+    /** Filled polygons, including the hole path through the triangulator. */
+    static void patches(Arena arena, long plot) {
+        // A 10x10 square with a 4x4 hole: eight vertices, the hole starting at
+        // vertex four. Area 84, which is what the bounds cannot tell us — but
+        // the bounds do tell us the ring crossed intact.
+        final double[] ring = {0, 0, 10, 0, 10, 10, 0, 10, 3, 3, 3, 7, 7, 7, 7, 3};
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, 8);
+        MemorySegment ys = arena.allocate(ValueLayout.JAVA_DOUBLE, 8);
+        for (int i = 0; i < 8; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, ring[i * 2]);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, ring[i * 2 + 1]);
+        }
+        MemorySegment holes = arena.allocate(ValueLayout.JAVA_INT, 1);
+        holes.setAtIndex(ValueLayout.JAVA_INT, 0, 4);
+
+        MemorySegment patch = arena.allocate(ph_patch.LAYOUT);
+        patch.set(ValueLayout.ADDRESS, ph_patch.OFFSET_X, xs);
+        patch.set(ValueLayout.ADDRESS, ph_patch.OFFSET_Y, ys);
+        patch.set(ValueLayout.JAVA_INT, ph_patch.OFFSET_COUNT, 8);
+        patch.set(ValueLayout.ADDRESS, ph_patch.OFFSET_HOLES, holes);
+        patch.set(ValueLayout.JAVA_INT, ph_patch.OFFSET_HOLE_COUNT, 1);
+        patch.set(ValueLayout.JAVA_INT, ph_patch.OFFSET_COLOR, 0x22c55eff);
+
+        MemorySegment desc = ph_patches_desc.allocate(arena);
+        ph_patches_desc_init(desc);
+        checkEq(desc.get(ValueLayout.JAVA_FLOAT, ph_patches_desc.OFFSET_OPACITY) == 1.0f ? 1 : 0, 1,
+                "ph_patches_desc_init sets opacity");
+        desc.set(ValueLayout.ADDRESS, ph_patches_desc.OFFSET_PATCHES, patch);
+        desc.set(ValueLayout.JAVA_INT, ph_patches_desc.OFFSET_PATCH_COUNT, 1);
+
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot_add_patches(plot, desc, handle), PH_OK, "ph_plot_add_patches");
+        long layer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(layer, bx, by), PH_OK, "patch bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO) == 0.0, "patch x lo");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 10.0, "patch x hi");
+
+        // A ring with fewer than three vertices is accepted and draws nothing;
+        // a null one is a caller mistake and is refused.
+        patch.set(ValueLayout.ADDRESS, ph_patch.OFFSET_X, MemorySegment.NULL);
+        checkEq(ph_plot_add_patches(plot, desc, handle), PH_E_INVALID_ARGUMENT,
+                "a patch with no coordinates is refused");
+
+        checkEq(ph_layer_destroy(layer), PH_OK, "the patches layer is destroyed");
+        ran("ph_patches_desc_init", "ph_plot_add_patches");
+    }
+
     static void interaction(Arena arena, long plot) {
         MemorySegment mode = arena.allocate(ValueLayout.JAVA_INT);
         checkEq(ph_plot_set_mode(plot, PH_MODE_BOX), PH_OK, "ph_plot_set_mode");
@@ -387,6 +437,7 @@ public final class PhotonSmokeTest {
             long plot = buildPlot(arena);
             axes(arena, plot);
             long line = layers(arena, plot);
+            patches(arena, plot);
             interaction(arena, plot);
             events(arena, plot);
             renderingFailsHonestly(arena, plot);

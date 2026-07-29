@@ -543,6 +543,50 @@ extern "C" ph_result PH_CALL ph_plot_add_line(ph_plot handle, const ph_line_desc
   }
 }
 
+extern "C" void PH_CALL ph_patches_desc_init(ph_patches_desc* out) {
+  if (!out) return;
+  *out = ph_patches_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_patches_desc));
+  out->opacity = 1.0f;
+  out->render_type = PH_RENDER_STATIC;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_patches(ph_plot handle, const ph_patches_desc* desc,
+                                                 ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_patches_desc.struct_size is larger than this build's");
+  }
+  const ph_patches_desc normalized = normalize(desc, ph_patches_desc_init);
+  if (normalized.patch_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "patch_count must be non-negative");
+  }
+  if (normalized.patch_count > 0 && !normalized.patches) {
+    return fail(PH_E_INVALID_ARGUMENT, "patches must be non-null when patch_count > 0");
+  }
+  // Checked here rather than skipped in the layer: a ring with a null pointer
+  // is a caller mistake, and silently drawing the other patches would hide it.
+  for (int32_t i = 0; i < normalized.patch_count; ++i) {
+    const ph_patch& patch = normalized.patches[i];
+    if (patch.count < 0) return fail(PH_E_INVALID_ARGUMENT, "patch count must be non-negative");
+    if (patch.count > 0 && (!patch.x || !patch.y)) {
+      return fail(PH_E_INVALID_ARGUMENT, "patch x and y must be non-null when count > 0");
+    }
+    if (patch.hole_count > 0 && !patch.holes) {
+      return fail(PH_E_INVALID_ARGUMENT, "patch holes must be non-null when hole_count > 0");
+    }
+  }
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::PatchesLayer>(normalized), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating patches layer");
+  }
+}
+
 extern "C" ph_result PH_CALL ph_plot_add_scatter(ph_plot handle, const ph_scatter_desc* desc, ph_layer* out) {
   clear_error();
   Plot* plot = nullptr;

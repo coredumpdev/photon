@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 
+#include "geo/earcut.hpp"
 #include "gl/program.hpp"
 
 namespace photon {
@@ -331,6 +332,27 @@ void main() {
   vec4 c = uUseVertexColor > 0.5 ? vColor : uColor;
   outColor = vec4(c.rgb * c.a * alpha, c.a * alpha);
 })";
+
+/// A solid-fill program driven by a per-vertex colour triangle soup. Copied
+/// from FILL_VERT/FILL_FRAG in layers/patches.ts, where pie shares it too.
+const char* const kFillVertBody = R"(
+precision highp float;
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec4 aColor;
+)";
+
+const char* const kFillVertMain = R"(
+out vec4 vColor;
+void main() {
+  vColor = aColor;
+  gl_Position = vec4(dataToClip(aPos), 0.0, 1.0);
+})";
+
+const char* const kFillFrag = R"(#version 300 es
+precision highp float;
+in vec4 vColor;
+out vec4 outColor;
+void main() { outColor = vec4(vColor.rgb * vColor.a, vColor.a); })";
 
 /// Assemble a vertex shader: version, declarations, the shared transform, main.
 std::string vertex_source(const char* body, const char* main) {
@@ -740,6 +762,158 @@ void ScatterLayer::release_gl(Api& api) {
   api.DeleteBuffers(4, buffers);
   vao_ = 0;
   corner_buffer_ = point_buffer_ = color_buffer_ = size_buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- PatchesLayer -----------------------------------------------------------
+
+PatchesLayer::PatchesLayer(const ph_patches_desc& desc) {
+  name_ = from_utf8(desc.name);
+  y_axis_ = from_utf8(desc.y_axis);
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  const float opacity = desc.opacity > 0.0f ? std::min(desc.opacity, 1.0f) : 1.0f;
+
+  const Rgba fallback = unpack_color(desc.color);
+  const int32_t patch_count = desc.patches ? std::max(0, desc.patch_count) : 0;
+
+  // The first vertex of the first non-empty patch anchors the float32
+  // reference, exactly as it does for a line — the same precision problem, and
+  // a map's coordinates are just as capable of exhausting a float.
+  for (int32_t i = 0; i < patch_count; ++i) {
+    const ph_patch& patch = desc.patches[i];
+    if (patch.count > 0 && patch.x && patch.y) {
+      x_ref_ = patch.x[0];
+      y_ref_ = patch.y[0];
+      break;
+    }
+  }
+
+  double min_x = std::numeric_limits<double>::infinity();
+  double max_x = -min_x;
+  double min_y = min_x;
+  double max_y = -min_x;
+
+  for (int32_t p = 0; p < patch_count; ++p) {
+    const ph_patch& patch = desc.patches[p];
+    if (!patch.x || !patch.y || patch.count < 3) continue;
+    const size_t n = static_cast<size_t>(patch.count);
+
+    Rgba rgba = patch.color != PH_COLOR_AUTO ? unpack_color_exact(patch.color) : fallback;
+    rgba.a *= opacity;
+
+    // Flat [x0,y0,x1,y1,…] in raw coordinates for earcut; the reference is
+    // subtracted on the way into the vertex buffer, not before triangulating,
+    // because the ear tests are scale-sensitive and float32 is not involved yet.
+    std::vector<double> flat(n * 2);
+    for (size_t i = 0; i < n; ++i) {
+      flat[i * 2] = patch.x[i];
+      flat[i * 2 + 1] = patch.y[i];
+    }
+
+    std::vector<uint32_t> holes;
+    if (patch.holes && patch.hole_count > 0) {
+      holes.reserve(static_cast<size_t>(patch.hole_count));
+      for (int32_t h = 0; h < patch.hole_count; ++h) {
+        if (patch.holes[h] > 0 && static_cast<size_t>(patch.holes[h]) < n) {
+          holes.push_back(static_cast<uint32_t>(patch.holes[h]));
+        }
+      }
+    }
+
+    for (const uint32_t index : geo::earcut(flat, holes)) {
+      const size_t k = static_cast<size_t>(index) * 2;
+      if (k + 1 >= flat.size()) continue;
+      positions_.push_back(static_cast<float>(flat[k] - x_ref_));
+      positions_.push_back(static_cast<float>(flat[k + 1] - y_ref_));
+      colors_.push_back(rgba.r);
+      colors_.push_back(rgba.g);
+      colors_.push_back(rgba.b);
+      colors_.push_back(rgba.a);
+    }
+
+    // Bounds come from the ring, not from the triangles: a patch whose
+    // triangulation failed still occupies space on the axis.
+    for (size_t i = 0; i < n; ++i) {
+      if (!finite(patch.x[i]) || !finite(patch.y[i])) continue;
+      min_x = std::min(min_x, patch.x[i]);
+      max_x = std::max(max_x, patch.x[i]);
+      min_y = std::min(min_y, patch.y[i]);
+      max_y = std::max(max_y, patch.y[i]);
+      has_bounds_ = true;
+    }
+  }
+
+  if (has_bounds_) {
+    x_bounds_ = ph_range{min_x, max_x};
+    y_bounds_ = ph_range{min_y, max_y};
+  }
+}
+
+bool PatchesLayer::bounds(ph_range& x, ph_range& y) const {
+  if (!has_bounds_) return false;
+  x = x_bounds_;
+  y = y_bounds_;
+  return true;
+}
+
+bool PatchesLayer::ensure_gl(Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &position_buffer_);
+    api.GenBuffers(1, &color_buffer_);
+    if (vao_ == 0) {
+      error = "failed to create patches layer vertex array";
+      return false;
+    }
+    api.BindVertexArray(vao_);
+    api.BindBuffer(GL_ARRAY_BUFFER, position_buffer_);
+    api.EnableVertexAttribArray(0);
+    api.VertexAttribPointer(0, 2, GL_FLOAT, 0, 0, nullptr);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.EnableVertexAttribArray(1);
+    api.VertexAttribPointer(1, 4, GL_FLOAT, 0, 0, nullptr);
+    api.BindVertexArray(0);
+  }
+
+  if (dirty_) {
+    const GLenum usage = buffer_usage(render_type_);
+    api.BindBuffer(GL_ARRAY_BUFFER, position_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(positions_.size() * sizeof(float)),
+                   positions_.empty() ? nullptr : positions_.data(), usage);
+    api.BindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+    api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(colors_.size() * sizeof(float)),
+                   colors_.empty() ? nullptr : colors_.data(), usage);
+    dirty_ = false;
+  }
+  return true;
+}
+
+bool PatchesLayer::draw(const DrawState& state, std::string& error) {
+  if (positions_.empty() || !state.api) return true;
+  Api& api = *state.api;
+  if (!ensure_gl(api, error)) return false;
+
+  static const std::vector<std::string> kUniforms = with_transform_uniforms({});
+  const Program* program = get_program(api, "fill", vertex_source(kFillVertBody, kFillVertMain),
+                                       kFillFrag, kUniforms, state.gfx, error);
+  if (!program) return false;
+
+  api.UseProgram(program->id);
+  set_transform_uniforms(api, *program, state.x, state.y, x_ref_, y_ref_);
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(positions_.size() / 2));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void PatchesLayer::release_gl(Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  const GLuint buffers[] = {position_buffer_, color_buffer_};
+  api.DeleteBuffers(2, buffers);
+  vao_ = 0;
+  position_buffer_ = color_buffer_ = 0;
   dirty_ = true;
 }
 

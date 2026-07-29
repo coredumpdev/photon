@@ -488,6 +488,70 @@ public final class Photon {
         }
     }
 
+    /** ph_patch — 40 bytes, alignment 8. */
+    public static final class ph_patch {
+        private ph_patch() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("holes"),
+            ValueLayout.JAVA_INT.withName("hole_count"),
+            ValueLayout.JAVA_INT.withName("color")
+        ).withName("ph_patch");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_X = 0L;
+        public static final long OFFSET_Y = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_HOLES = 24L;
+        public static final long OFFSET_HOLE_COUNT = 32L;
+        public static final long OFFSET_COLOR = 36L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_patches_desc — 56 bytes, alignment 8. */
+    public static final class ph_patches_desc {
+        private ph_patches_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("patches"),
+            ValueLayout.JAVA_INT.withName("patch_count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("opacity"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_patches_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_PATCHES = 8L;
+        public static final long OFFSET_PATCH_COUNT = 16L;
+        public static final long OFFSET_COLOR = 20L;
+        public static final long OFFSET_OPACITY = 24L;
+        public static final long OFFSET_NAME = 32L;
+        public static final long OFFSET_Y_AXIS = 40L;
+        public static final long OFFSET_RENDER_TYPE = 48L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_event — 80 bytes, alignment 8. */
     public static final class ph_event {
         private ph_event() {}
@@ -547,6 +611,7 @@ public final class Photon {
         "ph_axis_config_init",
         "ph_line_desc_init",
         "ph_scatter_desc_init",
+        "ph_patches_desc_init",
         "ph_plot_create",
         "ph_plot_destroy",
         "ph_plot_valid",
@@ -565,6 +630,7 @@ public final class Photon {
         "ph_plot_reset_view",
         "ph_plot_add_line",
         "ph_plot_add_scatter",
+        "ph_plot_add_patches",
         "ph_layer_set_xy",
         "ph_layer_set_visible",
         "ph_layer_valid",
@@ -601,6 +667,7 @@ public final class Photon {
     private static final MethodHandle PH_AXIS_CONFIG_INIT = handle("ph_axis_config_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_LINE_DESC_INIT = handle("ph_line_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_SCATTER_DESC_INIT = handle("ph_scatter_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PATCHES_DESC_INIT = handle("ph_patches_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_CREATE = handle("ph_plot_create", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_DESTROY = handle("ph_plot_destroy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_PLOT_VALID = handle("ph_plot_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
@@ -619,6 +686,7 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_RESET_VIEW = handle("ph_plot_reset_view", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_PLOT_ADD_LINE = handle("ph_plot_add_line", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_SCATTER = handle("ph_plot_add_scatter", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_PATCHES = handle("ph_plot_add_patches", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_XY = handle("ph_layer_set_xy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_SET_VISIBLE = handle("ph_layer_set_visible", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_VALID = handle("ph_layer_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
@@ -742,6 +810,14 @@ public final class Photon {
             PH_SCATTER_DESC_INIT.invokeExact(out);
         } catch (Throwable t) {
             throw new AssertionError("photon: ph_scatter_desc_init failed", t);
+        }
+    }
+
+    public static void ph_patches_desc_init(MemorySegment out) {
+        try {
+            PH_PATCHES_DESC_INIT.invokeExact(out);
+        } catch (Throwable t) {
+            throw new AssertionError("photon: ph_patches_desc_init failed", t);
         }
     }
 
@@ -886,6 +962,14 @@ public final class Photon {
             return (int) PH_PLOT_ADD_SCATTER.invokeExact(plot, desc, out);
         } catch (Throwable t) {
             throw new AssertionError("photon: ph_plot_add_scatter failed", t);
+        }
+    }
+
+    public static int ph_plot_add_patches(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_PATCHES.invokeExact(plot, desc, out);
+        } catch (Throwable t) {
+            throw new AssertionError("photon: ph_plot_add_patches failed", t);
         }
     }
 

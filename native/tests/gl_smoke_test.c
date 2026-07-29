@@ -257,6 +257,73 @@ int main(void) {
   CHECK(image_top_rows < image_opaque / 8);
 
   CHECK_EQ(ph_plot_destroy(plot), PH_OK);
+
+  /* ---- patches: does the triangulation reach the framebuffer? ---- */
+
+  /* Its own plot with fixed domains, so the filled fraction of the region is
+   * arithmetic rather than a guess. A 6x6 square with a 2x2 hole over a 10x10
+   * view covers (36 - 4) / 100 of the plot region. Counting those pixels checks
+   * the ear clipping, the hole bridging and the fill shader at once — none of
+   * which any other test reaches. */
+  ph_plot_desc patch_plot_desc;
+  ph_plot_desc_init(&patch_plot_desc);
+  patch_plot_desc.width = 200;
+  patch_plot_desc.height = 200;
+  patch_plot_desc.x.domain.lo = 0.0;
+  patch_plot_desc.x.domain.hi = 10.0;
+  patch_plot_desc.y.domain.lo = 0.0;
+  patch_plot_desc.y.domain.hi = 10.0;
+  ph_plot patch_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &patch_plot), PH_OK);
+
+  /* Outer ring counter-clockwise, hole clockwise — earcut enforces winding
+   * anyway, but writing it correctly is what a caller would do. */
+  const double patch_x[8] = {2, 8, 8, 2,  4, 4, 6, 6};
+  const double patch_y[8] = {2, 2, 8, 8,  4, 6, 6, 4};
+  const int32_t patch_holes[1] = {4};
+  ph_patch patch;
+  memset(&patch, 0, sizeof(patch));
+  patch.x = patch_x;
+  patch.y = patch_y;
+  patch.count = 8;
+  patch.holes = patch_holes;
+  patch.hole_count = 1;
+  CHECK_EQ(ph_color_parse("#00ffff", &patch.color), PH_OK);
+
+  ph_patches_desc patches_desc;
+  ph_patches_desc_init(&patches_desc);
+  patches_desc.patches = &patch;
+  patches_desc.patch_count = 1;
+  ph_layer patches_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_patches(patch_plot, &patches_desc, &patches_layer) != PH_OK) {
+    printf("  FAIL add_patches: %s\n", ph_last_error());
+    return 1;
+  }
+
+  const int patch_w = 200, patch_h = 200;
+  unsigned char* patch_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!patch_pixels) return 1;
+  const ph_result patch_result =
+      ph_plot_render_pixels(patch_plot, patch_w, patch_h, 1.0f, patch_pixels, patch_w * 4);
+  if (patch_result != PH_OK) {
+    printf("  FAIL patches render (%d): %s\n", patch_result, ph_last_error());
+    return 1;
+  }
+  long cyan = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    const unsigned char* p = patch_pixels + (size_t)i * 4;
+    if (p[3] > 200 && p[0] < 40 && p[1] > 200 && p[2] > 200) cyan++;
+  }
+  free(patch_pixels);
+
+  /* Region is (200 - 56 - 16) x (200 - 16 - 40) = 128 x 144 = 18432 px, and the
+   * fill covers 32% of it. */
+  const double expected = 18432.0 * 0.32;
+  printf("  patch fill=%ld px, expected about %.0f\n", cyan, expected);
+  CHECK(cyan > expected * 0.95);
+  CHECK(cyan < expected * 1.05);
+
+  CHECK_EQ(ph_plot_destroy(patch_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
