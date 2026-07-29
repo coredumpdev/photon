@@ -46,6 +46,20 @@ public final class PhotonSmokeTest {
         return arena.allocateFrom(text);
     }
 
+    /**
+     * Print and flush.
+     *
+     * The flush is not decoration. Under ctest stdout is a pipe, so it is
+     * block-buffered, and a native crash takes the buffer with it — which makes
+     * the last line you see arbitrarily earlier than the last line that ran.
+     * A Windows-only crash was first reported four sections later than it
+     * actually happened because of exactly this.
+     */
+    static void step(String name) {
+        System.out.println(name);
+        System.out.flush();
+    }
+
     // ---- the tests ---------------------------------------------------------
 
     static void versionAndInit(Arena arena) {
@@ -426,23 +440,30 @@ public final class PhotonSmokeTest {
 
     public static void main(String[] args) {
         try (Arena arena = Arena.ofConfined()) {
-            System.out.println("versionAndInit");
+            step("versionAndInit");
             versionAndInit(arena);
-            System.out.println("descriptorDefaults");
+            step("descriptorDefaults");
             descriptorDefaults(arena);
-            System.out.println("colors");
+            step("colors");
             colors(arena);
-
-            System.out.println("plot, axes, layers, interaction");
+            step("buildPlot");
             long plot = buildPlot(arena);
+            step("axes");
             axes(arena, plot);
+            step("layers");
             long line = layers(arena, plot);
+            step("patches");
             patches(arena, plot);
+            step("interaction");
             interaction(arena, plot);
+            step("events");
             events(arena, plot);
+            step("renderingFailsHonestly");
             renderingFailsHonestly(arena, plot);
+            step("handleSafety");
             handleSafety(arena, plot, line);
 
+            step("shutdown");
             ph_shutdown();
             ran("ph_shutdown");
         }

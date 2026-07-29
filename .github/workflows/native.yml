@@ -37,11 +37,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgl1-mesa-dri
 
       # For the binding test, which drives all 52 entry points through Panama.
-      # 22 is when the foreign function API became final.
+      # 22 is when the foreign function API became final; 25 is the current LTS,
+      # and asking for 22 exactly failed to resolve on one runner because it is
+      # a non-LTS release that has since gone.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "22"
+          java-version: "25"
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }} -DPHOTON_WARNINGS_AS_ERRORS=ON
@@ -69,7 +71,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "22"
+          java-version: "25"
       - name: Configure
         run: cmake -S . -B build/ci -DPHOTON_WARNINGS_AS_ERRORS=ON
       - name: Build
@@ -122,11 +124,14 @@ jobs:
       # wayland-scanner for the latter, which is why wayland-protocols is in the
       # list above — the first CI run failed on exactly that.
       #
+      # Tests off: this job asks whether the hosts still build, and building them
+      # is not a reason to also need a JDK for the binding test.
+      #
       # Compiled but not run: every host needs a display, and what matters here
       # is that the host code still builds against the ABI as it grows.
       - name: Build the hosts
         run: |
           cmake -S . -B build/hosts -DCMAKE_BUILD_TYPE=Release \
             -DPHOTON_BUILD_GLFW_HOST=ON -DPHOTON_BUILD_QT_HOST=ON \
-            -DPHOTON_WARNINGS_AS_ERRORS=ON
+            -DPHOTON_BUILD_TESTS=OFF -DPHOTON_WARNINGS_AS_ERRORS=ON
           cmake --build build/hosts --parallel
