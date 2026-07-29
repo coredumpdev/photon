@@ -180,6 +180,9 @@ internal static class PhotonSmokeTest
         // for it either way, so this is only the switch being wired.
         CheckEq(ph_plot_set_colorbar(plot, 0), PH_OK, "ph_plot_set_colorbar");
         CheckEq(ph_plot_set_colorbar(plot, 1), PH_OK, "ph_plot_set_colorbar(on)");
+        CheckEq(ph_plot_set_pick_mode(plot, PH_PICK_XY), PH_OK, "ph_plot_set_pick_mode");
+        CheckEq(ph_plot_set_pick_mode(plot, 99), PH_E_INVALID_ARGUMENT, "an unknown pick mode");
+        CheckEq(ph_plot_set_pick_mode(plot, PH_PICK_X), PH_OK, "back to the default");
         // Non-ASCII, so the UTF-8 marshalling is exercised rather than assumed.
         CheckEq(ph_plot_set_title(plot, "Portföy · σ"), PH_OK, "ph_plot_set_title");
         CheckEq(ph_plot_set_title(plot, null!), PH_OK, "ph_plot_set_title(null)");
@@ -188,7 +191,7 @@ internal static class PhotonSmokeTest
         CheckEq(ph_plot_set_margin(plot, in margin), PH_OK, "ph_plot_set_margin");
 
         Ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
-            "ph_plot_set_colorbar",
+            "ph_plot_set_colorbar", "ph_plot_set_pick_mode",
             "ph_plot_set_title", "ph_plot_set_margin");
         return plot;
     }
@@ -849,6 +852,32 @@ internal static class PhotonSmokeTest
             if (++drained > 1000) break;  // the queue is bounded; this is a tripwire
         }
         Check(drained > 0, "the interaction above queued events");
+
+        // Hover picking: a move over a point reports which point, once. The plot
+        // is 640x480 with the default margins, so its region centre is roughly
+        // (348, 228).
+        CheckEq(ph_plot_clear_events(plot), PH_OK, "start from an empty queue");
+        CheckEq(ph_plot_pointer_move(plot, 348.0, 228.0, PH_MOD_NONE), PH_OK, "hover a point");
+        var picks = 0;
+        while (ph_plot_poll_event(plot, out var hovered) == PH_OK && hovered.type != PH_EVENT_NONE)
+        {
+            if (hovered.type != PH_EVENT_POINT_PICKED) continue;
+            picks++;
+            Check(hovered.point_valid == 1, "the hover found a point");
+            Check(hovered.point_index >= 0, "and named its index");
+            Check(hovered.layer != PH_NULL_HANDLE, "and the layer it belongs to");
+        }
+        Check(picks == 1, "one pick event, not one per layer");
+
+        CheckEq(ph_plot_pointer_leave(plot), PH_OK, "leave clears the pick");
+        var clears = 0;
+        while (ph_plot_poll_event(plot, out var left) == PH_OK && left.type != PH_EVENT_NONE)
+        {
+            if (left.type != PH_EVENT_POINT_PICKED) continue;
+            clears++;
+            Check(left.point_valid == 0, "leaving reports nothing under the cursor");
+        }
+        Check(clears == 1, "and says so once");
 
         CheckEq(ph_plot_wheel(plot, 100.0, 100.0, -100.0, PH_MOD_NONE), PH_OK, "queue something");
         CheckEq(ph_plot_clear_events(plot), PH_OK, "ph_plot_clear_events");

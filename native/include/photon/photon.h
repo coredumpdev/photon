@@ -191,8 +191,11 @@ enum {
 /** Mirrors core `PickMode` — how hover chooses the highlighted point. */
 typedef int32_t ph_pick_mode;
 enum {
+  /** Nearest by horizontal distance — the classic crosshair-along-x. */
   PH_PICK_X  = 0,
+  /** Nearest by vertical distance. */
   PH_PICK_Y  = 1,
+  /** Nearest by true 2-D distance; right for point clouds. */
   PH_PICK_XY = 2
 };
 
@@ -1013,7 +1016,17 @@ enum {
    * The plot's contents changed and the host should schedule a frame —
    * Qt: update(), GLFW: wake the loop, Avalonia: RequestNextFrameRendering().
    */
-  PH_EVENT_REDRAW_REQUESTED = 5
+  PH_EVENT_REDRAW_REQUESTED = 5,
+  /**
+   * The hover cursor moved onto — or off — a data point. `layer` and
+   * `point_index` name it, `point_x`/`point_y` are its data coordinates, and
+   * `point_valid` is 0 when nothing is under the cursor.
+   *
+   * Emitted only when the picked point changes, not on every mouse move: a host
+   * that shows a tooltip should not have to filter a stream of identical
+   * events.
+   */
+  PH_EVENT_POINT_PICKED    = 6
 };
 
 /**
@@ -1033,6 +1046,10 @@ typedef struct ph_event {
   ph_bool       cursor_valid;
   ph_mode       mode;         /* MODE_CHANGED                    */
   ph_bool       visible;      /* LAYER_VISIBILITY                */
+  double        point_x;      /* POINT_PICKED, data space        */
+  double        point_y;
+  int32_t       point_index;  /* POINT_PICKED, -1 when none      */
+  ph_bool       point_valid;
 } ph_event;
 
 /* Pointer input ----------------------------------------------------------- */
@@ -1145,6 +1162,15 @@ PH_API ph_result PH_CALL ph_plot_set_title(ph_plot plot, const char* title);
  * margin the plot reserves for it. Turning it off gives that margin back.
  */
 PH_API ph_result PH_CALL ph_plot_set_colorbar(ph_plot plot, ph_bool enabled);
+
+/**
+ * How hover chooses the highlighted point. PH_PICK_X by default, as in the core.
+ *
+ * A series wants x — the reader is asking "what is the value here". A point
+ * cloud wants PH_PICK_XY, because there is no "the point at this x" and an
+ * x-only match highlights something the cursor is nowhere near.
+ */
+PH_API ph_result PH_CALL ph_plot_set_pick_mode(ph_plot plot, ph_pick_mode mode);
 
 /* ------------------------------------------------------------------------ */
 /* Axes and view                                                              */

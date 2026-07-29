@@ -242,6 +242,9 @@ public final class PhotonSmokeTest {
         // for it either way, so this is only the switch being wired.
         checkEq(ph_plot_set_colorbar(plot, 0), PH_OK, "ph_plot_set_colorbar");
         checkEq(ph_plot_set_colorbar(plot, 1), PH_OK, "ph_plot_set_colorbar(on)");
+        checkEq(ph_plot_set_pick_mode(plot, PH_PICK_XY), PH_OK, "ph_plot_set_pick_mode");
+        checkEq(ph_plot_set_pick_mode(plot, 99), PH_E_INVALID_ARGUMENT, "an unknown pick mode");
+        checkEq(ph_plot_set_pick_mode(plot, PH_PICK_X), PH_OK, "back to the default");
 
         MemorySegment margin = ph_margin.allocate(arena);
         margin.set(ValueLayout.JAVA_FLOAT, ph_margin.OFFSET_TOP, 20.0f);
@@ -251,7 +254,8 @@ public final class PhotonSmokeTest {
         checkEq(ph_plot_set_margin(plot, margin), PH_OK, "ph_plot_set_margin");
 
         ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
-            "ph_plot_set_title", "ph_plot_set_margin", "ph_plot_set_colorbar");
+            "ph_plot_set_title", "ph_plot_set_margin", "ph_plot_set_colorbar",
+            "ph_plot_set_pick_mode");
         return plot;
     }
 
@@ -945,6 +949,42 @@ public final class PhotonSmokeTest {
             if (drained > 1000) break;  // the queue is bounded; this is a tripwire
         }
         check(drained > 0, "the interaction above queued events");
+
+        // Hover picking: a move over a point reports which point, once. The plot
+        // is 640x480 with the default margins, so its region centre is roughly
+        // (348, 228) — but the assertion is only that *something* was picked and
+        // then un-picked, because the data under it belongs to earlier steps.
+        checkEq(ph_plot_clear_events(plot), PH_OK, "start from an empty queue");
+        checkEq(ph_plot_pointer_move(plot, 348.0, 228.0, PH_MOD_NONE), PH_OK, "hover a point");
+        int picks = 0;
+        while (ph_plot_poll_event(plot, event) == PH_OK
+               && event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE) != PH_EVENT_NONE) {
+            if (event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE) != PH_EVENT_POINT_PICKED) {
+                continue;
+            }
+            picks++;
+            check(event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_POINT_VALID) == 1,
+                  "the hover found a point");
+            check(event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_POINT_INDEX) >= 0,
+                  "and named its index");
+            check(event.get(ValueLayout.JAVA_LONG, ph_event.OFFSET_LAYER) != PH_NULL_HANDLE,
+                  "and the layer it belongs to");
+        }
+        check(picks == 1, "one pick event, not one per layer");
+
+        checkEq(ph_plot_pointer_leave(plot), PH_OK, "leave clears the pick");
+        int clears = 0;
+        while (ph_plot_poll_event(plot, event) == PH_OK
+               && event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE) != PH_EVENT_NONE) {
+            if (event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE) != PH_EVENT_POINT_PICKED) {
+                continue;
+            }
+            clears++;
+            check(event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_POINT_VALID) == 0,
+                  "leaving reports nothing under the cursor");
+        }
+        check(clears == 1, "and says so once");
+
         checkEq(ph_plot_poll_event(plot, event), PH_OK, "polling an empty queue still succeeds");
         checkEq(event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE), PH_EVENT_NONE,
                 "an empty queue reports NONE");

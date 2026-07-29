@@ -104,6 +104,7 @@ public final class Photon {
     public static final int PH_EVENT_MODE_CHANGED = 3;
     public static final int PH_EVENT_LAYER_VISIBILITY = 4;
     public static final int PH_EVENT_REDRAW_REQUESTED = 5;
+    public static final int PH_EVENT_POINT_PICKED = 6;
     public static final int PH_BUTTON_LEFT = 0;
     public static final int PH_BUTTON_MIDDLE = 1;
     public static final int PH_BUTTON_RIGHT = 2;
@@ -1262,7 +1263,7 @@ public final class Photon {
         }
     }
 
-    /** ph_event — 80 bytes, alignment 8. */
+    /** ph_event — 104 bytes, alignment 8. */
     public static final class ph_event {
         private ph_event() {}
 
@@ -1277,7 +1278,11 @@ public final class Photon {
             ValueLayout.JAVA_INT.withName("cursor_valid"),
             ValueLayout.JAVA_INT.withName("mode"),
             ValueLayout.JAVA_INT.withName("visible"),
-            MemoryLayout.paddingLayout(4)
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("point_x"),
+            ValueLayout.JAVA_DOUBLE.withName("point_y"),
+            ValueLayout.JAVA_INT.withName("point_index"),
+            ValueLayout.JAVA_INT.withName("point_valid")
         ).withName("ph_event");
 
         public static final long SIZE = LAYOUT.byteSize();
@@ -1292,6 +1297,10 @@ public final class Photon {
         public static final long OFFSET_CURSOR_VALID = 64L;
         public static final long OFFSET_MODE = 68L;
         public static final long OFFSET_VISIBLE = 72L;
+        public static final long OFFSET_POINT_X = 80L;
+        public static final long OFFSET_POINT_Y = 88L;
+        public static final long OFFSET_POINT_INDEX = 96L;
+        public static final long OFFSET_POINT_VALID = 100L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1354,6 +1363,7 @@ public final class Photon {
         "ph_plot_set_theme",
         "ph_plot_set_title",
         "ph_plot_set_colorbar",
+        "ph_plot_set_pick_mode",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
         "ph_plot_get_domain",
@@ -1449,6 +1459,7 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_SET_THEME = handle("ph_plot_set_theme", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_TITLE = handle("ph_plot_set_title", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_COLORBAR = handle("ph_plot_set_colorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT_SET_PICK_MODE = handle("ph_plot_set_pick_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_SCALE = handle("ph_plot_set_scale", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_DOMAIN = handle("ph_plot_set_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ph_range.LAYOUT));
     private static final MethodHandle PH_PLOT_GET_DOMAIN = handle("ph_plot_get_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -1862,6 +1873,14 @@ public final class Photon {
             return (int) PH_PLOT_SET_COLORBAR.invokeExact(plot, enabled);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_set_colorbar failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_set_pick_mode(long plot, int mode) {
+        try {
+            return (int) PH_PLOT_SET_PICK_MODE.invokeExact(plot, mode);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_pick_mode failed", photonFailure);
         }
     }
 

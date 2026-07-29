@@ -23,6 +23,7 @@
 
 #include "color.hpp"
 #include "color/colormap.hpp"
+#include "layers/pick.hpp"
 #include "gl/gl.hpp"
 #include "gl/transform.hpp"
 
@@ -76,6 +77,21 @@ class Layer {
     return false;
   }
 
+  /**
+   * The point nearest the cursor, in pixels. False when this layer has no
+   * points to pick — a heatmap is a field, not a set of samples, and offering
+   * a nearest texel would be inventing a reading the data does not support.
+   */
+  virtual bool pick(PickMode mode, double cursor_px, double cursor_py,
+                    const PickProjection& project, Picked& out) const {
+    (void)mode;
+    (void)cursor_px;
+    (void)cursor_py;
+    (void)project;
+    (void)out;
+    return false;
+  }
+
   const std::string& y_axis() const { return y_axis_; }
   /// Rebind to another y axis. Used when the axis a layer pointed at is removed.
   void set_y_axis(std::string id) { y_axis_ = std::move(id); }
@@ -85,6 +101,9 @@ class Layer {
   void set_visible(bool on) { visible_ = on; }
 
   Plot* owner = nullptr;
+  /// The ph_layer this object is behind, so an event can name it. Set when the
+  /// layer is registered; zero for a layer that never reached the ABI.
+  ph_layer handle = 0;
 
  protected:
   std::string name_;
@@ -124,6 +143,8 @@ class XYLayer : public Layer {
 class LineLayer : public XYLayer {
  public:
   explicit LineLayer(const ph_line_desc& desc);
+  bool pick(PickMode mode, double cursor_px, double cursor_py, const PickProjection& project,
+            Picked& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -280,6 +301,8 @@ class PieLayer : public Layer {
 class StemLayer : public XYLayer {
  public:
   explicit StemLayer(const ph_stem_desc& desc);
+  bool pick(PickMode mode, double cursor_px, double cursor_py, const PickProjection& project,
+            Picked& out) const override;
   bool bounds(ph_range& x, ph_range& y) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
@@ -723,6 +746,8 @@ class ScatterLayer : public XYLayer {
  public:
   explicit ScatterLayer(const ph_scatter_desc& desc);
   bool color_info(ColorInfo& out) const override;
+  bool pick(PickMode mode, double cursor_px, double cursor_py, const PickProjection& project,
+            Picked& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 

@@ -826,6 +826,14 @@ bool LineLayer::draw(const DrawState& state, std::string& error) {
   return true;
 }
 
+bool LineLayer::pick(PickMode mode, double cursor_px, double cursor_py,
+                     const PickProjection& project, Picked& out) const {
+  // No gate: a series is a continuous reading, so the nearest sample along the
+  // cursor is always the answer even when it is far away vertically.
+  return pick_nearest(x_, y_, mode, cursor_px, cursor_py, project,
+                      std::numeric_limits<double>::infinity(), monotonic_, out);
+}
+
 void LineLayer::release_gl(Api& api) {
   if (full_vao_ == 0) return;
   const GLuint vaos[] = {full_vao_, decimated_vao_, join_full_vao_, join_decimated_vao_};
@@ -910,6 +918,17 @@ bool ScatterLayer::color_info(ColorInfo& out) const {
   out.domain = color_domain_;
   out.label = name_;
   return true;
+}
+
+bool ScatterLayer::pick(PickMode mode, double cursor_px, double cursor_py,
+                        const PickProjection& project, Picked& out) const {
+  // Only a hit when the cursor is within the marker plus a couple of pixels of
+  // slack: a cloud has no "the point along x", so a far-away match would be a
+  // highlight the reader cannot account for.
+  double largest = size_;
+  for (const float size : sizes_) largest = std::max(largest, static_cast<double>(size));
+  const double gate = largest / 2.0 + 4.0;
+  return pick_nearest(x_, y_, mode, cursor_px, cursor_py, project, gate, monotonic_, out);
 }
 
 bool ScatterLayer::ensure_gl(Api& api, std::string& error) {
@@ -1625,6 +1644,16 @@ void StemLayer::build() {
   segments_.clear();
   packed_.clear();
   stem_bounds_ = false;
+  // Stems fill their own buffers rather than going through XYLayer::rebuild, so
+  // the sortedness the binary-search pick relies on has to be worked out here —
+  // left at its default it would claim sorted for data that is not.
+  monotonic_ = true;
+  for (size_t i = 1; i < n; ++i) {
+    if (x_[i] < x_[i - 1]) {
+      monotonic_ = false;
+      break;
+    }
+  }
   if (n == 0) {
     dirty_ = true;
     return;
@@ -1668,6 +1697,12 @@ bool StemLayer::bounds(ph_range& x, ph_range& y) const {
   x = stem_x_;
   y = stem_y_;
   return true;
+}
+
+bool StemLayer::pick(PickMode mode, double cursor_px, double cursor_py,
+                     const PickProjection& project, Picked& out) const {
+  return pick_nearest(x_, y_, mode, cursor_px, cursor_py, project,
+                      std::numeric_limits<double>::infinity(), monotonic_, out);
 }
 
 bool StemLayer::ensure_gl(Api& api, std::string& error) {

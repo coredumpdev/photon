@@ -59,6 +59,8 @@ class Plot {
   PlotRegion region() const;
   /// The base margin grown for the title strip and any extra y axes.
   ph_margin compute_margin() const;
+  /// Re-run the hover pick and emit PH_EVENT_POINT_PICKED when it changed.
+  void update_pick();
   /// The colour scales the visible layers report, in draw order.
   std::vector<render::ColorbarEntry> color_scales() const;
   /// Where each y axis line sits, parallel to the axis list.
@@ -86,9 +88,21 @@ class Plot {
   bool remove_layer(Layer* layer);
   const std::vector<std::unique_ptr<Layer>>& layers() const { return layers_; }
 
+  /// One layer's answer to the hover cursor, with the pixel it lands on.
+  struct Hit {
+    Layer* layer = nullptr;
+    Picked point;
+    double px = 0.0;
+    double py = 0.0;
+  };
+  /// Every visible layer's nearest point to the hover cursor, in draw order.
+  std::vector<Hit> hover_hits() const;
+
   /// Turn the colorbar stack off. On by default, as in the web core.
   void set_colorbar(bool on) { colorbar_ = on; }
   bool colorbar() const { return colorbar_; }
+
+  void set_pick_mode(ph_pick_mode mode) { pick_ = mode; }
 
   /// Handles minted for this plot's layers, so teardown can invalidate them.
   std::vector<uint64_t> layer_handles;
@@ -203,6 +217,13 @@ class Plot {
   ph_pick_mode pick_ = PH_PICK_X;
   bool interactive_ = true;
   bool hover_enabled_ = true;
+  /// Where the hover cursor is, in logical pixels, and whether it is inside.
+  double hover_px_ = 0.0;
+  double hover_py_ = 0.0;
+  bool hover_inside_ = false;
+  /// The last point reported picked, so an unchanged pick emits no event.
+  ph_layer picked_layer_ = 0;
+  int32_t picked_index_ = -1;
   bool crosshair_ = true;
   bool colorbar_ = true;
   bool equal_aspect_ = false;

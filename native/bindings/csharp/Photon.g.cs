@@ -81,6 +81,7 @@ public static partial class Ph
     public const int PH_EVENT_MODE_CHANGED = 3;
     public const int PH_EVENT_LAYER_VISIBILITY = 4;
     public const int PH_EVENT_REDRAW_REQUESTED = 5;
+    public const int PH_EVENT_POINT_PICKED = 6;
     public const int PH_BUTTON_LEFT = 0;
     public const int PH_BUTTON_MIDDLE = 1;
     public const int PH_BUTTON_RIGHT = 2;
@@ -888,7 +889,7 @@ public static partial class Ph
         public int render_type;
     }
 
-    /// <summary>ph_event — 80 bytes, alignment 8.</summary>
+    /// <summary>ph_event — 104 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_event
     {
@@ -912,6 +913,14 @@ public static partial class Ph
         public int mode;
         /// <summary>offset 72</summary>
         public int visible;
+        /// <summary>offset 80</summary>
+        public double point_x;
+        /// <summary>offset 88</summary>
+        public double point_y;
+        /// <summary>offset 96</summary>
+        public int point_index;
+        /// <summary>offset 100</summary>
+        public int point_valid;
     }
 
     /// <summary>
@@ -965,6 +974,7 @@ public static partial class Ph
         "ph_plot_set_theme",
         "ph_plot_set_title",
         "ph_plot_set_colorbar",
+        "ph_plot_set_pick_mode",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
         "ph_plot_get_domain",
@@ -1163,6 +1173,9 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_colorbar")]
     public static extern int ph_plot_set_colorbar(ulong plot, int enabled);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_pick_mode")]
+    public static extern int ph_plot_set_pick_mode(ulong plot, int mode);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_scale")]
     public static extern int ph_plot_set_scale(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string axis, IntPtr desc);

@@ -129,8 +129,12 @@ static void test_struct_layout_is_pinned(void) {
   CHECK_EQ(offsetof(ph_event, cursor_valid), 64);
   CHECK_EQ(offsetof(ph_event, mode), 68);
   CHECK_EQ(offsetof(ph_event, visible), 72);
+  CHECK_EQ(offsetof(ph_event, point_x), 80);
+  CHECK_EQ(offsetof(ph_event, point_y), 88);
+  CHECK_EQ(offsetof(ph_event, point_index), 96);
+  CHECK_EQ(offsetof(ph_event, point_valid), 100);
   /* Trailing padding to the struct's 8-byte alignment; Panama needs it spelled. */
-  CHECK_EQ(sizeof(ph_event), 80);
+  CHECK_EQ(sizeof(ph_event), 104);
 
   CHECK_EQ(offsetof(ph_frame_target, framebuffer), 4);
   CHECK_EQ(offsetof(ph_frame_target, dpr), 24);

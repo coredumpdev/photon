@@ -126,6 +126,12 @@ void draw_title(Painter& painter, const Rect& region, const std::string& title, 
 /// Dashed guide lines through (px, py) while the pointer is down.
 void draw_crosshair_xy(Painter& painter, const Rect& region, double px, double py, ph_theme theme);
 
+/// The vertical-only hover guide, for when the XY crosshair is switched off.
+void draw_crosshair(Painter& painter, const Rect& region, double px, ph_theme theme);
+
+/// The disc drawn on the picked point: filled in the series colour, white-rimmed.
+void draw_marker(Painter& painter, double px, double py, Rgba color);
+
 /// The box-zoom rectangle. `lock_x`/`lock_y` follow the interaction mode: an
 /// axis that is not locked spans the whole region, as in drawSelection().
 void draw_selection(Painter& painter, const Rect& region, double x0, double y0, double x1,

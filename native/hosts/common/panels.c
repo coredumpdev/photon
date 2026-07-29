@@ -411,6 +411,9 @@ static void build_decay(ph_panels* p, ph_plot plot) {
 /* Panel 2 — per-point colour and size, and an explicit tick list. */
 static void build_scatter(ph_panels* p, ph_plot plot) {
   ph_plot_set_title(plot, "Scatter");
+  /* A cloud has no "the point at this x", so an x-only pick would highlight
+   * something the cursor is nowhere near. */
+  ph_plot_set_pick_mode(plot, PH_PICK_XY);
   style_axis(plot, "x", "x", 0);
   style_axis(plot, "y", "y", 0);
 

@@ -502,6 +502,18 @@ extern "C" ph_result PH_CALL ph_plot_set_colorbar(ph_plot handle, ph_bool enable
   return PH_OK;
 }
 
+extern "C" ph_result PH_CALL ph_plot_set_pick_mode(ph_plot handle, ph_pick_mode mode) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (mode != PH_PICK_X && mode != PH_PICK_Y && mode != PH_PICK_XY) {
+    return fail(PH_E_INVALID_ARGUMENT, "unknown pick mode");
+  }
+  plot->set_pick_mode(mode);
+  return PH_OK;
+}
+
 // ---------------------------------------------------------------------------
 // Axes and view
 // ---------------------------------------------------------------------------
@@ -651,6 +663,7 @@ ph_result register_layer(ph_plot plot_handle, Plot* plot,
   ref->plot = plot_handle;
   ref->layer = borrowed;
   const ph_layer handle = Registry::get().layers.insert(std::move(ref));
+  borrowed->handle = handle;
   plot->layer_handles.push_back(handle);
   *out = handle;
   return PH_OK;

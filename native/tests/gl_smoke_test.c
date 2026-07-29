@@ -1004,6 +1004,91 @@ int main(void) {
   CHECK(narrow_opaque < 18432 * 0.8);
 
   CHECK_EQ(ph_plot_destroy(legend_plot), PH_OK);
+
+  /* ---- hover: a guide line and a marker on the point under the cursor ---- */
+
+  ph_plot hover_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &hover_plot), PH_OK);
+
+  /* Three points at y = 5 across a 10x10 view. The cursor goes on the middle
+   * one, so the marker has to land at the region's centre. */
+  const double hover_x[3] = {2.0, 5.0, 8.0};
+  const double hover_y[3] = {5.0, 5.0, 5.0};
+  ph_line_desc hover_line;
+  ph_line_desc_init(&hover_line);
+  hover_line.x = hover_x;
+  hover_line.y = hover_y;
+  hover_line.count = 3;
+  hover_line.width = 1.0f;
+  CHECK_EQ(ph_color_parse("#00ff00", &hover_line.color), PH_OK);
+  ph_layer hover_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_line(hover_plot, &hover_line, &hover_layer) != PH_OK) {
+    printf("  FAIL hover line: %s\n", ph_last_error());
+    return 1;
+  }
+
+  /* The region is x 56..184, y 16..160, so its centre is (120, 88). */
+  ph_plot_pointer_move(hover_plot, 120.0, 88.0, PH_MOD_NONE);
+
+  /* The move should have reported the point, once. */
+  ph_event ev;
+  int picked = 0;
+  memset(&ev, 0, sizeof(ev));
+  ev.struct_size = (uint32_t)sizeof(ev);
+  while (ph_plot_poll_event(hover_plot, &ev) == PH_OK && ev.type != PH_EVENT_NONE) {
+    if (ev.type != PH_EVENT_POINT_PICKED) continue;
+    picked++;
+    CHECK(ev.point_valid == 1);
+    CHECK(ev.point_index == 1);
+    CHECK(ev.point_x == 5.0 && ev.point_y == 5.0);
+    CHECK(ev.layer == hover_layer);
+  }
+  printf("  hover picked %d point(s)\n", picked);
+  CHECK(picked == 1);
+
+  unsigned char* hover_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!hover_pixels) return 1;
+  if (ph_plot_render_pixels(hover_plot, patch_w, patch_h, 1.0f, hover_pixels, patch_w * 4) !=
+      PH_OK) {
+    printf("  FAIL hover render: %s\n", ph_last_error());
+    return 1;
+  }
+  /* The marker is a white-rimmed disc about 11 px across, centred on the point.
+   * Count its white rim; the series line is green and one pixel tall, so it
+   * cannot be mistaken for it. */
+  long rim = 0;
+  for (int row = 78; row < 99; row++) {
+    for (int col = 110; col < 131; col++) {
+      const unsigned char* p = hover_pixels + ((size_t)row * patch_w + col) * 4;
+      if (p[3] > 200 && p[0] > 230 && p[1] > 230 && p[2] > 230) rim++;
+    }
+  }
+  free(hover_pixels);
+  printf("  hover marker rim=%ld px\n", rim);
+  CHECK(rim > 20);
+
+  /* Moving to the same point again must not repeat the event — a host drawing
+   * a tooltip should not have to filter a stream of identical ones. */
+  ph_plot_pointer_move(hover_plot, 121.0, 89.0, PH_MOD_NONE);
+  int repeats = 0;
+  while (ph_plot_poll_event(hover_plot, &ev) == PH_OK && ev.type != PH_EVENT_NONE) {
+    if (ev.type == PH_EVENT_POINT_PICKED) repeats++;
+  }
+  printf("  hover repeats=%d\n", repeats);
+  CHECK(repeats == 0);
+
+  /* Leaving reports the loss of the pick. */
+  ph_plot_pointer_leave(hover_plot);
+  int cleared = 0;
+  while (ph_plot_poll_event(hover_plot, &ev) == PH_OK && ev.type != PH_EVENT_NONE) {
+    if (ev.type != PH_EVENT_POINT_PICKED) continue;
+    cleared++;
+    CHECK(ev.point_valid == 0);
+    CHECK(ev.point_index == -1);
+  }
+  CHECK(cleared == 1);
+
+  CHECK_EQ(ph_plot_destroy(hover_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

@@ -182,14 +182,17 @@ All of the above are pure functions with existing unit tests in
 
 These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
 
-- [ ] **Hover / pick** — `layers/pick.ts` (150 lines). `PH_EVENT_CURSOR_MOVED`
-      reports the cursor's data coordinates but never which *point* it is near.
-      Needs `pickNearest`, a `pick()` virtual on layers, and a
-      `PH_EVENT_POINT_PICKED` carrying layer + index + x/y. The hover crosshair
-      and marker in `drawCrosshair`/`drawMarker` are waiting on it — the
-      press-and-drag crosshair is drawn, the hover one is not.
-- [ ] **Tooltip / hover readout** — depends on pick. The text renderer can draw
-      it; what is missing is a rounded panel primitive and multi-line layout.
+- [x] ~~**Hover / pick**~~ — `src/layers/pick.cpp`, a `pick()` virtual that the
+      line, scatter and stem layers implement, `PH_EVENT_POINT_PICKED` carrying
+      layer + index + x/y, and the hover crosshair and marker drawn.
+      `ph_plot_set_pick_mode` picks the metric; a cloud wants `PH_PICK_XY`.
+      `tests/pick_test.cpp` checks the binary search against the scan it
+      replaces — an optimisation that picks a different point is a bug that only
+      shows up as the tooltip naming the wrong sample.
+- [ ] **Tooltip / hover readout** — pick is done, so this is unblocked. What is
+      missing is a rounded panel primitive and multi-line layout. A host can
+      already build its own from `PH_EVENT_POINT_PICKED`, which may be the
+      better answer for Qt — the same argument as the toolbar.
 - [ ] **Legend** — `ph_plot_desc.legend` is accepted and ignored. Layer names are
       already stored. Interactive legend entries toggle series visibility in the
       web core, which means hit-testing, which means it wants pick first.

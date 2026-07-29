@@ -424,7 +424,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, name) == 32, "ph_patches_desc.name of
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, y_axis) == 40, "ph_patches_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, render_type) == 48, "ph_patches_desc.render_type offset");
 
-PH_ASSERT_LAYOUT(sizeof(ph_event) == 80, "ph_event size");
+PH_ASSERT_LAYOUT(sizeof(ph_event) == 104, "ph_event size");
 PH_ASSERT_LAYOUT(_Alignof(ph_event) == 8, "ph_event alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_event, struct_size) == 0, "ph_event.struct_size offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, type) == 4, "ph_event.type offset");
@@ -436,6 +436,10 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, cursor_y) == 56, "ph_event.cursor_y offset")
 PH_ASSERT_LAYOUT(offsetof(ph_event, cursor_valid) == 64, "ph_event.cursor_valid offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, mode) == 68, "ph_event.mode offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, visible) == 72, "ph_event.visible offset");
+PH_ASSERT_LAYOUT(offsetof(ph_event, point_x) == 80, "ph_event.point_x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_event, point_y) == 88, "ph_event.point_y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_event, point_index) == 96, "ph_event.point_index offset");
+PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid offset");
 
 #endif  /* 64-bit */
 

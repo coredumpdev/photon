@@ -287,6 +287,33 @@ void draw_crosshair_xy(Painter& painter, const Rect& region, double px, double p
   painter.dashed(false, crisp(py), region.left, region.right(), 1.0, dash, color);
 }
 
+void draw_crosshair(Painter& painter, const Rect& region, double px, ph_theme theme) {
+  if (px < region.left || px > region.right()) return;
+  const Rgba color = with_alpha(unpack_color_exact(theme_for(theme).text), 0.4f);
+  const std::vector<float> dash{3.0f, 3.0f};
+  painter.dashed(true, crisp(px), region.top, region.bottom(), 1.0, dash, color);
+}
+
+void draw_marker(Painter& painter, double px, double py, Rgba color) {
+  // A filled disc with a white rim, from drawMarker(): 4 px radius and a 1.5 px
+  // stroke. There is no circle primitive here, so the disc is a stack of rows —
+  // eight of them at this size, which is cheaper than a shader for one point.
+  constexpr double kRadius = 4.0;
+  constexpr double kRim = 1.5;
+  const Rgba white{1.0f, 1.0f, 1.0f, 1.0f};
+  const auto disc = [&](double radius, Rgba fill) {
+    const int rows = static_cast<int>(std::ceil(radius * 2.0 * painter.dpr()));
+    for (int i = 0; i < rows; ++i) {
+      const double dy = -radius + (static_cast<double>(i) + 0.5) * (radius * 2.0 / rows);
+      const double half = std::sqrt(std::max(0.0, radius * radius - dy * dy));
+      if (half <= 0.0) continue;
+      painter.fill(px - half, py + dy, half * 2.0, radius * 2.0 / rows + 0.5, fill);
+    }
+  };
+  disc(kRadius + kRim / 2.0, white);
+  disc(kRadius - kRim / 2.0, color);
+}
+
 void draw_selection(Painter& painter, const Rect& region, double x0, double y0, double x1,
                     double y1, bool lock_x, bool lock_y) {
   const auto clamp = [](double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); };

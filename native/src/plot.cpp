@@ -595,7 +595,13 @@ void Plot::pointer_move(double px, double py, ph_modifiers) {
   ev.cursor_valid = (px >= r.left && px <= r.left + r.width &&
                      py >= r.top && py <= r.top + r.height) ? 1 : 0;
   push_event(ev);
-  if (crosshair_) request_render();
+
+  hover_px_ = px;
+  hover_py_ = py;
+  hover_inside_ = ev.cursor_valid != 0;
+  update_pick();
+  // The hover crosshair and its markers are drawn, so every move is a frame.
+  request_render();
 }
 
 void Plot::pointer_up(double px, double py, ph_button button, ph_modifiers) {
@@ -647,8 +653,78 @@ void Plot::pointer_leave() {
     ev.type = PH_EVENT_CURSOR_MOVED;
     ev.cursor_valid = 0;
     push_event(ev);
+    hover_inside_ = false;
+    update_pick();
   }
   request_render();
+}
+
+std::vector<Plot::Hit> Plot::hover_hits() const {
+  std::vector<Hit> hits;
+  if (!hover_enabled_ || !hover_inside_) return hits;
+  const PlotRegion r = region();
+  if (r.width <= 0.0 || r.height <= 0.0) return hits;
+
+  const PickMode mode = pick_ == PH_PICK_Y   ? PickMode::Y
+                        : pick_ == PH_PICK_XY ? PickMode::XY
+                                              : PickMode::X;
+  for (const std::unique_ptr<Layer>& layer : layers_) {
+    if (!layer || !layer->visible()) continue;
+    const YAxis* axis = &primary_y();
+    if (!layer->y_axis().empty()) {
+      for (const YAxis& candidate : y_axes_) {
+        if (candidate.id == layer->y_axis()) {
+          axis = &candidate;
+          break;
+        }
+      }
+    }
+    PickProjection project;
+    project.x_left = r.left;
+    project.x_width = r.width;
+    project.y_top = r.top;
+    project.y_height = r.height;
+    project.scale_x = &scale_x_;
+    project.scale_y = &axis->scale;
+
+    Picked hit;
+    if (!layer->pick(mode, hover_px_, hover_py_, project, hit)) continue;
+    hits.push_back(Hit{layer.get(), hit, project.project_x(hit.x), project.project_y(hit.y)});
+  }
+  return hits;
+}
+
+void Plot::update_pick() {
+  if (!hover_enabled_) return;
+  const std::vector<Hit> hits = hover_hits();
+
+  // The first layer to report wins, which is draw order — the same rule the web
+  // core's tooltip header uses.
+  ph_layer layer_handle = 0;
+  int32_t index = -1;
+  double x = 0.0;
+  double y = 0.0;
+  if (!hits.empty()) {
+    layer_handle = hits.front().layer->handle;
+    index = hits.front().point.index;
+    x = hits.front().point.x;
+    y = hits.front().point.y;
+  }
+  // Only on a change: a host drawing a tooltip should not have to filter a
+  // stream of identical events, and a mouse move is many events a second.
+  if (layer_handle == picked_layer_ && index == picked_index_) return;
+  picked_layer_ = layer_handle;
+  picked_index_ = index;
+
+  ph_event ev{};
+  ev.struct_size = static_cast<uint32_t>(sizeof(ph_event));
+  ev.type = PH_EVENT_POINT_PICKED;
+  ev.layer = layer_handle;
+  ev.point_x = x;
+  ev.point_y = y;
+  ev.point_index = index;
+  ev.point_valid = index >= 0 ? 1 : 0;
+  push_event(ev);
 }
 
 void Plot::data_at_pixel(double px, double py, double& out_x, double& out_y) const {
@@ -871,6 +947,17 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
                            lock.y);
   } else if (crosshair_ && panning_) {
     render::draw_crosshair_xy(painter, rect, last_px_, last_py_, theme_);
+  } else if (hover_enabled_ && hover_inside_) {
+    // Hover: the full crosshair when it is on, the vertical guide otherwise —
+    // and a marker on whatever each layer says is nearest.
+    if (crosshair_) {
+      render::draw_crosshair_xy(painter, rect, hover_px_, hover_py_, theme_);
+    } else {
+      render::draw_crosshair(painter, rect, hover_px_, theme_);
+    }
+    for (const Hit& hit : hover_hits()) {
+      render::draw_marker(painter, hit.px, hit.py, unpack_color(hit.layer->color()));
+    }
   }
 
   int right_axes = 0;
