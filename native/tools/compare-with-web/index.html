@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Photon — web reference</title>
+<style>
+  /* The same page colour the native grab is composited over, and no margins:
+     the screenshot has to line up with the native image byte for byte in
+     geometry, so nothing may shift the grid. */
+  html, body { margin: 0; padding: 0; background: #0d1117; }
+  #grid { display: grid; grid-template-columns: 640px 640px; width: 1280px; }
+  #grid > div { width: 640px; height: 420px; }
+</style>
+<div id="grid"></div>
+<script type="module">
+  import { PANELS } from "./panels.js";
+  const grid = document.getElementById("grid");
+  for (const build of PANELS) {
+    const cell = document.createElement("div");
+    grid.appendChild(cell);
+    build(cell);
+  }
+  // The capture script waits for this rather than for a timeout.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.body.dataset.ready = "1";
+  }));
+</script>

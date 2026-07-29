@@ -338,11 +338,23 @@ marshalled view rather than the C view. The C# twin exists but has never been
 compiled; see [`bindings/README.md`](bindings/README.md).
 
 The claim the whole port rests on — that one engine draws the same chart
-everywhere — is checked rather than asserted. The GLFW gallery and the Java one
-were rendered at the same size and compared pixel by pixel: **0 of 1,075,200
-pixels differ by more than two levels**, and the two that do are rounding in the
-comparison's own alpha compositing. The demo charts use a fixed LCG rather than
-a random source precisely so that this comparison can exist.
+everywhere — is checked rather than asserted, twice over.
+
+*Between hosts*, exactly: the GLFW gallery and the Java one were rendered at the
+same size and compared pixel by pixel, and **0 of 1,075,200 pixels differ by
+more than two levels** — the two that do are rounding in the comparison's own
+alpha compositing. The demo charts use a fixed LCG rather than a random source
+precisely so this can exist.
+
+*Against the web core*, structurally: `tools/compare-with-web/` builds the same
+four panels on `@photonviz/core`, renders them in headless Chromium and compares
+the plot region and every grid line against a native grab. Those match exactly.
+They cannot match by pixel — the web draws text with Canvas2D and the system
+font while the native side rasterizes an embedded Inter subset, which is a
+deliberate divergence explained above — so the comparison is of geometry, which
+is what the port reproduces number for number. It found the port padding the x
+axis by 5% on autoscale where the web pads by 2%; the unit test covering it had
+been hand-derived from the same misreading and agreed with the bug.
 
 ## Adding the remaining layers
 

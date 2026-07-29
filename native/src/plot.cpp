@@ -352,7 +352,15 @@ bool Plot::remove_y_axis(const char* id) {
 }
 
 void Plot::autoscale() {
-  const double frac = 0.05;
+  // The two fractions differ, and the asymmetry is deliberate rather than a
+  // typo in plot.ts: an x axis is usually time or an index and wants to fill
+  // the width, while a value axis wants headroom above and below the series so
+  // a peak does not touch the frame. Getting this wrong is invisible in a unit
+  // test — the padding cascades into a different tick step, and the chart is
+  // simply *different* rather than broken, which is how it survived until the
+  // native and web galleries were compared as images.
+  constexpr double kPadX = 0.02;
+  constexpr double kPadY = 0.05;
 
   if (auto_x_) {
     double lo = std::numeric_limits<double>::infinity();
@@ -367,7 +375,7 @@ void Plot::autoscale() {
       any = true;
     }
     if (any) {
-      const ph_range padded = pad_domain(lo, hi, scale_x_.is_log(), frac);
+      const ph_range padded = pad_domain(lo, hi, scale_x_.is_log(), kPadX);
       scale_x_.set_domain(padded.lo, padded.hi);
     }
   }
@@ -389,7 +397,7 @@ void Plot::autoscale() {
       any = true;
     }
     if (any) {
-      const ph_range padded = pad_domain(lo, hi, axis.scale.is_log(), frac);
+      const ph_range padded = pad_domain(lo, hi, axis.scale.is_log(), kPadY);
       axis.scale.set_domain(padded.lo, padded.hi);
     }
   }

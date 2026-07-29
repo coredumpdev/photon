@@ -18,21 +18,27 @@ been compiled at all.**
 
 ---
 
-## The acceptance test nobody has run
+## The acceptance test, and what it found
 
-- [ ] **Put a native gallery and `examples/vanilla` side by side in a browser and
-      diff them.** This is the acceptance test for the whole port and it is still
-      outstanding. Everything is in place for it: `photon_gallery_qml --grab
-      shot.png` and `photon_gallery_widgets --grab shot.png` write a frame to
-      disk, and the demo charts in `hosts/common/panels.c` are deterministic by
-      construction (a fixed LCG, no `rand()`), so the same picture comes out on
-      every machine and in every host. What is missing is the same four panels
-      on the web side and a comparison script.
+- [x] ~~Put a native gallery and the web core side by side and diff them.~~ Done:
+      `tools/compare-with-web/` transcribes the demo panels onto the web core,
+      renders them in headless Chromium, and compares the plot region and every
+      grid line against a native grab. **The layout now matches exactly**, in
+      all four panels.
+- [ ] It is not run by CI. It needs Playwright and a Chromium, which the native
+      workflow does not install; running it there would make a native change
+      that shifts the layout fail immediately rather than at the next manual
+      check.
+- [ ] It compares geometry, not colour. Series pixels differ by antialiasing
+      and text by font — both by design, both documented — but nothing yet
+      checks that a *series* is where it should be beyond the eye and the
+      difference image.
 
-Faz 2 found two engine bugs this way — a locale-dependent decimal separator and
-a half-implemented `flip_y` — and both were invisible to every test that existed
-at the time. There is no reason to think the browser comparison would find
-nothing.
+It found one bug immediately: the x axis was padded 5% on autoscale where the
+web pads 2%. The unit test covering it had been hand-derived from the same
+misreading, so the two agreed with each other and neither was right. The chart
+was not broken, just different — which is exactly what a numeric test is blind
+to.
 
 ---
 
@@ -57,8 +63,7 @@ The bindings are generated and the Java one is tested; the samples are not.
       `hosts/common/panels.c`, which is ordinary C and not part of the ABI. The
       pixel comparison in `hosts/java/README.md` is what keeps the two honest;
       if a fifth host appears, that comparison should become a script.
-- [ ] `tools/generate_bindings.py --check` in CI, so a header change that is not
-      regenerated fails the build rather than being noticed later.
+- [x] ~~`tools/generate_bindings.py --check` in CI.~~ The `generated` job.
 - [ ] The generator assumes a 64-bit target. 32-bit would need its own pair, and
       the layout test skips rather than asserting something false.
 
@@ -199,9 +204,11 @@ These exist in `plot.ts` and have no native equivalent yet. Roughly by value:
       unverified. The `msvc` preset exists but has never run. Expect the first
       MSVC build to surface `/W4` warnings and possibly `__stdcall` issues in
       the GL loader.
-- [ ] **No CI for `native/`.** Add a workflow matrixing
-      {ubuntu, macos, windows} × {debug, release}, plus the asan leg on Linux.
-      `.github/workflows/release.yml` covers only the npm packages.
+- [x] ~~No CI for `native/`.~~ `.github/workflows/native.yml` matrixes
+      {ubuntu, macos, windows} × {debug, release}, plus an asan leg, a
+      generated-sources check and a host build. **It has never run** — the
+      commands were verified locally on Linux, but Windows and macOS are still
+      unproven and the first run is likely to surface something.
 - [ ] **The `PH_GFX_GLES30` path is untested.** `translate()` passes the shader
       through unchanged for ES; nothing has ever run it. ANGLE/WinUI needs it,
       and the text shader's `textureSize` and `fwidth` are both core in ES 3.0,

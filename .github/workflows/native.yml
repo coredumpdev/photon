@@ -1,0 +1,112 @@
+name: Native
+
+# The C++ core and its bindings. Separate from ci.yml because it shares nothing
+# with the TypeScript build — different toolchain, different platforms, and no
+# reason for a change to a chart type to spend ten minutes on three compilers.
+on:
+  push:
+    branches: [master]
+    paths: ["native/**", ".github/workflows/native.yml"]
+  pull_request:
+    paths: ["native/**", ".github/workflows/native.yml"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: native
+
+jobs:
+  build:
+    name: ${{ matrix.os }} · ${{ matrix.preset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        preset: [debug, release]
+        include:
+          # The msvc preset is a multi-config Visual Studio generator; the
+          # ninja-based debug/release presets do not apply there.
+          - os: windows-latest
+            preset: msvc
+        exclude:
+          - os: windows-latest
+            preset: debug
+          - os: windows-latest
+            preset: release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # EGL is what the headless GL smoke test creates its context through, and
+      # llvmpipe is what runs the shaders when there is no GPU. Without them the
+      # test is simply not built, which would quietly lose the only coverage of
+      # the GLSL translation.
+      - name: Install EGL and a software GL driver
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgl1-mesa-dri
+
+      # For the binding test, which drives all 52 entry points through Panama.
+      # 22 is when the foreign function API became final.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DPHOTON_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  sanitizers:
+    name: ubuntu · asan + ubsan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install EGL and a software GL driver
+        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgl1-mesa-dri
+      - run: cmake --preset asan -DPHOTON_WARNINGS_AS_ERRORS=ON
+      - run: cmake --build --preset asan
+      # The Java test is not part of this preset: the JVM is uninstrumented and
+      # dlopens the library, which ASan refuses outright. tests/CMakeLists.txt
+      # skips it here on purpose.
+      - run: ctest --preset asan
+
+  generated:
+    name: generated sources are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The bindings and the layout check are generated from photon.h. A header
+      # change that was not regenerated is a binding that silently disagrees
+      # with the library, so it fails here rather than at a call site.
+      - run: python3 tools/generate_bindings.py --check
+      # The embedded font is committed as a .ttf and turned into a byte array at
+      # build time, so nothing to check there — but the subsetting script should
+      # at least still parse.
+      - run: python3 -c "import ast, pathlib; ast.parse(pathlib.Path('tools/make_font.py').read_text())"
+
+  hosts:
+    name: ubuntu · GLFW and Qt hosts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the toolkits
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1-mesa-dev libgl1-mesa-dri \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            qt6-base-dev qt6-declarative-dev libqt6opengl6-dev
+      # Compiled but not run: every host needs a display, and what matters here
+      # is that the host code still builds against the ABI as it grows.
+      - name: Build the hosts
+        run: |
+          cmake -S . -B build/hosts -DCMAKE_BUILD_TYPE=Release \
+            -DPHOTON_BUILD_GLFW_HOST=ON -DPHOTON_BUILD_QT_HOST=ON \
+            -DPHOTON_WARNINGS_AS_ERRORS=ON
+          cmake --build build/hosts --parallel

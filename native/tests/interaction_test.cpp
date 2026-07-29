@@ -232,11 +232,11 @@ void test_zooming_out_and_back_returns_the_view() {
 
   // And reset still works, whatever happened in between: this plot was created
   // without an explicit domain, so it autoscales back over the data with the
-  // core's 5% padding.
+  // core's 2% x padding.
   CHECK_EQ(ph_plot_reset_view(plot), PH_OK);
   const ph_range reset = domain_of(plot, "x");
-  CHECK_NEAR(reset.lo, -0.5, 1e-9);
-  CHECK_NEAR(reset.hi, 10.5, 1e-9);
+  CHECK_NEAR(reset.lo, -0.2, 1e-9);
+  CHECK_NEAR(reset.hi, 10.2, 1e-9);
 
   ph_plot_destroy(plot);
 }
@@ -453,10 +453,14 @@ void test_autoscale_padding_matches_plot_ts() {
   ph_layer layer = PH_NULL_HANDLE;
   CHECK_EQ(ph_plot_add_line(plot, &line, &layer), PH_OK);
 
-  // padDomain pads by 5% of the span on each side.
+  // padDomain pads by a fraction of the span on each side — and the fraction
+  // is not the same for both axes. 2% on x, 5% on y: an x axis is usually time
+  // or an index and wants to fill the width, a value axis wants headroom. This
+  // test asserted 5% on both until the native and web galleries were compared
+  // as images, which is the only thing that noticed.
   const ph_range x = domain_of(plot, "x");
-  CHECK_NEAR(x.lo, -0.1, 1e-12);
-  CHECK_NEAR(x.hi, 2.1, 1e-12);
+  CHECK_NEAR(x.lo, -0.04, 1e-12);
+  CHECK_NEAR(x.hi, 2.04, 1e-12);
   const ph_range y = domain_of(plot, "y");
   CHECK_NEAR(y.lo, 9.0, 1e-12);
   CHECK_NEAR(y.hi, 31.0, 1e-12);
@@ -465,7 +469,7 @@ void test_autoscale_padding_matches_plot_ts() {
   // collapsing them to an empty domain.
   CHECK_EQ(ph_layer_set_visible(layer, 0), PH_OK);
   const ph_range hidden = domain_of(plot, "x");
-  CHECK_NEAR(hidden.lo, -0.1, 1e-12);
+  CHECK_NEAR(hidden.lo, -0.04, 1e-12);
 
   CHECK_EQ(ph_plot_destroy(plot), PH_OK);
 }

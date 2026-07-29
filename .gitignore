@@ -30,3 +30,6 @@ docs/api/
 
 # Jupyter autosaves
 .ipynb_checkpoints/
+
+# The web-reference bundle the native comparison harness builds
+native/tools/compare-with-web/dist/
