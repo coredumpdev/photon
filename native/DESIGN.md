@@ -9,8 +9,9 @@ expensive to change later. It says *why*, not just what — the what is in
 
 ## Status
 
-Faz 0, Faz 1 and Faz 2 are complete: a chart drawn natively is a chart, and it
-draws under three hosts from one engine. Faz 3 is the C# and Java bindings.
+Faz 0 through Faz 3 are complete: a chart drawn natively is a chart, it draws
+under three hosts from one engine, and two more languages reach it through
+generated bindings. Faz 4 is the rest of the layers.
 
 | Area | State |
 | --- | --- |
@@ -31,7 +32,8 @@ draws under three hosts from one engine. Faz 3 is the C# and Java bindings.
 | GLFW host | window, input, dpr, and a four-panel gallery |
 | Qt Quick host | `QQuickFramebufferObject` item, render-thread safe, QML module |
 | Qt Widgets host | `QOpenGLWidget`, same charts, GUI thread |
-| C# / Java bindings | not started (Faz 3) |
+| C# and Java bindings | generated from the header; Java built and run by ctest |
+| Layout verification | every generated field offset asserted against the compiler |
 
 `tests/gl_smoke_test.c` is the one that matters most here: it creates a
 surfaceless EGL context, renders a chart through the public ABI, and reads the
@@ -319,7 +321,20 @@ The ABI was shaped so that each binding is mechanical:
 | descriptor struct | `[StructLayout(LayoutKind.Sequential)] struct` | `MemoryLayout.structLayout` |
 | `PH_CALL` | `CallingConvention.Cdecl` — **must be explicit** | n/a |
 
-Sketches live in [`bindings/`](bindings/). They are reference, not built.
+Both bindings are **generated** from the header by `tools/generate_bindings.py`,
+and that is a rule rather than a convenience. Four hand-maintained copies of
+fifty-two signatures is four places for a field to drift out of order, and a
+field in the wrong order is not a compile error in any of these languages — it
+is a plausible-looking number read from the wrong offset. Faz 0's hand-written
+sketches were already missing four entry points by the time Faz 3 arrived.
+
+The generator places fields by its own model of the C type system, so it emits a
+third file — `tests/abi_layout_test.c` — asserting every offset it computed
+against what the compiler produces, built as part of the test suite. And
+`bindings/java/PhotonSmokeTest.java` drives all fifty-two entry points through
+Panama and fails if it missed one, which is the only test that exercises the
+marshalled view rather than the C view. The C# twin exists but has never been
+compiled; see [`bindings/README.md`](bindings/README.md).
 
 ## Adding the remaining layers
 
@@ -348,9 +363,10 @@ in each binding, or below it as `ph_plot_add_<chart>` — that call is Faz 4's.
   `hosts/common/panels.c`. *The second host is what proves the first host's
   abstraction was real* — it proved it was not, twice: see the locale note above
   and the `flip_y` note in the host contract.
-- **Faz 3.** C# and Java bindings, generated from the header rather than
-  hand-written.
-- **Faz 4.** The remaining layers and the 3D family.
+- **Faz 3 — done.** C# and Java bindings, generated from the header, with the
+  generator's own layout model checked against the compiler and every entry
+  point exercised from Java.
+- **Faz 4 — next.** The remaining layers and the 3D family.
 
 ## Open questions
 

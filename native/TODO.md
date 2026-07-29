@@ -7,12 +7,14 @@ file to port **to** in `native/src/`, so a task can be picked up cold.
 Line counts are the TypeScript source, as a rough size signal — the C++ tends to
 land within about 20% of it.
 
-**State right now:** Faz 0, Faz 1 and Faz 2 are done. The ABI (52 entry points),
+**State right now:** Faz 0 through Faz 3 are done. The ABI (52 entry points),
 the interaction model, the five scales, ticks, the GL 3.3 backend, line +
 scatter, the SDF text renderer, the grid/axes/labels/title overlay, theme and
-axis styling, offscreen readback, and three hosts — GLFW, Qt Quick and Qt
-Widgets — all work and are tested: 6/6 tests on GCC and Clang across
-debug/release/asan. **Only Linux has ever been compiled.**
+axis styling, offscreen readback, three hosts — GLFW, Qt Quick and Qt Widgets —
+and generated C# and Java bindings all work and are tested: 8/8 tests on GCC and
+Clang across debug/release/asan, including one that drives all 52 entry points
+through Panama. **Only Linux has ever been compiled, and the C# binding has not
+been compiled at all.**
 
 ---
 
@@ -34,23 +36,24 @@ nothing.
 
 ---
 
-## Faz 3 — C# and Java bindings
+## Faz 3 leftovers
 
-- [ ] **Generate them from `include/photon/photon.h`**, do not hand-write. Four
-      hand-maintained copies of 52 signatures is four places for a struct field
-      to drift, and a field in the wrong order is silent data corruption rather
-      than a compile error. `bindings/*/` currently holds hand-written
-      *sketches* — reference only, explicitly not shipping bindings, and already
-      missing the four entry points Faz 1 added.
-- [ ] C#: P/Invoke, `CallingConvention.Cdecl` (mandatory — .NET defaults to
-      StdCall on 32-bit Windows). Ship an Avalonia `OpenGlControlBase` sample.
-- [ ] Java: Panama FFM (JDK 22+). The `ph_line_desc` field offsets in the sketch
-      are hand-computed; the generator must emit them from the header. They are
-      pinned by `test_struct_layout_is_pinned` in `tests/abi_c_test.c`.
+The bindings are generated and the Java one is tested; the samples are not.
+
+- [ ] **Nothing in C# has ever been compiled.** No .NET SDK on the machine that
+      generated it. `bindings/csharp/PhotonSmokeTest.cs` exists precisely so that
+      one `dotnet run` settles it — run that before writing anything on top.
+- [ ] An Avalonia `OpenGlControlBase` sample. `bindings/README.md` describes the
+      shape it needs, including the render-thread problem that `hosts/qt/README.md`
+      works through in full.
 - [ ] JavaFX and WPF samples driving `ph_plot_render_pixels` into a
       `WritableImage` / `WriteableBitmap`.
-- [ ] A binding-level test that calls every ABI entry point once. The C tests
-      cover the C view; nothing yet covers the marshalled view.
+- [ ] An idiomatic wrapper over each binding. Both are faithful mirrors of the C
+      names on purpose; something pleasant belongs above them, not instead.
+- [ ] `tools/generate_bindings.py --check` in CI, so a header change that is not
+      regenerated fails the build rather than being noticed later.
+- [ ] The generator assumes a 64-bit target. 32-bit would need its own pair, and
+      the layout test skips rather than asserting something false.
 
 ---
 

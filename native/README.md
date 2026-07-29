@@ -3,14 +3,15 @@
 The C++ port of `@photonviz/core`, exposed through one C ABI so a single engine
 can drive GLFW, Qt/QML, C# and Java hosts.
 
-**Faz 0, Faz 1 and Faz 2 are done.** The ABI, the host contract and the
+**Faz 0 through Faz 3 are done.** The ABI, the host contract and the
 interaction model are complete and tested; the OpenGL 3.3 backend draws line and
 scatter series with a full chart around them — grid, axes, tick labels, axis
 titles and a plot title, all rendered from an embedded SDF font.
 `ph_plot_render_pixels` covers hosts with no GL interop. Three hosts drive the
 same engine: GLFW, Qt Quick and Qt Widgets, all showing the same four charts
-from `hosts/common/panels.c`. Next are the C# and Java bindings. See
-[DESIGN.md](DESIGN.md) for the architecture and the reasoning behind it, and
+from `hosts/common/panels.c`. C# and Java bindings are generated from the header,
+and the Java one is built and run by `ctest`. Next are the remaining layer types.
+See [DESIGN.md](DESIGN.md) for the architecture and the reasoning behind it, and
 [TODO.md](TODO.md) for what is still outstanding.
 
 ## Build
@@ -91,6 +92,7 @@ tests/
   overlay_test.cpp        margins, axis placement, tick resolution, themes
   text_test.cpp           font metrics, kerning and UTF-8 — widths pinned
   gl_smoke_test.c         a real headless GL context; the only shader compile
+  abi_layout_test.c       generated: every field offset, asserted
 hosts/
   common/panels.c         the demo charts, shared by every host
   glfw/                   window, input, a grid of plots in one context
@@ -98,8 +100,10 @@ hosts/
 third_party/
   stb_truetype.h          public domain, v1.26
   fonts/                  Inter subset (OFL-1.1) + its license
-tools/make_font.py        regenerates the font subset
-bindings/                 reference sketches (not built)
+tools/
+  make_font.py            regenerates the font subset
+  generate_bindings.py    emits the bindings and the layout check from the header
+bindings/                 generated C# and Java, plus a test for each
 cmake/                    package config, export-symbol lists, the font embedder
 ```
 
