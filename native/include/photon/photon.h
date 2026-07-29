@@ -525,6 +525,8 @@ typedef struct ph_scatter_desc {
   const double*   color_by;
   /** Value range mapped to [0,1]. lo == hi = the data min/max. */
   ph_range        color_by_domain;
+  /** The ramp `color_by` maps through. NULL is viridis, the core's default. */
+  const ph_colormap_spec* color_map;
   ph_render_type  render_type;
 } ph_scatter_desc;
 
@@ -1134,6 +1136,15 @@ PH_API ph_result PH_CALL ph_plot_set_theme(ph_plot plot, ph_theme theme);
 
 /** Set (or clear, with NULL) the plot title drawn in the reserved top strip. */
 PH_API ph_result PH_CALL ph_plot_set_title(ph_plot plot, const char* title);
+
+/**
+ * Show or hide the colorbar stack. On by default, as in the core.
+ *
+ * Every layer that maps values to colours — heatmap, hexbin, contour, and a
+ * scatter or quiver coloured by value — contributes one bar, drawn in a right
+ * margin the plot reserves for it. Turning it off gives that margin back.
+ */
+PH_API ph_result PH_CALL ph_plot_set_colorbar(ph_plot plot, ph_bool enabled);
 
 /* ------------------------------------------------------------------------ */
 /* Axes and view                                                              */

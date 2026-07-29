@@ -148,6 +148,18 @@ void Plot::set_title(const char* title) {
   request_render();
 }
 
+std::vector<render::ColorbarEntry> Plot::color_scales() const {
+  std::vector<render::ColorbarEntry> out;
+  if (!colorbar_) return out;
+  for (const std::unique_ptr<Layer>& layer : layers_) {
+    if (!layer || !layer->visible()) continue;
+    ColorInfo info;
+    if (!layer->color_info(info)) continue;
+    out.push_back(render::ColorbarEntry{info.lut, info.domain, std::move(info.label)});
+  }
+  return out;
+}
+
 ph_margin Plot::compute_margin() const {
   int left_count = 0;
   int right_count = 0;
@@ -159,12 +171,12 @@ ph_margin Plot::compute_margin() const {
     }
   }
   // Port of computeMargin(): the first left axis sits on the region's own edge,
-  // so only the ones beyond it widen the margin. The colorbar's share of the
-  // right margin arrives with the colorbar, in Faz 4.
+  // so only the ones beyond it widen the margin.
   ph_margin out = margin_;
   out.top += title_.empty() ? 0.0f : static_cast<float>(kTitleReserve);
   out.left += static_cast<float>(std::max(0, left_count - 1) * kYAxisGap);
   out.right += static_cast<float>(right_count * kYAxisGap);
+  if (!color_scales().empty()) out.right += static_cast<float>(render::kColorbarGap);
   return out;
 }
 
@@ -860,6 +872,12 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
   } else if (crosshair_ && panning_) {
     render::draw_crosshair_xy(painter, rect, last_px_, last_py_, theme_);
   }
+
+  int right_axes = 0;
+  for (const YAxis& axis : y_axes_) {
+    if (axis.side != 0) ++right_axes;
+  }
+  render::draw_colorbars(painter, rect, color_scales(), right_axes, theme_);
 
   render::draw_title(painter, rect, title_, theme_);
 

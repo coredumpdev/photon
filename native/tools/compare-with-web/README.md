@@ -26,11 +26,12 @@ Not a pixel diff, because two things differ by design and always will:
 - **Antialiasing.** Different GL implementations round edge coverage
   differently, and headless Chromium runs on SwiftShader.
 
-One thing is switched off rather than compared: the **colorbar**. The web draws
-one beside every colormapped layer and reserves right-margin space for it; the
-native core has no colorbar yet, so the Field panel passes `colorbar: false`.
-Left on, every number in that panel would differ by the width of a widget that
-does not exist yet, and a real drift would hide behind it.
+One panel opts out of the *grid* comparison: **Field**. Its heatmap covers the
+whole plot region, so no grid line is visible in either image — and worse than
+nothing, the two GL implementations resolve the quad's edge column differently
+and the native blend lands within a level of the grid colour, which the detector
+cannot tell from a real line. The region is still compared there; only the grid
+is skipped, and only because there is no grid to see.
 
 What must match is the geometry, because that is what the port reproduces number
 for number. `compare.mjs` extracts the plot region and every grid line from both

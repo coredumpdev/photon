@@ -295,11 +295,6 @@ function field(container) {
     ...common,
     title: "Field",
     axes: { x: { title: "x" }, y: { title: "y" } },
-    // The native core has no colorbar yet — it is the next gap after the
-    // layers. Left on, the web reserves right-margin space for it and the two
-    // plot regions genuinely differ, which would mask any real drift here
-    // behind a difference already written down in native/TODO.md.
-    colorbar: false,
   });
   // Diverging, because the field is signed and its zero means something —
   // paired with a domain centred on it.
@@ -425,8 +420,6 @@ function density(container) {
     ...common,
     title: "Density",
     axes: { x: { title: "x" }, y: { title: "y" } },
-    // No colorbar in the native core yet — see the Field panel.
-    colorbar: false,
   });
   plot.addHexbin({ x: xs, y: ys, radius: 0.16, colormap: "magma" });
   return plot;
@@ -455,7 +448,6 @@ function flow(container) {
     ...common,
     title: "Flow",
     axes: { x: { title: "x" }, y: { title: "y" } },
-    colorbar: false,
   });
   // No values given, so the colour follows each arrow's own magnitude.
   plot.addQuiver({ x: xs, y: ys, u: us, v: vs, width: 2, colorBy: { colormap: "turbo" } });
@@ -478,7 +470,6 @@ function contour(container) {
     ...common,
     title: "Contour",
     axes: { x: { title: "x" }, y: { title: "y" } },
-    colorbar: false,
   });
   // No `color`, so each level takes its own from the colormap.
   plot.addContour({

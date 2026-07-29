@@ -493,6 +493,15 @@ extern "C" ph_result PH_CALL ph_plot_set_title(ph_plot handle, const char* title
   return PH_OK;
 }
 
+extern "C" ph_result PH_CALL ph_plot_set_colorbar(ph_plot handle, ph_bool enabled) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_colorbar(enabled != 0);
+  return PH_OK;
+}
+
 // ---------------------------------------------------------------------------
 // Axes and view
 // ---------------------------------------------------------------------------
@@ -1137,12 +1146,8 @@ extern "C" ph_result PH_CALL ph_plot_add_scatter(ph_plot handle, const ph_scatte
   if (normalized.count > 0 && (!normalized.x || !normalized.y)) {
     return fail(PH_E_INVALID_ARGUMENT, "x and y must be non-null when count > 0");
   }
-  if (normalized.color_by) {
-    // Accepting this and quietly drawing every point in one colour is the
-    // blank-chart failure mode by another name. Say what is missing instead.
-    return fail(PH_E_UNSUPPORTED,
-                "colorBy needs the colormap tables, which arrive in Faz 4; pass per-point "
-                "`colors` for now");
+  if (normalized.color_map && !desc_size_ok(normalized.color_map)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_colormap_spec.struct_size is larger than this build's");
   }
   try {
     return register_layer(handle, plot, std::make_unique<photon::ScatterLayer>(normalized), out);

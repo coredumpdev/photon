@@ -342,7 +342,7 @@ public static partial class Ph
         public int render_type;
     }
 
-    /// <summary>ph_scatter_desc — 112 bytes, alignment 8.</summary>
+    /// <summary>ph_scatter_desc — 120 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_scatter_desc
     {
@@ -373,6 +373,8 @@ public static partial class Ph
         /// <summary>offset 88</summary>
         public ph_range color_by_domain;
         /// <summary>offset 104</summary>
+        public IntPtr color_map;
+        /// <summary>offset 112</summary>
         public int render_type;
     }
 
@@ -962,6 +964,7 @@ public static partial class Ph
         "ph_plot_set_margin",
         "ph_plot_set_theme",
         "ph_plot_set_title",
+        "ph_plot_set_colorbar",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
         "ph_plot_get_domain",
@@ -1157,6 +1160,9 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_title")]
     public static extern int ph_plot_set_title(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_colorbar")]
+    public static extern int ph_plot_set_colorbar(ulong plot, int enabled);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_scale")]
     public static extern int ph_plot_set_scale(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string axis, IntPtr desc);

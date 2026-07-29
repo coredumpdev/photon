@@ -520,6 +520,10 @@ int main(void) {
 
   ph_plot grid_plot = PH_NULL_HANDLE;
   CHECK_EQ(ph_plot_create(&patch_plot_desc, &grid_plot), PH_OK);
+  /* A heatmap reports a colour scale, and a colour scale widens the right
+   * margin — which would move every pixel this section names. The colorbar has
+   * its own check below; here it is in the way. */
+  CHECK_EQ(ph_plot_set_colorbar(grid_plot, 0), PH_OK);
 
   /* A 2x2 grid over the left half of a 10x10 view, coloured through a
    * two-stop black-to-white ramp. Row 0 is the bottom, so the bright cell is
@@ -710,6 +714,9 @@ int main(void) {
 
   ph_plot field_plot = PH_NULL_HANDLE;
   CHECK_EQ(ph_plot_create(&patch_plot_desc, &field_plot), PH_OK);
+  /* Same reason as the heatmap: the hexbin's colour scale would move the region
+   * out from under the arithmetic below. */
+  CHECK_EQ(ph_plot_set_colorbar(field_plot, 0), PH_OK);
 
   /* Three points at the same place and one far away: two cells, and with a
    * black-to-white ramp over a [1,3] count domain the busy one comes out white
@@ -902,6 +909,101 @@ int main(void) {
   CHECK(edge_px > 150 && edge_px < 460);
 
   CHECK_EQ(ph_plot_destroy(iso_plot), PH_OK);
+
+  /* ---- the colorbar: a reserved margin, and a gradient that runs the right way ---- */
+
+  ph_plot legend_plot = PH_NULL_HANDLE;
+  CHECK_EQ(ph_plot_create(&patch_plot_desc, &legend_plot), PH_OK);
+
+  /* A 1x2 grid of 0 and 1 through a black-to-white ramp. The bar is the legend
+   * for it: black at the bottom, white at the top, in a margin the plot has to
+   * have widened by itself. */
+  const double legend_values[2] = {0.0, 1.0};
+  ph_colormap_spec legend_map;
+  ph_colormap_spec_init(&legend_map);
+  legend_map.stops = ramp;
+  legend_map.stop_count = 2;
+
+  ph_heatmap_desc legend_heat;
+  ph_heatmap_desc_init(&legend_heat);
+  legend_heat.values = legend_values;
+  legend_heat.cols = 1;
+  legend_heat.rows = 2;
+  legend_heat.x.lo = 0.0;
+  legend_heat.x.hi = 10.0;
+  legend_heat.y.lo = 0.0;
+  legend_heat.y.hi = 10.0;
+  legend_heat.colormap = &legend_map;
+  ph_layer legend_heat_layer = PH_NULL_HANDLE;
+  if (ph_plot_add_heatmap(legend_plot, &legend_heat, &legend_heat_layer) != PH_OK) {
+    printf("  FAIL colorbar heatmap: %s\n", ph_last_error());
+    return 1;
+  }
+
+  unsigned char* legend_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!legend_pixels) return 1;
+  if (ph_plot_render_pixels(legend_plot, patch_w, patch_h, 1.0f, legend_pixels, patch_w * 4) != PH_OK) {
+    printf("  FAIL colorbar render: %s\n", ph_last_error());
+    return 1;
+  }
+
+  /* The reserved margin is 62 px on top of the usual 16, so the bar sits past
+   * column 200 - 16 - 62 = 122. Look for a column out there that is a gradient:
+   * bright near the top of its run and dark near the bottom. */
+  int legend_col = -1;
+  for (int col = 130; col < patch_w && legend_col < 0; col++) {
+    long light = 0, dark = 0;
+    for (int row = 16; row < 160; row++) {
+      const unsigned char* p = legend_pixels + ((size_t)row * patch_w + col) * 4;
+      if (p[3] < 200) continue;
+      if (p[0] > 200 && p[1] > 200 && p[2] > 200) light++;
+      if (p[0] < 60 && p[1] < 60 && p[2] < 60) dark++;
+    }
+    if (light > 8 && dark > 8) legend_col = col;
+  }
+  printf("  colorbar gradient column %d\n", legend_col);
+  CHECK(legend_col >= 130);
+
+  /* And it runs the right way up: the top of the bar is the domain maximum. */
+  long top_light = 0, bottom_light = 0;
+  for (int row = 16; row < 160; row++) {
+    const unsigned char* p = legend_pixels + ((size_t)row * patch_w + legend_col) * 4;
+    if (p[3] < 200 || p[0] < 180) continue;
+    if (row < 88) top_light++;
+    else bottom_light++;
+  }
+  printf("  colorbar light rows: top %ld, bottom %ld\n", top_light, bottom_light);
+  CHECK(top_light > bottom_light);
+
+  long narrow_opaque = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    if (legend_pixels[(size_t)i * 4 + 3] > 200) narrow_opaque++;
+  }
+  free(legend_pixels);
+
+  /* Turning it off gives the margin back, so the plot region grows again. */
+  CHECK_EQ(ph_plot_set_colorbar(legend_plot, 0), PH_OK);
+  unsigned char* wide_pixels = (unsigned char*)malloc((size_t)patch_w * patch_h * 4);
+  if (!wide_pixels) return 1;
+  if (ph_plot_render_pixels(legend_plot, patch_w, patch_h, 1.0f, wide_pixels, patch_w * 4) != PH_OK) {
+    printf("  FAIL colorbar-off render: %s\n", ph_last_error());
+    return 1;
+  }
+  long wide_opaque = 0;
+  for (int i = 0; i < patch_w * patch_h; i++) {
+    if (wide_pixels[(size_t)i * 4 + 3] > 200) wide_opaque++;
+  }
+  free(wide_pixels);
+  /* The heatmap covers the whole region, so its pixel count *is* the region:
+   * 128 x 144 = 18432 without the bar, 66 x 144 = 9504 with it (plus the bar's
+   * own ink, which is why the narrow figure is not simply half). That the wide
+   * one reaches the full region is what says the reservation was real and was
+   * given back. */
+  printf("  colorbar off: %ld opaque px, on: %ld\n", wide_opaque, narrow_opaque);
+  CHECK(wide_opaque > 18432 * 0.95 && wide_opaque < 18432 * 1.05);
+  CHECK(narrow_opaque < 18432 * 0.8);
+
+  CHECK_EQ(ph_plot_destroy(legend_plot), PH_OK);
   ph_shutdown();
 
   eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

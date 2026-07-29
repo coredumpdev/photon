@@ -129,12 +129,15 @@ convenience wrappers above the ABI and the streaming setters below it.
       with both registries, `reverse`/`discrete` folded into one spec, and
       `tests/colormap_test.cpp` checking every sample against numbers printed
       by the TypeScript.
-- [ ] `ph_scatter_desc.color_by` still returns `PH_E_UNSUPPORTED`. The
-      colormaps it was waiting on are there now; what is left is threading a
-      `ph_colormap_spec` through the scatter descriptor.
-- [ ] `render/colorbar.ts` — the `ColorInfo` hook is already in the layer
-      contract as a comment; add the virtual. `Plot::compute_margin` reserves
-      nothing for it yet, and the web's `COLORBAR_GAP` is the number to match.
+- [x] ~~`ph_scatter_desc.color_by`~~ — accepted now that the colormaps exist,
+      with `color_map` beside it. It wins over explicit per-point `colors`, the
+      same way it does in the web core.
+- [x] ~~`render/colorbar.ts`~~ — `Layer::color_info` is a real virtual now, and
+      `Plot::compute_margin` reserves the web's 62 px when any visible layer
+      reports a scale. The web builds the bar out of DOM and a CSS gradient;
+      here it is one filled rect per device pixel row, which is smoother than
+      the 24 stops a browser interpolates between. `ph_plot_set_colorbar` turns
+      it off and gives the margin back.
 
 ### Composed charts — free functions, no new shaders
 

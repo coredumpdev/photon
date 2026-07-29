@@ -28,4 +28,12 @@ std::vector<Tick> with_minor_ticks(const std::vector<Tick>& major, int count);
 /// Default number formatter: compact, avoids noisy trailing decimals.
 std::string default_format(double value);
 
+/**
+ * The colorbar's own formatter, from `compact()` in colorbar.ts: three
+ * significant digits, which is plenty beside a gradient, and a shorter
+ * exponential threshold than an axis uses because the labels sit in a narrow
+ * margin.
+ */
+std::string compact_format(double value);
+
 }  // namespace photon

@@ -176,6 +176,10 @@ internal static class PhotonSmokeTest
 
         CheckEq(ph_plot_set_size(plot, 640, 480), PH_OK, "ph_plot_set_size");
         CheckEq(ph_plot_set_theme(plot, PH_THEME_LIGHT), PH_OK, "ph_plot_set_theme");
+        // On by default; a plot with no colour-mapping layer reserves nothing
+        // for it either way, so this is only the switch being wired.
+        CheckEq(ph_plot_set_colorbar(plot, 0), PH_OK, "ph_plot_set_colorbar");
+        CheckEq(ph_plot_set_colorbar(plot, 1), PH_OK, "ph_plot_set_colorbar(on)");
         // Non-ASCII, so the UTF-8 marshalling is exercised rather than assumed.
         CheckEq(ph_plot_set_title(plot, "Portföy · σ"), PH_OK, "ph_plot_set_title");
         CheckEq(ph_plot_set_title(plot, null!), PH_OK, "ph_plot_set_title(null)");
@@ -184,6 +188,7 @@ internal static class PhotonSmokeTest
         CheckEq(ph_plot_set_margin(plot, in margin), PH_OK, "ph_plot_set_margin");
 
         Ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
+            "ph_plot_set_colorbar",
             "ph_plot_set_title", "ph_plot_set_margin");
         return plot;
     }
@@ -306,6 +311,14 @@ internal static class PhotonSmokeTest
             desc.count = count;
             desc.marker = PH_MARKER_DIAMOND;
             CheckEq(ph_plot_add_scatter(plot, in desc, out scatter), PH_OK, "ph_plot_add_scatter");
+
+            // Colouring by value used to be rejected outright, because
+            // accepting it and drawing one flat colour is the blank-chart
+            // failure by another name. The colormaps exist now.
+            desc.color_by = scatterY.AddrOfPinnedObject();
+            CheckEq(ph_plot_add_scatter(plot, in desc, out var mapped), PH_OK,
+                "a scatter coloured by value");
+            CheckEq(ph_layer_destroy(mapped), PH_OK, "the mapped layer is destroyed");
         }
         finally
         {

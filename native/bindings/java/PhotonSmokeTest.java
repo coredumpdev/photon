@@ -238,6 +238,10 @@ public final class PhotonSmokeTest {
         checkEq(ph_plot_set_theme(plot, PH_THEME_LIGHT), PH_OK, "ph_plot_set_theme");
         checkEq(ph_plot_set_title(plot, utf8(arena, "Portföy · σ")), PH_OK, "ph_plot_set_title");
         checkEq(ph_plot_set_title(plot, MemorySegment.NULL), PH_OK, "ph_plot_set_title(null)");
+        // On by default; a plot with no colour-mapping layer reserves nothing
+        // for it either way, so this is only the switch being wired.
+        checkEq(ph_plot_set_colorbar(plot, 0), PH_OK, "ph_plot_set_colorbar");
+        checkEq(ph_plot_set_colorbar(plot, 1), PH_OK, "ph_plot_set_colorbar(on)");
 
         MemorySegment margin = ph_margin.allocate(arena);
         margin.set(ValueLayout.JAVA_FLOAT, ph_margin.OFFSET_TOP, 20.0f);
@@ -247,7 +251,7 @@ public final class PhotonSmokeTest {
         checkEq(ph_plot_set_margin(plot, margin), PH_OK, "ph_plot_set_margin");
 
         ran("ph_plot_create", "ph_plot_valid", "ph_plot_set_size", "ph_plot_set_theme",
-            "ph_plot_set_title", "ph_plot_set_margin");
+            "ph_plot_set_title", "ph_plot_set_margin", "ph_plot_set_colorbar");
         return plot;
     }
 
@@ -358,6 +362,21 @@ public final class PhotonSmokeTest {
         checkEq(ph_plot_add_scatter(plot, scatterDesc, scatterHandle), PH_OK,
                 "ph_plot_add_scatter");
         long scatter = scatterHandle.get(ValueLayout.JAVA_LONG, 0);
+
+        // Colouring by value used to be rejected outright, because accepting it
+        // and drawing one flat colour is the blank-chart failure by another
+        // name. The colormaps exist now, so it is a normal request.
+        MemorySegment mapped = ph_scatter_desc.allocate(arena);
+        ph_scatter_desc_init(mapped);
+        mapped.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_X, xs);
+        mapped.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_Y, ys);
+        mapped.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_COUNT, count);
+        mapped.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_COLOR_BY, ys);
+        checkEq(ph_plot_add_scatter(plot, mapped, scatterHandle), PH_OK,
+                "a scatter coloured by value");
+        long mappedLayer = scatterHandle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(mappedLayer, bx, by), PH_OK, "colour mapping does not move it");
+        checkEq(ph_layer_destroy(mappedLayer), PH_OK, "the mapped layer is destroyed");
 
         // Streaming: replace the data in place.
         for (int i = 0; i < count; i++) {

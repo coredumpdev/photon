@@ -25,6 +25,23 @@ bool finite(double v) {
   return std::isfinite(v);
 }
 
+/// Turn a descriptor's colormap fields into the internal spec. NULL is viridis.
+photon::color::Spec colormap_spec(const ph_colormap_spec* desc) {
+  photon::color::Spec spec;
+  if (!desc) return spec;
+  if (desc->name) spec.name = desc->name;
+  if (desc->stops && desc->stop_count > 0) {
+    spec.stops.reserve(static_cast<size_t>(desc->stop_count));
+    for (int32_t i = 0; i < desc->stop_count; ++i) {
+      spec.stops.push_back(photon::color::to_rgb(desc->stops[i]));
+    }
+  }
+  spec.reverse = desc->reverse != 0;
+  spec.discrete_steps = desc->discrete_steps;
+  return spec;
+}
+
+
 std::string from_utf8(const char* s) {
   return s ? std::string(s) : std::string();
 }
@@ -849,10 +866,50 @@ ScatterLayer::ScatterLayer(const ph_scatter_desc& desc) {
       colors_[i * 4 + 3] = c.a;
     }
   }
-  // colorBy needs the colormap tables, which land with the colorbar in Faz 4;
-  // until then a caller can pass explicit per-point colours and get the same
-  // picture. Silently ignoring it would be the blank-chart failure mode, so the
-  // ABI reports it instead — see ph_plot_add_scatter.
+  // colorBy wins over explicit colours, the same way it does in the web core:
+  // asking for both is contradictory, and the mapped one is the more specific
+  // request.
+  if (desc.color_by && n > 0) {
+    use_vertex_color_ = true;
+    double lo = desc.color_by_domain.lo;
+    double hi = desc.color_by_domain.hi;
+    if (!(hi > lo)) {
+      lo = std::numeric_limits<double>::infinity();
+      hi = -lo;
+      for (size_t i = 0; i < n; ++i) {
+        const double v = desc.color_by[i];
+        if (!finite(v)) continue;
+        lo = std::min(lo, v);
+        hi = std::max(hi, v);
+      }
+      if (!finite(lo) || !finite(hi)) {
+        lo = 0.0;
+        hi = 1.0;
+      }
+    }
+    color_domain_ = ph_range{lo, hi};
+    const double span = (hi - lo) != 0.0 ? (hi - lo) : 1.0;
+    const photon::color::Spec spec = colormap_spec(desc.color_map);
+    const photon::color::Lut& table = photon::color::lut(spec);
+    color_lut_ = &table;
+    colors_.resize(n * 4);
+    for (size_t i = 0; i < n; ++i) {
+      const photon::color::Rgb c =
+          photon::color::sample(table, (desc.color_by[i] - lo) / span);
+      colors_[i * 4] = c.r;
+      colors_[i * 4 + 1] = c.g;
+      colors_[i * 4 + 2] = c.b;
+      colors_[i * 4 + 3] = 1.0f;
+    }
+  }
+}
+
+bool ScatterLayer::color_info(ColorInfo& out) const {
+  if (!color_lut_) return false;
+  out.lut = color_lut_;
+  out.domain = color_domain_;
+  out.label = name_;
+  return true;
 }
 
 bool ScatterLayer::ensure_gl(Api& api, std::string& error) {
@@ -2178,22 +2235,6 @@ void BoxLayer::release_gl(Api& api) {
 
 namespace {
 
-/// Turn a descriptor's colormap fields into the internal spec. NULL is viridis.
-photon::color::Spec colormap_spec(const ph_colormap_spec* desc) {
-  photon::color::Spec spec;
-  if (!desc) return spec;
-  if (desc->name) spec.name = desc->name;
-  if (desc->stops && desc->stop_count > 0) {
-    spec.stops.reserve(static_cast<size_t>(desc->stop_count));
-    for (int32_t i = 0; i < desc->stop_count; ++i) {
-      spec.stops.push_back(photon::color::to_rgb(desc->stops[i]));
-    }
-  }
-  spec.reverse = desc->reverse != 0;
-  spec.discrete_steps = desc->discrete_steps;
-  return spec;
-}
-
 /// The six vertices of the extent quad: (x, y, u, v), with v following the
 /// texture's row order. `flip_v` puts the first row at the top instead.
 std::array<float, 24> extent_quad(const ph_range& x, const ph_range& y, double x_ref,
@@ -2327,6 +2368,7 @@ HeatmapLayer::HeatmapLayer(const ph_heatmap_desc& desc) {
 
   const photon::color::Spec spec = colormap_spec(desc.colormap);
   const photon::color::Lut& table = photon::color::lut(spec);
+  color_lut_ = &table;
 
   double lo = desc.domain.lo;
   double hi = desc.domain.hi;
@@ -2365,6 +2407,14 @@ bool HeatmapLayer::bounds(ph_range& x, ph_range& y) const {
   if (cols_ == 0 || rows_ == 0) return false;
   x = extent_x_;
   y = extent_y_;
+  return true;
+}
+
+bool HeatmapLayer::color_info(ColorInfo& out) const {
+  if (!color_lut_) return false;
+  out.lut = color_lut_;
+  out.domain = value_domain_;
+  out.label = name_;
   return true;
 }
 
@@ -2959,6 +3009,7 @@ HexbinLayer::HexbinLayer(const ph_hexbin_desc& desc) {
 
   const photon::color::Spec spec = colormap_spec(desc.colormap);
   const photon::color::Lut& table = photon::color::lut(spec);
+  color_lut_ = &table;
   centers_.resize(cells.size() * 2);
   colors_.resize(cells.size() * 4);
   for (size_t k = 0; k < cells.size(); ++k) {
@@ -2977,6 +3028,14 @@ bool HexbinLayer::bounds(ph_range& x, ph_range& y) const {
   if (!hex_bounds_) return false;
   x = hex_x_;
   y = hex_y_;
+  return true;
+}
+
+bool HexbinLayer::color_info(ColorInfo& out) const {
+  if (!color_lut_) return false;
+  out.lut = color_lut_;
+  out.domain = count_domain_;
+  out.label = name_;
   return true;
 }
 
@@ -3114,6 +3173,7 @@ QuiverLayer::QuiverLayer(const ph_quiver_desc& desc) {
   const double span = (hi - lo) != 0.0 ? (hi - lo) : 1.0;
   const photon::color::Spec spec = colormap_spec(desc.color_map);
   const photon::color::Lut& table = photon::color::lut(spec);
+  if (vertex_color_) color_lut_ = &table;
 
   arrows_.resize(n * 4);
   colors_.resize(n * 4);
@@ -3156,6 +3216,14 @@ bool QuiverLayer::bounds(ph_range& x, ph_range& y) const {
   if (!quiver_bounds_) return false;
   x = quiver_x_;
   y = quiver_y_;
+  return true;
+}
+
+bool QuiverLayer::color_info(ColorInfo& out) const {
+  if (!color_lut_) return false;
+  out.lut = color_lut_;
+  out.domain = value_domain_;
+  out.label = name_;
   return true;
 }
 
@@ -3377,6 +3445,8 @@ ContourLayer::ContourLayer(const ph_contour_desc& desc) {
   const Rgba fixed = unpack_color_exact(desc.color);
   const photon::color::Spec spec = colormap_spec(desc.colormap);
   const photon::color::Lut& table = photon::color::lut(spec);
+  // One flat colour means there is nothing for a colorbar to say.
+  if (!fixed_color) color_lut_ = &table;
   const double level_span = (vmax - vmin) != 0.0 ? (vmax - vmin) : 1.0;
 
   const double x_step = (extent_x_.hi - extent_x_.lo) / static_cast<double>(cols - 1);
@@ -3454,6 +3524,14 @@ bool ContourLayer::bounds(ph_range& x, ph_range& y) const {
   if (!has_extent_) return false;
   x = extent_x_;
   y = extent_y_;
+  return true;
+}
+
+bool ContourLayer::color_info(ColorInfo& out) const {
+  if (!color_lut_) return false;
+  out.lut = color_lut_;
+  out.domain = value_domain_;
+  out.label = name_;
   return true;
 }
 

@@ -180,6 +180,97 @@ void draw_y_axis(Painter& painter, const Rect& region, const Scale& scale,
   }
 }
 
+namespace {
+
+/// The colorbar's own numbers, from ColorbarOptions' defaults in colorbar.ts.
+constexpr double kBarWidth = 12.0;
+constexpr double kBarHeightFraction = 0.72;
+constexpr int kBarTickTarget = 5;
+constexpr double kBarLabelSize = 10.0;
+/// Gap between the region's right edge and the bar, and bar to its labels.
+constexpr double kBarLeftGap = 12.0;
+constexpr double kBarLabelGap = 4.0;
+constexpr double kBarCaptionGap = 3.0;
+
+/// Round tick values inside the domain — the same nice numbers an axis picks.
+/// A very narrow domain can round every candidate away, so the ends stand in.
+std::vector<double> bar_ticks(const ph_range& domain) {
+  std::vector<double> out;
+  if (!std::isfinite(domain.lo) || !std::isfinite(domain.hi)) return out;
+  if (domain.lo == domain.hi) {
+    out.push_back(domain.lo);
+    return out;
+  }
+  for (const Tick& tick : auto_ticks(domain.lo, domain.hi, kBarTickTarget)) {
+    if (tick.value >= domain.lo && tick.value <= domain.hi) out.push_back(tick.value);
+  }
+  if (out.size() < 2) {
+    out.clear();
+    out.push_back(domain.lo);
+    out.push_back(domain.hi);
+  }
+  return out;
+}
+
+}  // namespace
+
+void draw_colorbars(Painter& painter, const Rect& region,
+                    const std::vector<ColorbarEntry>& entries, int extra_right_axes,
+                    ph_theme theme) {
+  if (entries.empty()) return;
+  const Theme& colors = theme_for(theme);
+  const Rgba text = with_alpha(unpack_color_exact(colors.text), 0.85f);
+  const Rgba border = unpack_color_exact(colors.axis);
+
+  const double left = region.right() + extra_right_axes * 52.0 + kBarLeftGap;
+  // The stack shares the region's height, minus room for the captions when
+  // there is more than one bar — the same arithmetic renderColorbars does.
+  const double per = (region.height * kBarHeightFraction) / static_cast<double>(entries.size()) -
+                     (entries.size() > 1 ? 22.0 : 0.0);
+  const double bar_height = std::max(24.0, per);
+  const double slot = region.height / static_cast<double>(entries.size());
+
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const ColorbarEntry& entry = entries[i];
+    if (!entry.lut) continue;
+    double top = region.top + static_cast<double>(i) * slot;
+    if (!entry.label.empty()) {
+      painter.label(entry.label, left, top, text::Align::Left, text::Baseline::Top, text,
+                    kBarLabelSize);
+      top += kBarLabelSize + kBarCaptionGap;
+    }
+
+    // One filled row per device pixel: the ramp is a lookup, so a smooth
+    // gradient costs the same as a banded one and reads better.
+    const int rows = std::max(1, static_cast<int>(std::lround(bar_height * painter.dpr())));
+    const double row_height = bar_height / static_cast<double>(rows);
+    for (int r = 0; r < rows; ++r) {
+      // Row 0 is the top of the bar and the top is the domain maximum, which is
+      // what puts the minimum next to the lowest tick label.
+      const double t = 1.0 - (static_cast<double>(r) + 0.5) / static_cast<double>(rows);
+      const photon::color::Rgb c = photon::color::sample(*entry.lut, t);
+      painter.fill(left, top + static_cast<double>(r) * row_height, kBarWidth,
+                   row_height + 0.5, Rgba{c.r, c.g, c.b, 1.0f});
+    }
+    painter.hairline(true, crisp(left), top, top + bar_height, 1.0, border);
+    painter.hairline(true, crisp(left + kBarWidth), top, top + bar_height, 1.0, border);
+    painter.hairline(false, crisp(top), left, left + kBarWidth, 1.0, border);
+    painter.hairline(false, crisp(top + bar_height), left, left + kBarWidth, 1.0, border);
+
+    const double span = (entry.domain.hi - entry.domain.lo) != 0.0
+                            ? (entry.domain.hi - entry.domain.lo)
+                            : 1.0;
+    for (const double value : bar_ticks(entry.domain)) {
+      // Each label sits at its true fraction of the bar, so it names the exact
+      // colour beside it — evenly spaced labels would lie whenever the nice
+      // tick values are not evenly spaced inside the domain.
+      const double y = top + (1.0 - (value - entry.domain.lo) / span) * bar_height;
+      painter.label(compact_format(value), left + kBarWidth + kBarLabelGap, y, text::Align::Left,
+                    text::Baseline::Middle, text, kBarLabelSize);
+    }
+  }
+}
+
 void draw_title(Painter& painter, const Rect& region, const std::string& title, ph_theme theme) {
   if (title.empty()) return;
   const Rgba color = unpack_color_exact(theme_for(theme).title);

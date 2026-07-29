@@ -115,4 +115,12 @@ std::string default_format(double value) {
   return format_c(value, std::chars_format::general, 6);
 }
 
+std::string compact_format(double value) {
+  if (value == 0.0) return "0";
+  if (!std::isfinite(value)) return default_format(value);
+  const double abs = std::fabs(value);
+  if (abs >= 1e5 || abs < 1e-3) return exponential_1(value);
+  return format_c(value, std::chars_format::general, 3);
+}
+
 }  // namespace photon

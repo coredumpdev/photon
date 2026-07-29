@@ -472,7 +472,7 @@ public final class Photon {
         }
     }
 
-    /** ph_scatter_desc — 112 bytes, alignment 8. */
+    /** ph_scatter_desc — 120 bytes, alignment 8. */
     public static final class ph_scatter_desc {
         private ph_scatter_desc() {}
 
@@ -493,6 +493,7 @@ public final class Photon {
             ValueLayout.ADDRESS.withName("y_axis"),
             ValueLayout.ADDRESS.withName("color_by"),
             ph_range.LAYOUT.withName("color_by_domain"),
+            ValueLayout.ADDRESS.withName("color_map"),
             ValueLayout.JAVA_INT.withName("render_type"),
             MemoryLayout.paddingLayout(4)
         ).withName("ph_scatter_desc");
@@ -512,7 +513,8 @@ public final class Photon {
         public static final long OFFSET_Y_AXIS = 72L;
         public static final long OFFSET_COLOR_BY = 80L;
         public static final long OFFSET_COLOR_BY_DOMAIN = 88L;
-        public static final long OFFSET_RENDER_TYPE = 104L;
+        public static final long OFFSET_COLOR_MAP = 104L;
+        public static final long OFFSET_RENDER_TYPE = 112L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1351,6 +1353,7 @@ public final class Photon {
         "ph_plot_set_margin",
         "ph_plot_set_theme",
         "ph_plot_set_title",
+        "ph_plot_set_colorbar",
         "ph_plot_set_scale",
         "ph_plot_set_domain",
         "ph_plot_get_domain",
@@ -1445,6 +1448,7 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_SET_MARGIN = handle("ph_plot_set_margin", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_THEME = handle("ph_plot_set_theme", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_TITLE = handle("ph_plot_set_title", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_SET_COLORBAR = handle("ph_plot_set_colorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_SCALE = handle("ph_plot_set_scale", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_DOMAIN = handle("ph_plot_set_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ph_range.LAYOUT));
     private static final MethodHandle PH_PLOT_GET_DOMAIN = handle("ph_plot_get_domain", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -1850,6 +1854,14 @@ public final class Photon {
             return (int) PH_PLOT_SET_TITLE.invokeExact(plot, title);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_set_title failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_set_colorbar(long plot, int enabled) {
+        try {
+            return (int) PH_PLOT_SET_COLORBAR.invokeExact(plot, enabled);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_colorbar failed", photonFailure);
         }
     }
 

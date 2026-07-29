@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "axes/ticks.hpp"
+#include "color/colormap.hpp"
 #include "render/primitives.hpp"
 #include "render/theme.hpp"
 #include "text/text.hpp"
@@ -97,6 +98,27 @@ struct YAxisPlacement {
 void draw_y_axis(Painter& painter, const Rect& region, const Scale& scale,
                  const std::vector<Tick>& ticks, const AxisStyle& style,
                  const std::string& title, const YAxisPlacement& placement);
+
+/// One colour scale to draw a bar for. Mirrors core `ColorInfo`, resolved.
+struct ColorbarEntry {
+  const photon::color::Lut* lut = nullptr;
+  ph_range domain{0.0, 1.0};
+  std::string label;
+};
+
+/// Right-margin space a colorbar needs: the bar plus its tick labels.
+constexpr double kColorbarGap = 62.0;
+
+/**
+ * The colorbar stack, in the right margin the plot reserved for it.
+ *
+ * The web builds this out of DOM and a CSS gradient; here the gradient is one
+ * filled rect per device pixel row, which is smoother than the 24 stops a
+ * browser interpolates between and costs nothing at this size.
+ */
+void draw_colorbars(Painter& painter, const Rect& region,
+                    const std::vector<ColorbarEntry>& entries, int extra_right_axes,
+                    ph_theme theme);
 
 /// The plot title, centred in the strip reserved above the region.
 void draw_title(Painter& painter, const Rect& region, const std::string& title, ph_theme theme);

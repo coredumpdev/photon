@@ -59,6 +59,8 @@ class Plot {
   PlotRegion region() const;
   /// The base margin grown for the title strip and any extra y axes.
   ph_margin compute_margin() const;
+  /// The colour scales the visible layers report, in draw order.
+  std::vector<render::ColorbarEntry> color_scales() const;
   /// Where each y axis line sits, parallel to the axis list.
   std::vector<render::YAxisPlacement> y_axis_placements(const PlotRegion& r) const;
 
@@ -83,6 +85,10 @@ class Plot {
   Layer* add_layer(std::unique_ptr<Layer> layer);
   bool remove_layer(Layer* layer);
   const std::vector<std::unique_ptr<Layer>>& layers() const { return layers_; }
+
+  /// Turn the colorbar stack off. On by default, as in the web core.
+  void set_colorbar(bool on) { colorbar_ = on; }
+  bool colorbar() const { return colorbar_; }
 
   /// Handles minted for this plot's layers, so teardown can invalidate them.
   std::vector<uint64_t> layer_handles;
@@ -198,6 +204,7 @@ class Plot {
   bool interactive_ = true;
   bool hover_enabled_ = true;
   bool crosshair_ = true;
+  bool colorbar_ = true;
   bool equal_aspect_ = false;
   bool bounded_pan_ = false;
 

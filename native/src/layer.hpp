@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "color.hpp"
+#include "color/colormap.hpp"
 #include "gl/gl.hpp"
 #include "gl/transform.hpp"
 
@@ -41,6 +42,20 @@ struct DrawState {
   float dpr = 1.0f;
 };
 
+/**
+ * A continuous colour scale a layer maps values through, so the plot can draw
+ * the legend for it. Mirrors core `ColorInfo`.
+ *
+ * The table is a pointer rather than a copy because `color::lut` hands back a
+ * reference into a cache that only ever grows — it stays valid for the life of
+ * the process, which is longer than any layer.
+ */
+struct ColorInfo {
+  const photon::color::Lut* lut = nullptr;
+  ph_range domain{0.0, 1.0};
+  std::string label;
+};
+
 class Layer {
  public:
   virtual ~Layer() = default;
@@ -54,6 +69,12 @@ class Layer {
   /// Release GL objects. Requires the owning context to be current.
   /// Never deletes a cached program — those are shared across every layer.
   virtual void release_gl(gl::Api& api) = 0;
+
+  /// The colour scale this layer maps values through, if it maps any.
+  virtual bool color_info(ColorInfo& out) const {
+    (void)out;
+    return false;
+  }
 
   const std::string& y_axis() const { return y_axis_; }
   /// Rebind to another y axis. Used when the axis a layer pointed at is removed.
@@ -380,6 +401,7 @@ class ContourLayer : public Layer {
  public:
   explicit ContourLayer(const ph_contour_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
+  bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -393,7 +415,8 @@ class ContourLayer : public Layer {
   bool has_extent_ = false;
   double x_ref_ = 0.0;
   double y_ref_ = 0.0;
-  /// The value range the level colours span — what a colorbar would caption.
+  /// Set only when the levels take their colours from a ramp.
+  const photon::color::Lut* color_lut_ = nullptr;
   ph_range value_domain_{0.0, 1.0};
   ph_render_type render_type_ = PH_RENDER_STATIC;
   bool dirty_ = true;
@@ -449,6 +472,7 @@ class HexbinLayer : public Layer {
  public:
   explicit HexbinLayer(const ph_hexbin_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
+  bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -463,7 +487,8 @@ class HexbinLayer : public Layer {
   ph_range hex_x_{0.0, 0.0};
   ph_range hex_y_{0.0, 0.0};
   bool hex_bounds_ = false;
-  /// The count range the colours span — what a colorbar would caption.
+  /// The ramp and the count range it spans.
+  const photon::color::Lut* color_lut_ = nullptr;
   ph_range count_domain_{1.0, 1.0};
   ph_render_type render_type_ = PH_RENDER_STATIC;
   bool dirty_ = true;
@@ -484,6 +509,7 @@ class QuiverLayer : public Layer {
  public:
   explicit QuiverLayer(const ph_quiver_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
+  bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -501,6 +527,7 @@ class QuiverLayer : public Layer {
   ph_range quiver_x_{0.0, 0.0};
   ph_range quiver_y_{0.0, 0.0};
   bool quiver_bounds_ = false;
+  const photon::color::Lut* color_lut_ = nullptr;
   ph_range value_domain_{0.0, 1.0};
   ph_render_type render_type_ = PH_RENDER_STATIC;
   bool dirty_ = true;
@@ -606,6 +633,7 @@ class HeatmapLayer : public Layer {
  public:
   explicit HeatmapLayer(const ph_heatmap_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
+  bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -621,7 +649,8 @@ class HeatmapLayer : public Layer {
   double x_ref_ = 0.0;
   double y_ref_ = 0.0;
   bool smooth_ = true;
-  /// The value range the colours span, after any auto-fit — what a colorbar needs.
+  /// The ramp and the value range it spans, after any auto-fit.
+  const photon::color::Lut* color_lut_ = nullptr;
   ph_range value_domain_{0.0, 1.0};
   std::array<float, 24> quad_{};
 
@@ -693,6 +722,7 @@ class PatchesLayer : public Layer {
 class ScatterLayer : public XYLayer {
  public:
   explicit ScatterLayer(const ph_scatter_desc& desc);
+  bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -706,6 +736,9 @@ class ScatterLayer : public XYLayer {
   ph_marker marker_ = PH_MARKER_CIRCLE;
   ph_render_type render_type_ = PH_RENDER_STATIC;
   bool use_vertex_color_ = false;
+  /// Set only when `color_by` was given: the ramp and the range it spans.
+  const photon::color::Lut* color_lut_ = nullptr;
+  ph_range color_domain_{0.0, 1.0};
 
   gl::GLuint vao_ = 0;
   gl::GLuint corner_buffer_ = 0;

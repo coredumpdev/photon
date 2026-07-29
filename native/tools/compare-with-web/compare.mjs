@@ -212,7 +212,13 @@ const PANELS = [
   ["Revenue", 2560, 0],
   ["Funnel", 0, 420], ["Share", 640, 420], ["Impulse", 1280, 420], ["Yield", 1920, 420],
   ["Latency", 2560, 420],
-  ["Field", 0, 840], ["Sprite", 640, 840], ["Candles", 1280, 840], ["Bars", 1920, 840],
+  // Field's heatmap covers its whole region, so no grid line is visible in
+  // either image and there is nothing to compare. Worse than nothing: the two
+  // GL implementations resolve the quad's edge column differently, and the
+  // native blend lands within a level of the grid colour. Comparing the region
+  // still means something here; comparing "grid lines" does not.
+  ["Field", 0, 840, { grid: false }],
+  ["Sprite", 640, 840], ["Candles", 1280, 840], ["Bars", 1920, 840],
   ["Density", 2560, 840],
   ["Flow", 0, 1260], ["Contour", 640, 1260], ["Network", 1280, 1260],
 ];
@@ -224,7 +230,7 @@ const complain = (message) => {
   failures++;
 };
 
-for (const [name, ox, oy] of PANELS) {
+for (const [name, ox, oy, opts] of PANELS) {
   const nativeRegion = findRegion(nativeImage, ox, oy, CELL_WIDTH, CELL_HEIGHT);
   const webRegion = findRegion(webImage, ox, oy, CELL_WIDTH, CELL_HEIGHT);
   if (!nativeRegion || !webRegion) {
@@ -236,6 +242,12 @@ for (const [name, ox, oy] of PANELS) {
     .filter((key) => nativeRegion[key] !== webRegion[key]);
   if (same.length) {
     complain(`${name}: region ${JSON.stringify(nativeRegion)} vs ${JSON.stringify(webRegion)}`);
+  }
+
+  if (opts?.grid === false) {
+    console.log(`  ${name.padEnd(10)} region ${nativeRegion.left},${nativeRegion.top} ` +
+                `${nativeRegion.width}x${nativeRegion.height}  grid not comparable`);
+    continue;
   }
 
   const nativeGrid = findGrid(nativeImage, ox, oy, nativeRegion);

@@ -151,7 +151,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_line_desc, dash_count) == 80, "ph_line_desc.dash_co
 PH_ASSERT_LAYOUT(offsetof(ph_line_desc, no_decimate) == 84, "ph_line_desc.no_decimate offset");
 PH_ASSERT_LAYOUT(offsetof(ph_line_desc, render_type) == 88, "ph_line_desc.render_type offset");
 
-PH_ASSERT_LAYOUT(sizeof(ph_scatter_desc) == 112, "ph_scatter_desc size");
+PH_ASSERT_LAYOUT(sizeof(ph_scatter_desc) == 120, "ph_scatter_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_scatter_desc) == 8, "ph_scatter_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, struct_size) == 0, "ph_scatter_desc.struct_size offset");
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, x) == 8, "ph_scatter_desc.x offset");
@@ -166,7 +166,8 @@ PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, name) == 64, "ph_scatter_desc.name of
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, y_axis) == 72, "ph_scatter_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, color_by) == 80, "ph_scatter_desc.color_by offset");
 PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, color_by_domain) == 88, "ph_scatter_desc.color_by_domain offset");
-PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, render_type) == 104, "ph_scatter_desc.render_type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, color_map) == 104, "ph_scatter_desc.color_map offset");
+PH_ASSERT_LAYOUT(offsetof(ph_scatter_desc, render_type) == 112, "ph_scatter_desc.render_type offset");
 
 PH_ASSERT_LAYOUT(sizeof(ph_area_desc) == 80, "ph_area_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_area_desc) == 8, "ph_area_desc alignment");
