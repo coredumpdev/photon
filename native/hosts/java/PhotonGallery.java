@@ -67,6 +67,9 @@ public final class PhotonGallery {
 
     private static final long[] plots = new long[PANELS];
     private static long streamLayer = PH_NULL_HANDLE;
+    private static long fieldLayer = PH_NULL_HANDLE;
+    private static MemorySegment fieldValues;
+    private static MemorySegment fieldDesc;
     private static MemorySegment streamX;
     private static MemorySegment streamY;
 
@@ -558,9 +561,8 @@ public final class PhotonGallery {
         }
     }
 
-    /** Panel 10 — a scalar field, coloured by the core rather than by the caller. */
-    private static void buildField(long plot) {
-        MemorySegment values = doubles(FIELD_COLS * FIELD_ROWS);
+    /** The interference field at time `t`. It travels, driven by the clock. */
+    private static void fillField(MemorySegment values, double t) {
         for (int row = 0; row < FIELD_ROWS; row++) {
             for (int col = 0; col < FIELD_COLS; col++) {
                 double x = (col - FIELD_COLS * 0.5) * 0.12;
@@ -568,9 +570,16 @@ public final class PhotonGallery {
                 double r1 = Math.sqrt((x + 2.0) * (x + 2.0) + y * y);
                 double r2 = Math.sqrt((x - 2.0) * (x - 2.0) + y * y);
                 values.setAtIndex(ValueLayout.JAVA_DOUBLE, row * FIELD_COLS + col,
-                                  Math.sin(r1 * 3.0) + Math.sin(r2 * 3.0));
+                                  Math.sin(r1 * 3.0 - t) + Math.sin(r2 * 3.0 - t));
             }
         }
+    }
+
+    /** Panel 10 — a scalar field, coloured by the core rather than by the caller. */
+    private static void buildField(long plot) {
+        MemorySegment values = doubles(FIELD_COLS * FIELD_ROWS);
+        fillField(values, 0.0);
+        fieldValues = values;
 
         setTitle(plot, "Field");
         styleAxis(plot, "x", "x", 0);
@@ -592,15 +601,18 @@ public final class PhotonGallery {
         desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_Y + ph_range.OFFSET_LO, -4.5);
         desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_Y + ph_range.OFFSET_HI, 4.5);
         desc.set(ValueLayout.ADDRESS, ph_heatmap_desc.OFFSET_COLORMAP, cmap);
-
-        MemorySegment domain = ph_range.allocate(ARENA);
-        ph_symmetric_domain(values, FIELD_COLS * FIELD_ROWS, 0.0, domain);
-        MemorySegment.copy(domain, 0, desc, ph_heatmap_desc.OFFSET_DOMAIN, ph_range.SIZE);
+        // A fixed domain, so the colours mean the same thing from frame to
+        // frame — an auto-fit one would rescale as the waves move.
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_DOMAIN + ph_range.OFFSET_LO, -2.0);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_heatmap_desc.OFFSET_DOMAIN + ph_range.OFFSET_HI, 2.0);
+        desc.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_RENDER_TYPE, PH_RENDER_DYNAMIC);
+        fieldDesc = desc;
 
         MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
         if (ph_plot_add_heatmap(plot, desc, out) != PH_OK) {
             throw new IllegalStateException(Photon.lastError());
         }
+        fieldLayer = out.get(ValueLayout.JAVA_LONG, 0);
     }
 
     /** Panel 11 — RGBA pixels placed in data space, at two filters. */
@@ -952,6 +964,13 @@ public final class PhotonGallery {
     }
 
     private static void advanceStream(double seconds) {
+        if (fieldLayer != PH_NULL_HANDLE) {
+            // Two circular waves travelling outwards — the case a heatmap
+            // setter is for, and the reason the layer keeps its texture instead
+            // of being destroyed and re-added sixty times a second.
+            fillField(fieldValues, seconds * 2.0);
+            ph_layer_set_heatmap(fieldLayer, fieldDesc);
+        }
         for (int i = 0; i < STREAM_POINTS; i++) {
             double phase = seconds * 2.0 + i * 0.035;
             streamY.setAtIndex(ValueLayout.JAVA_DOUBLE, i,

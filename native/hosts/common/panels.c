@@ -75,6 +75,9 @@ struct ph_panels {
   ph_box_group boxes[BOXES];
 
   double field[FIELD_COLS * FIELD_ROWS];
+  ph_heatmap_desc field_desc;
+  ph_colormap_spec field_map;
+  ph_layer field_layer;
   unsigned char sprite[SPRITE * SPRITE * 4];
 
   double session_index[SESSIONS];
@@ -101,6 +104,19 @@ static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatte
                                               "Candles", "Bars",         "Density", "Flow",
                                               "Contour", "Network"};
 
+/** The interference field at time `t`. Shared by the initial bake and the clock. */
+static void fill_field(ph_panels* p, double t) {
+  for (int row = 0; row < FIELD_ROWS; row++) {
+    for (int col = 0; col < FIELD_COLS; col++) {
+      const double x = (col - FIELD_COLS * 0.5) * 0.12;
+      const double y = (row - FIELD_ROWS * 0.5) * 0.12;
+      const double r1 = sqrt((x + 2.0) * (x + 2.0) + y * y);
+      const double r2 = sqrt((x - 2.0) * (x - 2.0) + y * y);
+      p->field[row * FIELD_COLS + col] = sin(r1 * 3.0 - t) + sin(r2 * 3.0 - t);
+    }
+  }
+}
+
 static ph_color parse(const char* css) {
   ph_color out = PH_COLOR_AUTO;
   ph_color_parse(css, &out);
@@ -120,6 +136,7 @@ ph_panels* ph_panels_create(void) {
   ph_panels* p = (ph_panels*)calloc(1, sizeof(ph_panels));
   if (!p) return NULL;
   p->stream_layer = PH_NULL_HANDLE;
+  p->field_layer = PH_NULL_HANDLE;
 
   for (int i = 0; i < SAMPLES; i++) {
     const double t = i * 0.05;
@@ -242,16 +259,9 @@ ph_panels* ph_panels_create(void) {
   p->boxes[4].color = parse("#f472b6");
 
   /* Two interfering circular waves — a field whose structure survives being
-   * squeezed into a small cell, which is what makes it worth colouring. */
-  for (int row = 0; row < FIELD_ROWS; row++) {
-    for (int col = 0; col < FIELD_COLS; col++) {
-      const double x = (col - FIELD_COLS * 0.5) * 0.12;
-      const double y = (row - FIELD_ROWS * 0.5) * 0.12;
-      const double r1 = sqrt((x + 2.0) * (x + 2.0) + y * y);
-      const double r2 = sqrt((x - 2.0) * (x - 2.0) + y * y);
-      p->field[row * FIELD_COLS + col] = sin(r1 * 3.0) + sin(r2 * 3.0);
-    }
-  }
+   * squeezed into a small cell, which is what makes it worth colouring. It
+   * travels; ph_panels_advance re-bakes it from the same function. */
+  fill_field(p, 0.0);
 
   /* A 16x16 RGBA sprite: a soft disc with a hard ring, written top row first
    * the way a decoded image arrives, so the layer's default orientation is the
@@ -612,27 +622,27 @@ static void build_field(ph_panels* p, ph_plot plot) {
   style_axis(plot, "x", "x", 0);
   style_axis(plot, "y", "y", 0);
 
-  ph_colormap_spec cmap;
-  ph_colormap_spec_init(&cmap);
+  ph_colormap_spec_init(&p->field_map);
   /* Diverging, because the field is signed and its zero means something —
    * paired with a domain centred on it, which is what symmetric_domain is for. */
-  cmap.name = "RdBu";
-  ph_range domain;
-  ph_symmetric_domain(p->field, FIELD_COLS * FIELD_ROWS, 0.0, &domain);
+  p->field_map.name = "RdBu";
 
-  ph_heatmap_desc heat;
-  ph_heatmap_desc_init(&heat);
-  heat.values = p->field;
-  heat.cols = FIELD_COLS;
-  heat.rows = FIELD_ROWS;
-  heat.x.lo = -6.0;
-  heat.x.hi = 6.0;
-  heat.y.lo = -4.5;
-  heat.y.hi = 4.5;
-  heat.colormap = &cmap;
-  heat.domain = domain;
-  ph_layer layer = PH_NULL_HANDLE;
-  ph_plot_add_heatmap(plot, &heat, &layer);
+  ph_heatmap_desc_init(&p->field_desc);
+  p->field_desc.values = p->field;
+  p->field_desc.cols = FIELD_COLS;
+  p->field_desc.rows = FIELD_ROWS;
+  p->field_desc.x.lo = -6.0;
+  p->field_desc.x.hi = 6.0;
+  p->field_desc.y.lo = -4.5;
+  p->field_desc.y.hi = 4.5;
+  p->field_desc.colormap = &p->field_map;
+  /* A fixed domain, so the colours mean the same thing from frame to frame —
+   * an auto-fit one would rescale as the waves move and hide the motion. */
+  p->field_desc.domain.lo = -2.0;
+  p->field_desc.domain.hi = 2.0;
+  /* DYNAMIC, because ph_panels_advance re-bakes this every frame. */
+  p->field_desc.render_type = PH_RENDER_DYNAMIC;
+  ph_plot_add_heatmap(plot, &p->field_desc, &p->field_layer);
 }
 
 /* Panel 11 — RGBA pixels placed in data space, with a line for scale. */
@@ -876,7 +886,15 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
 }
 
 void ph_panels_advance(ph_panels* panels, double seconds) {
-  if (!panels || panels->stream_layer == PH_NULL_HANDLE) return;
+  if (!panels) return;
+  if (panels->field_layer != PH_NULL_HANDLE) {
+    /* Two circular waves travelling outwards — the case a heatmap setter is
+     * for, and the reason the layer keeps its texture instead of being
+     * destroyed and re-added sixty times a second. */
+    fill_field(panels, seconds * 2.0);
+    ph_layer_set_heatmap(panels->field_layer, &panels->field_desc);
+  }
+  if (panels->stream_layer == PH_NULL_HANDLE) return;
   for (int i = 0; i < STREAM_POINTS; i++) {
     const double phase = seconds * 2.0 + i * 0.035;
     panels->stream_y[i] =

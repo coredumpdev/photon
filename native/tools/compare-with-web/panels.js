@@ -7,7 +7,7 @@
  * if one changes, both must.
  */
 
-import { Plot, symmetricDomain } from "@photonviz/core";
+import { Plot } from "@photonviz/core";
 
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
@@ -281,7 +281,8 @@ function latency(container) {
   return plot;
 }
 
-function field(container) {
+/** The interference field at time `t` — it travels, driven by the same clock. */
+function fieldValues(t) {
   const values = new Float64Array(FIELD_COLS * FIELD_ROWS);
   for (let row = 0; row < FIELD_ROWS; row++) {
     for (let col = 0; col < FIELD_COLS; col++) {
@@ -289,22 +290,27 @@ function field(container) {
       const y = (row - FIELD_ROWS * 0.5) * 0.12;
       const r1 = Math.sqrt((x + 2) * (x + 2) + y * y);
       const r2 = Math.sqrt((x - 2) * (x - 2) + y * y);
-      values[row * FIELD_COLS + col] = Math.sin(r1 * 3) + Math.sin(r2 * 3);
+      values[row * FIELD_COLS + col] = Math.sin(r1 * 3 - t) + Math.sin(r2 * 3 - t);
     }
   }
+  return values;
+}
 
+function field(container) {
   const plot = new Plot(container, {
     ...common,
     title: "Field",
     axes: { x: { title: "x" }, y: { title: "y" } },
   });
   // Diverging, because the field is signed and its zero means something —
-  // paired with a domain centred on it.
+  // paired with a fixed domain centred on it, so the colours mean the same
+  // thing from frame to frame as the waves travel.
   plot.addHeatmap({
-    values, cols: FIELD_COLS, rows: FIELD_ROWS,
+    values: fieldValues(STREAM_SECONDS * 2),
+    cols: FIELD_COLS, rows: FIELD_ROWS,
     extent: { x: [-6, 6], y: [-4.5, 4.5] },
     colormap: "RdBu",
-    domain: symmetricDomain(values, 0),
+    domain: [-2, 2],
   });
   return plot;
 }
@@ -462,16 +468,8 @@ function flow(container) {
 }
 
 function contour(container) {
-  const values = new Float64Array(FIELD_COLS * FIELD_ROWS);
-  for (let row = 0; row < FIELD_ROWS; row++) {
-    for (let col = 0; col < FIELD_COLS; col++) {
-      const x = (col - FIELD_COLS * 0.5) * 0.12;
-      const y = (row - FIELD_ROWS * 0.5) * 0.12;
-      const r1 = Math.sqrt((x + 2) * (x + 2) + y * y);
-      const r2 = Math.sqrt((x - 2) * (x - 2) + y * y);
-      values[row * FIELD_COLS + col] = Math.sin(r1 * 3) + Math.sin(r2 * 3);
-    }
-  }
+  // The contour panel is the *static* field: only the heatmap streams.
+  const values = fieldValues(0);
 
   const plot = new Plot(container, {
     ...common,

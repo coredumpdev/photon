@@ -1186,6 +1186,10 @@ void PatchesLayer::release_gl(Api& api) {
 // -- AreaLayer --------------------------------------------------------------
 
 AreaLayer::AreaLayer(const ph_area_desc& desc) {
+  set_data(desc);
+}
+
+void AreaLayer::set_data(const ph_area_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   // The core's default is a translucent blue rather than the opaque series
@@ -1306,6 +1310,10 @@ void AreaLayer::release_gl(Api& api) {
 // -- BarLayer ---------------------------------------------------------------
 
 BarLayer::BarLayer(const ph_bar_desc& desc) {
+  set_data(desc);
+}
+
+void BarLayer::set_data(const ph_bar_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   color_ = desc.color;
@@ -1816,6 +1824,10 @@ void StemLayer::release_gl(Api& api) {
 // -- ErrorBarLayer ----------------------------------------------------------
 
 ErrorBarLayer::ErrorBarLayer(const ph_errorbar_desc& desc) {
+  set_data(desc);
+}
+
+void ErrorBarLayer::set_data(const ph_errorbar_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   color_ = desc.color;
@@ -2381,6 +2393,10 @@ bool draw_quad(const DrawState& state, GLuint vao, GLuint texture, double x_ref,
 // -- HeatmapLayer -----------------------------------------------------------
 
 HeatmapLayer::HeatmapLayer(const ph_heatmap_desc& desc) {
+  set_data(desc);
+}
+
+void HeatmapLayer::set_data(const ph_heatmap_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   smooth_ = desc.no_smooth == 0;
@@ -2609,6 +2625,10 @@ void OhlcSeries::release_gl(Api& api) {
 // -- CandlestickLayer -------------------------------------------------------
 
 CandlestickLayer::CandlestickLayer(const ph_candlestick_desc& desc) {
+  set_data(desc);
+}
+
+void CandlestickLayer::set_data(const ph_candlestick_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   render_type_ = desc.render_type;
@@ -2755,6 +2775,10 @@ void CandlestickLayer::release_gl(Api& api) {
 // -- OhlcLayer --------------------------------------------------------------
 
 OhlcLayer::OhlcLayer(const ph_ohlc_desc& desc) {
+  set_data(desc);
+}
+
+void OhlcLayer::set_data(const ph_ohlc_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   render_type_ = desc.render_type;
@@ -2967,6 +2991,10 @@ void main() {
 }  // namespace
 
 HexbinLayer::HexbinLayer(const ph_hexbin_desc& desc) {
+  set_data(desc);
+}
+
+void HexbinLayer::set_data(const ph_hexbin_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   render_type_ = desc.render_type;
@@ -3146,6 +3174,10 @@ void HexbinLayer::release_gl(Api& api) {
 // -- QuiverLayer ------------------------------------------------------------
 
 QuiverLayer::QuiverLayer(const ph_quiver_desc& desc) {
+  set_data(desc);
+}
+
+void QuiverLayer::set_data(const ph_quiver_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   color_ = desc.color;
@@ -3427,6 +3459,10 @@ constexpr ph_color kEdgeColor = 0x94a3b880u;
 }  // namespace
 
 ContourLayer::ContourLayer(const ph_contour_desc& desc) {
+  set_data(desc);
+}
+
+void ContourLayer::set_data(const ph_contour_desc& desc) {
   name_ = from_utf8(desc.name);
   y_axis_ = from_utf8(desc.y_axis);
   render_type_ = desc.render_type;

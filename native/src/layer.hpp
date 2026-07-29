@@ -200,6 +200,9 @@ class LineLayer : public XYLayer {
 class AreaLayer : public XYLayer {
  public:
   explicit AreaLayer(const ph_area_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_area_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
@@ -233,6 +236,9 @@ class AreaLayer : public XYLayer {
 class BarLayer : public XYLayer {
  public:
   explicit BarLayer(const ph_bar_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_bar_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
@@ -340,6 +346,9 @@ class StemLayer : public XYLayer {
 class ErrorBarLayer : public XYLayer {
  public:
   explicit ErrorBarLayer(const ph_errorbar_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_errorbar_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
@@ -423,6 +432,9 @@ class BoxLayer : public Layer {
 class ContourLayer : public Layer {
  public:
   explicit ContourLayer(const ph_contour_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_contour_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
@@ -494,6 +506,9 @@ class GraphLayer : public Layer {
 class HexbinLayer : public Layer {
  public:
   explicit HexbinLayer(const ph_hexbin_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_hexbin_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
@@ -531,6 +546,9 @@ class HexbinLayer : public Layer {
 class QuiverLayer : public Layer {
  public:
   explicit QuiverLayer(const ph_quiver_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_quiver_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
@@ -613,6 +631,9 @@ class OhlcSeries : public Layer {
 class CandlestickLayer : public OhlcSeries {
  public:
   explicit CandlestickLayer(const ph_candlestick_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_candlestick_desc& desc);
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -634,6 +655,9 @@ class CandlestickLayer : public OhlcSeries {
 class OhlcLayer : public OhlcSeries {
  public:
   explicit OhlcLayer(const ph_ohlc_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_ohlc_desc& desc);
   bool draw(const DrawState& state, std::string& error) override;
 
  protected:
@@ -655,6 +679,9 @@ class OhlcLayer : public OhlcSeries {
 class HeatmapLayer : public Layer {
  public:
   explicit HeatmapLayer(const ph_heatmap_desc& desc);
+  /// Replace everything the descriptor carries and re-upload next frame.
+  /// The constructor is a call to this, so the two cannot drift apart.
+  void set_data(const ph_heatmap_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
   bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;

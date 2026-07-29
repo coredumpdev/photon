@@ -118,10 +118,15 @@ convenience wrappers above the ABI and the streaming setters below it.
       through a colormap, and those fields are absent from `ph_patches_desc`
       rather than accepted and ignored. Adding them is additive once the
       colormaps land.
-- [ ] **No layer added in Faz 4 can stream.** `ph_layer_set_xy` fits line and
-      scatter and nothing else: patches is a list of rings, area has a base and
-      bar has a base, a width and per-bar colours. Each wants a
-      `ph_layer_set_<name>` taking its own descriptor, which is additive.
+- [x] ~~**Streaming setters.**~~ `ph_layer_set_<name>` for area, bar, errorbar,
+      candlestick, ohlc, heatmap, hexbin, quiver and contour — every layer a
+      live feed drives. Each takes the descriptor that created it, and the
+      constructor is now a call to the same `set_data`, so construction and
+      streaming cannot drift apart. Passing the wrong descriptor type is
+      refused rather than reinterpreted.
+- [ ] pie, patches, box, image and graph have no setter. Nothing drives them per
+      frame, and destroying and re-adding one costs a few GL objects once;
+      adding setters later is additive.
 
 ### Colour and the colorbar
 

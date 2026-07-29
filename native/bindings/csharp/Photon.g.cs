@@ -1109,6 +1109,15 @@ public static partial class Ph
         "ph_plot_add_heatmap",
         "ph_plot_add_image",
         "ph_layer_set_xy",
+        "ph_layer_set_area",
+        "ph_layer_set_bar",
+        "ph_layer_set_errorbar",
+        "ph_layer_set_candlestick",
+        "ph_layer_set_ohlc",
+        "ph_layer_set_heatmap",
+        "ph_layer_set_hexbin",
+        "ph_layer_set_quiver",
+        "ph_layer_set_contour",
         "ph_layer_set_visible",
         "ph_layer_valid",
         "ph_layer_bounds",
@@ -1451,6 +1460,60 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_xy")]
     public static extern int ph_layer_set_xy(ulong layer, double[] x, double[] y, int count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_area")]
+    public static extern int ph_layer_set_area(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_area")]
+    public static extern int ph_layer_set_area(ulong layer, in ph_area_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_bar")]
+    public static extern int ph_layer_set_bar(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_bar")]
+    public static extern int ph_layer_set_bar(ulong layer, in ph_bar_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_errorbar")]
+    public static extern int ph_layer_set_errorbar(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_errorbar")]
+    public static extern int ph_layer_set_errorbar(ulong layer, in ph_errorbar_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_candlestick")]
+    public static extern int ph_layer_set_candlestick(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_candlestick")]
+    public static extern int ph_layer_set_candlestick(ulong layer, in ph_candlestick_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_ohlc")]
+    public static extern int ph_layer_set_ohlc(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_ohlc")]
+    public static extern int ph_layer_set_ohlc(ulong layer, in ph_ohlc_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_heatmap")]
+    public static extern int ph_layer_set_heatmap(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_heatmap")]
+    public static extern int ph_layer_set_heatmap(ulong layer, in ph_heatmap_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_hexbin")]
+    public static extern int ph_layer_set_hexbin(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_hexbin")]
+    public static extern int ph_layer_set_hexbin(ulong layer, in ph_hexbin_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_quiver")]
+    public static extern int ph_layer_set_quiver(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_quiver")]
+    public static extern int ph_layer_set_quiver(ulong layer, in ph_quiver_desc desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_contour")]
+    public static extern int ph_layer_set_contour(ulong layer, IntPtr desc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_contour")]
+    public static extern int ph_layer_set_contour(ulong layer, in ph_contour_desc desc);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_visible")]
     public static extern int ph_layer_set_visible(ulong layer, int visible);

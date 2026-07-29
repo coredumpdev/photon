@@ -1520,6 +1520,15 @@ public final class Photon {
         "ph_plot_add_heatmap",
         "ph_plot_add_image",
         "ph_layer_set_xy",
+        "ph_layer_set_area",
+        "ph_layer_set_bar",
+        "ph_layer_set_errorbar",
+        "ph_layer_set_candlestick",
+        "ph_layer_set_ohlc",
+        "ph_layer_set_heatmap",
+        "ph_layer_set_hexbin",
+        "ph_layer_set_quiver",
+        "ph_layer_set_contour",
         "ph_layer_set_visible",
         "ph_layer_valid",
         "ph_layer_bounds",
@@ -1623,6 +1632,15 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_HEATMAP = handle("ph_plot_add_heatmap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_IMAGE = handle("ph_plot_add_image", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_XY = handle("ph_layer_set_xy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_LAYER_SET_AREA = handle("ph_layer_set_area", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_BAR = handle("ph_layer_set_bar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_ERRORBAR = handle("ph_layer_set_errorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_CANDLESTICK = handle("ph_layer_set_candlestick", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_OHLC = handle("ph_layer_set_ohlc", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_HEATMAP = handle("ph_layer_set_heatmap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_HEXBIN = handle("ph_layer_set_hexbin", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_QUIVER = handle("ph_layer_set_quiver", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_CONTOUR = handle("ph_layer_set_contour", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_VISIBLE = handle("ph_layer_set_visible", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_LAYER_VALID = handle("ph_layer_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_LAYER_BOUNDS = handle("ph_layer_bounds", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -2289,6 +2307,78 @@ public final class Photon {
             return (int) PH_LAYER_SET_XY.invokeExact(layer, x, y, count);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_layer_set_xy failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_area(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_AREA.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_area failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_bar(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_BAR.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_bar failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_errorbar(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_ERRORBAR.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_errorbar failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_candlestick(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_CANDLESTICK.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_candlestick failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_ohlc(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_OHLC.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_ohlc failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_heatmap(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_HEATMAP.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_heatmap failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_hexbin(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_HEXBIN.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_hexbin failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_quiver(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_QUIVER.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_quiver failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_contour(long layer, MemorySegment desc) {
+        try {
+            return (int) PH_LAYER_SET_CONTOUR.invokeExact(layer, desc);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_contour failed", photonFailure);
         }
     }
 

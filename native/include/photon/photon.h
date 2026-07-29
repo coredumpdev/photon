@@ -1420,6 +1420,30 @@ PH_API ph_result PH_CALL ph_plot_add_image(ph_plot plot, const ph_image_desc* de
 /** Replace a layer's x/y data in place. Cheap on PH_RENDER_DYNAMIC layers. */
 PH_API ph_result PH_CALL ph_layer_set_xy(ph_layer layer, const double* x, const double* y, int32_t count);
 
+/*
+ * Replace a layer's data in place, keeping its handle and its GPU objects.
+ *
+ * `ph_layer_set_xy` fits a line or a scatter and nothing else: an area has a
+ * base, a bar has a width and per-bar colours, a candle has five arrays. So the
+ * layers a live feed drives take their own descriptor here — the same one that
+ * created them, and the constructor is a call to the same code, so the two
+ * cannot drift apart. Everything the descriptor carries is replaced, not just
+ * the arrays.
+ *
+ * The layers left out — pie, patches, box, image and graph — are not driven per
+ * frame by anything, and destroying and re-adding one costs a few GL objects
+ * once. Adding setters for them later is additive.
+ */
+PH_API ph_result PH_CALL ph_layer_set_area(ph_layer layer, const ph_area_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_bar(ph_layer layer, const ph_bar_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_errorbar(ph_layer layer, const ph_errorbar_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_candlestick(ph_layer layer, const ph_candlestick_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_ohlc(ph_layer layer, const ph_ohlc_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_heatmap(ph_layer layer, const ph_heatmap_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_hexbin(ph_layer layer, const ph_hexbin_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_quiver(ph_layer layer, const ph_quiver_desc* desc);
+PH_API ph_result PH_CALL ph_layer_set_contour(ph_layer layer, const ph_contour_desc* desc);
+
 PH_API ph_result PH_CALL ph_layer_set_visible(ph_layer layer, ph_bool visible);
 PH_API ph_bool   PH_CALL ph_layer_valid(ph_layer layer);
 

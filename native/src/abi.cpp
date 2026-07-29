@@ -1284,6 +1284,76 @@ extern "C" ph_result PH_CALL ph_layer_set_xy(ph_layer handle, const double* x, c
   return PH_OK;
 }
 
+namespace {
+
+/// The shared body of every ph_layer_set_<name>: resolve, validate the header,
+/// hand the whole descriptor to the layer.
+template <typename Desc, typename LayerType, typename InitFn>
+ph_result set_layer_data(ph_layer handle, const Desc* desc, InitFn init, const char* type_name) {
+  clear_error();
+  Plot* plot = nullptr;
+  photon::Layer* layer = nullptr;
+  const ph_result r = photon::resolve_layer(handle, &plot, &layer);
+  if (r != PH_OK) return r;
+  auto* typed = dynamic_cast<LayerType*>(layer);
+  if (!typed) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                std::string("this layer is not a ") + type_name + " layer");
+  }
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                std::string(type_name) + ".struct_size is larger than this build's");
+  }
+  const Desc normalized = normalize(desc, init);
+  try {
+    typed->set_data(normalized);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory replacing layer data");
+  }
+  // The axes follow the new data the way they follow a ph_layer_set_xy.
+  plot->autoscale();
+  plot->request_render();
+  return PH_OK;
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_layer_set_area(ph_layer handle, const ph_area_desc* desc) {
+  return set_layer_data<ph_area_desc, photon::AreaLayer>(handle, desc, ph_area_desc_init, "ph_area_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_bar(ph_layer handle, const ph_bar_desc* desc) {
+  return set_layer_data<ph_bar_desc, photon::BarLayer>(handle, desc, ph_bar_desc_init, "ph_bar_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_errorbar(ph_layer handle, const ph_errorbar_desc* desc) {
+  return set_layer_data<ph_errorbar_desc, photon::ErrorBarLayer>(handle, desc, ph_errorbar_desc_init, "ph_errorbar_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_candlestick(ph_layer handle, const ph_candlestick_desc* desc) {
+  return set_layer_data<ph_candlestick_desc, photon::CandlestickLayer>(handle, desc, ph_candlestick_desc_init, "ph_candlestick_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_ohlc(ph_layer handle, const ph_ohlc_desc* desc) {
+  return set_layer_data<ph_ohlc_desc, photon::OhlcLayer>(handle, desc, ph_ohlc_desc_init, "ph_ohlc_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_heatmap(ph_layer handle, const ph_heatmap_desc* desc) {
+  return set_layer_data<ph_heatmap_desc, photon::HeatmapLayer>(handle, desc, ph_heatmap_desc_init, "ph_heatmap_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_hexbin(ph_layer handle, const ph_hexbin_desc* desc) {
+  return set_layer_data<ph_hexbin_desc, photon::HexbinLayer>(handle, desc, ph_hexbin_desc_init, "ph_hexbin_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_quiver(ph_layer handle, const ph_quiver_desc* desc) {
+  return set_layer_data<ph_quiver_desc, photon::QuiverLayer>(handle, desc, ph_quiver_desc_init, "ph_quiver_desc");
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_contour(ph_layer handle, const ph_contour_desc* desc) {
+  return set_layer_data<ph_contour_desc, photon::ContourLayer>(handle, desc, ph_contour_desc_init, "ph_contour_desc");
+}
+
 extern "C" ph_result PH_CALL ph_layer_set_visible(ph_layer handle, ph_bool visible) {
   clear_error();
   Plot* plot = nullptr;

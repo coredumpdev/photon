@@ -499,6 +499,127 @@ internal static class PhotonSmokeTest
             "ph_plot_add_box");
     }
 
+    /// Streaming: replacing a layer's data in place, and the type check that
+    /// stops one descriptor reaching a layer that would reinterpret its fields.
+    private static void Streaming(ulong plot)
+    {
+        var xs = new double[] { 0, 1, 2, 3 };
+        var ys = new double[] { 1, 1, 1, 1 };
+        var pins = new[]
+        {
+            GCHandle.Alloc(xs, GCHandleType.Pinned), GCHandle.Alloc(ys, GCHandleType.Pinned),
+        };
+        try
+        {
+            var px = pins[0].AddrOfPinnedObject();
+            var py = pins[1].AddrOfPinnedObject();
+
+            ph_area_desc_init(out var area);
+            area.x = px;
+            area.y = py;
+            area.count = xs.Length;
+            CheckEq(ph_plot_add_area(plot, in area, out var areaLayer), PH_OK,
+                "an area to stream into");
+            CheckEq(ph_layer_bounds(areaLayer, out _, out var before), PH_OK, "area bounds");
+            Check(before.hi == 1.0, "y reaches 1");
+
+            // New values through the same handle: the bounds follow, which is
+            // what says the data was replaced rather than ignored.
+            for (var i = 0; i < ys.Length; i++) ys[i] = 9.0;
+            CheckEq(ph_layer_set_area(areaLayer, in area), PH_OK, "ph_layer_set_area");
+            CheckEq(ph_layer_bounds(areaLayer, out _, out var after), PH_OK,
+                "bounds after streaming");
+            Check(after.hi == 9.0, "y now reaches 9");
+
+            ph_bar_desc_init(out var bar);
+            bar.x = px;
+            bar.y = py;
+            bar.count = xs.Length;
+            CheckEq(ph_layer_set_bar(areaLayer, in bar), PH_E_INVALID_ARGUMENT,
+                "a bar descriptor is refused by an area layer");
+            CheckEq(ph_layer_destroy(areaLayer), PH_OK, "the area layer is destroyed");
+
+            CheckEq(ph_plot_add_bar(plot, in bar, out var barLayer), PH_OK, "a bar");
+            CheckEq(ph_layer_set_bar(barLayer, in bar), PH_OK, "ph_layer_set_bar");
+            CheckEq(ph_layer_destroy(barLayer), PH_OK, "the bar layer is destroyed");
+
+            ph_errorbar_desc_init(out var err);
+            err.x = px;
+            err.y = py;
+            err.count = xs.Length;
+            err.y_err = 1.0;
+            CheckEq(ph_plot_add_errorbar(plot, in err, out var errLayer), PH_OK, "an error bar");
+            CheckEq(ph_layer_set_errorbar(errLayer, in err), PH_OK, "ph_layer_set_errorbar");
+            CheckEq(ph_layer_destroy(errLayer), PH_OK, "the error bar layer is destroyed");
+
+            ph_candlestick_desc_init(out var candle);
+            candle.x = px;
+            candle.open = py;
+            candle.high = py;
+            candle.low = py;
+            candle.close = py;
+            candle.count = xs.Length;
+            CheckEq(ph_plot_add_candlestick(plot, in candle, out var candleLayer), PH_OK,
+                "a candlestick");
+            CheckEq(ph_layer_set_candlestick(candleLayer, in candle), PH_OK,
+                "ph_layer_set_candlestick");
+            CheckEq(ph_layer_destroy(candleLayer), PH_OK, "the candlestick layer is destroyed");
+
+            ph_ohlc_desc_init(out var bars);
+            bars.x = px;
+            bars.open = py;
+            bars.high = py;
+            bars.low = py;
+            bars.close = py;
+            bars.count = xs.Length;
+            CheckEq(ph_plot_add_ohlc(plot, in bars, out var ohlcLayer), PH_OK, "an ohlc");
+            CheckEq(ph_layer_set_ohlc(ohlcLayer, in bars), PH_OK, "ph_layer_set_ohlc");
+            CheckEq(ph_layer_destroy(ohlcLayer), PH_OK, "the ohlc layer is destroyed");
+
+            ph_heatmap_desc_init(out var grid);
+            grid.values = py;
+            grid.cols = 2;
+            grid.rows = 2;
+            CheckEq(ph_plot_add_heatmap(plot, in grid, out var gridLayer), PH_OK, "a heatmap");
+            CheckEq(ph_layer_set_heatmap(gridLayer, in grid), PH_OK, "ph_layer_set_heatmap");
+            CheckEq(ph_layer_destroy(gridLayer), PH_OK, "the heatmap layer is destroyed");
+
+            ph_contour_desc_init(out var iso);
+            iso.values = py;
+            iso.cols = 2;
+            iso.rows = 2;
+            CheckEq(ph_plot_add_contour(plot, in iso, out var isoLayer), PH_OK, "a contour");
+            CheckEq(ph_layer_set_contour(isoLayer, in iso), PH_OK, "ph_layer_set_contour");
+            CheckEq(ph_layer_destroy(isoLayer), PH_OK, "the contour layer is destroyed");
+
+            ph_hexbin_desc_init(out var hex);
+            hex.x = px;
+            hex.y = py;
+            hex.count = xs.Length;
+            CheckEq(ph_plot_add_hexbin(plot, in hex, out var hexLayer), PH_OK, "a hexbin");
+            CheckEq(ph_layer_set_hexbin(hexLayer, in hex), PH_OK, "ph_layer_set_hexbin");
+            CheckEq(ph_layer_destroy(hexLayer), PH_OK, "the hexbin layer is destroyed");
+
+            ph_quiver_desc_init(out var arrows);
+            arrows.x = px;
+            arrows.y = py;
+            arrows.u = py;
+            arrows.v = py;
+            arrows.count = xs.Length;
+            CheckEq(ph_plot_add_quiver(plot, in arrows, out var quiverLayer), PH_OK, "a quiver");
+            CheckEq(ph_layer_set_quiver(quiverLayer, in arrows), PH_OK, "ph_layer_set_quiver");
+            CheckEq(ph_layer_destroy(quiverLayer), PH_OK, "the quiver layer is destroyed");
+        }
+        finally
+        {
+            foreach (var pin in pins) pin.Free();
+        }
+
+        Ran("ph_layer_set_area", "ph_layer_set_bar", "ph_layer_set_errorbar",
+            "ph_layer_set_candlestick", "ph_layer_set_ohlc", "ph_layer_set_heatmap",
+            "ph_layer_set_hexbin", "ph_layer_set_quiver", "ph_layer_set_contour");
+    }
+
     /// Annotations: every type, and the two ways one leaves again.
     private static void Annotations(ulong plot)
     {
@@ -1003,6 +1124,7 @@ internal static class PhotonSmokeTest
         AreaAndBars(plot);
         PieAndStem(plot);
         ErrorBarsAndBoxes(plot);
+        Streaming(plot);
         Annotations(plot);
         IsoAndGraph(plot);
         Fields(plot);

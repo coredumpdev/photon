@@ -575,6 +575,141 @@ public final class PhotonSmokeTest {
             "ph_plot_add_box");
     }
 
+    /**
+     * Streaming: replacing a layer's data in place, and the type check that
+     * stops a candlestick descriptor reaching an area layer.
+     */
+    static void streaming(Arena arena, long plot) {
+        MemorySegment xs = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        MemorySegment ys = arena.allocate(ValueLayout.JAVA_DOUBLE, 4);
+        for (int i = 0; i < 4; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 1.0);
+        }
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+
+        MemorySegment area = ph_area_desc.allocate(arena);
+        ph_area_desc_init(area);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_X, xs);
+        area.set(ValueLayout.ADDRESS, ph_area_desc.OFFSET_Y, ys);
+        area.set(ValueLayout.JAVA_INT, ph_area_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_area(plot, area, handle), PH_OK, "an area to stream into");
+        long areaLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_bounds(areaLayer, bx, by), PH_OK, "area bounds");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 1.0, "y reaches 1");
+
+        // New values through the same handle: the bounds follow, which is what
+        // says the data was replaced rather than appended or ignored.
+        for (int i = 0; i < 4; i++) ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 9.0);
+        checkEq(ph_layer_set_area(areaLayer, area), PH_OK, "ph_layer_set_area");
+        checkEq(ph_layer_bounds(areaLayer, bx, by), PH_OK, "bounds after streaming");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 9.0, "y now reaches 9");
+
+        // A descriptor of the wrong type must not reach a layer that would
+        // reinterpret its fields — that is silent corruption, not a chart.
+        MemorySegment bar = ph_bar_desc.allocate(arena);
+        ph_bar_desc_init(bar);
+        bar.set(ValueLayout.ADDRESS, ph_bar_desc.OFFSET_X, xs);
+        bar.set(ValueLayout.ADDRESS, ph_bar_desc.OFFSET_Y, ys);
+        bar.set(ValueLayout.JAVA_INT, ph_bar_desc.OFFSET_COUNT, 4);
+        checkEq(ph_layer_set_bar(areaLayer, bar), PH_E_INVALID_ARGUMENT,
+                "a bar descriptor is refused by an area layer");
+        checkEq(ph_layer_destroy(areaLayer), PH_OK, "the area layer is destroyed");
+
+        // The rest, each created and then re-fed once, so every setter is
+        // exercised through the binding rather than merely declared.
+        checkEq(ph_plot_add_bar(plot, bar, handle), PH_OK, "a bar");
+        long barLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_bar(barLayer, bar), PH_OK, "ph_layer_set_bar");
+        checkEq(ph_layer_destroy(barLayer), PH_OK, "the bar layer is destroyed");
+
+        MemorySegment err = ph_errorbar_desc.allocate(arena);
+        ph_errorbar_desc_init(err);
+        err.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_X, xs);
+        err.set(ValueLayout.ADDRESS, ph_errorbar_desc.OFFSET_Y, ys);
+        err.set(ValueLayout.JAVA_INT, ph_errorbar_desc.OFFSET_COUNT, 4);
+        err.set(ValueLayout.JAVA_DOUBLE, ph_errorbar_desc.OFFSET_Y_ERR, 1.0);
+        checkEq(ph_plot_add_errorbar(plot, err, handle), PH_OK, "an error bar");
+        long errLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_errorbar(errLayer, err), PH_OK, "ph_layer_set_errorbar");
+        checkEq(ph_layer_destroy(errLayer), PH_OK, "the error bar layer is destroyed");
+
+        MemorySegment candle = ph_candlestick_desc.allocate(arena);
+        ph_candlestick_desc_init(candle);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_X, xs);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_OPEN, ys);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_HIGH, ys);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_LOW, ys);
+        candle.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_CLOSE, ys);
+        candle.set(ValueLayout.JAVA_INT, ph_candlestick_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_candlestick(plot, candle, handle), PH_OK, "a candlestick");
+        long candleLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_candlestick(candleLayer, candle), PH_OK,
+                "ph_layer_set_candlestick");
+        checkEq(ph_layer_destroy(candleLayer), PH_OK, "the candlestick layer is destroyed");
+
+        MemorySegment bars = ph_ohlc_desc.allocate(arena);
+        ph_ohlc_desc_init(bars);
+        bars.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_X, xs);
+        bars.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_OPEN, ys);
+        bars.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_HIGH, ys);
+        bars.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_LOW, ys);
+        bars.set(ValueLayout.ADDRESS, ph_ohlc_desc.OFFSET_CLOSE, ys);
+        bars.set(ValueLayout.JAVA_INT, ph_ohlc_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_ohlc(plot, bars, handle), PH_OK, "an ohlc");
+        long ohlcLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_ohlc(ohlcLayer, bars), PH_OK, "ph_layer_set_ohlc");
+        checkEq(ph_layer_destroy(ohlcLayer), PH_OK, "the ohlc layer is destroyed");
+
+        MemorySegment grid = ph_heatmap_desc.allocate(arena);
+        ph_heatmap_desc_init(grid);
+        grid.set(ValueLayout.ADDRESS, ph_heatmap_desc.OFFSET_VALUES, ys);
+        grid.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_COLS, 2);
+        grid.set(ValueLayout.JAVA_INT, ph_heatmap_desc.OFFSET_ROWS, 2);
+        checkEq(ph_plot_add_heatmap(plot, grid, handle), PH_OK, "a heatmap");
+        long gridLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_heatmap(gridLayer, grid), PH_OK, "ph_layer_set_heatmap");
+        checkEq(ph_layer_destroy(gridLayer), PH_OK, "the heatmap layer is destroyed");
+
+        MemorySegment iso = ph_contour_desc.allocate(arena);
+        ph_contour_desc_init(iso);
+        iso.set(ValueLayout.ADDRESS, ph_contour_desc.OFFSET_VALUES, ys);
+        iso.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_COLS, 2);
+        iso.set(ValueLayout.JAVA_INT, ph_contour_desc.OFFSET_ROWS, 2);
+        checkEq(ph_plot_add_contour(plot, iso, handle), PH_OK, "a contour");
+        long isoLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_contour(isoLayer, iso), PH_OK, "ph_layer_set_contour");
+        checkEq(ph_layer_destroy(isoLayer), PH_OK, "the contour layer is destroyed");
+
+        MemorySegment hex = ph_hexbin_desc.allocate(arena);
+        ph_hexbin_desc_init(hex);
+        hex.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_X, xs);
+        hex.set(ValueLayout.ADDRESS, ph_hexbin_desc.OFFSET_Y, ys);
+        hex.set(ValueLayout.JAVA_INT, ph_hexbin_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_hexbin(plot, hex, handle), PH_OK, "a hexbin");
+        long hexLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_hexbin(hexLayer, hex), PH_OK, "ph_layer_set_hexbin");
+        checkEq(ph_layer_destroy(hexLayer), PH_OK, "the hexbin layer is destroyed");
+
+        MemorySegment arrows = ph_quiver_desc.allocate(arena);
+        ph_quiver_desc_init(arrows);
+        arrows.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_X, xs);
+        arrows.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_Y, ys);
+        arrows.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_U, ys);
+        arrows.set(ValueLayout.ADDRESS, ph_quiver_desc.OFFSET_V, ys);
+        arrows.set(ValueLayout.JAVA_INT, ph_quiver_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_quiver(plot, arrows, handle), PH_OK, "a quiver");
+        long quiverLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        checkEq(ph_layer_set_quiver(quiverLayer, arrows), PH_OK, "ph_layer_set_quiver");
+        checkEq(ph_layer_destroy(quiverLayer), PH_OK, "the quiver layer is destroyed");
+
+        ran("ph_layer_set_area", "ph_layer_set_bar", "ph_layer_set_errorbar",
+            "ph_layer_set_candlestick", "ph_layer_set_ohlc", "ph_layer_set_heatmap",
+            "ph_layer_set_hexbin", "ph_layer_set_quiver", "ph_layer_set_contour");
+    }
+
     /** Annotations: every type, and the two ways one leaves again. */
     static void annotations(Arena arena, long plot) {
         MemorySegment a = ph_annotation.allocate(arena);
@@ -1128,6 +1263,8 @@ public final class PhotonSmokeTest {
             pieAndStem(arena, plot);
             step("errorBarsAndBoxes");
             errorBarsAndBoxes(arena, plot);
+            step("streaming");
+            streaming(arena, plot);
             step("annotations");
             annotations(arena, plot);
             step("isoAndGraph");
