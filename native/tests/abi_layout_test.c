@@ -913,11 +913,62 @@ PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, colormap) == 80, "ph_quiver3d_desc.c
 PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, name) == 88, "ph_quiver3d_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, render_type) == 96, "ph_quiver3d_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_contour3d_desc) == 104, "ph_contour3d_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_contour3d_desc) == 8, "ph_contour3d_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, struct_size) == 0, "ph_contour3d_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, values) == 8, "ph_contour3d_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, cols) == 16, "ph_contour3d_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, rows) == 20, "ph_contour3d_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, x) == 24, "ph_contour3d_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, z) == 40, "ph_contour3d_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, levels) == 56, "ph_contour3d_desc.levels offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, level_values) == 64, "ph_contour3d_desc.level_values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, level_count) == 72, "ph_contour3d_desc.level_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, color) == 76, "ph_contour3d_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, colormap) == 80, "ph_contour3d_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, name) == 88, "ph_contour3d_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contour3d_desc, render_type) == 96, "ph_contour3d_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_box3d) == 56, "ph_box3d size");
+PH_ASSERT_LAYOUT(_Alignof(ph_box3d) == 8, "ph_box3d alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, x) == 0, "ph_box3d.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, y) == 8, "ph_box3d.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, z) == 16, "ph_box3d.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, w) == 24, "ph_box3d.w offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, h) == 32, "ph_box3d.h offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, d) == 40, "ph_box3d.d offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box3d, color) == 48, "ph_box3d.color offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_boxes3d_desc) == 48, "ph_boxes3d_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_boxes3d_desc) == 8, "ph_boxes3d_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, struct_size) == 0, "ph_boxes3d_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, boxes) == 8, "ph_boxes3d_desc.boxes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, count) == 16, "ph_boxes3d_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, color) == 20, "ph_boxes3d_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, opacity) == 24, "ph_boxes3d_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, name) == 32, "ph_boxes3d_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_boxes3d_desc, render_type) == 40, "ph_boxes3d_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_isosurface_desc) == 112, "ph_isosurface_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_isosurface_desc) == 8, "ph_isosurface_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, struct_size) == 0, "ph_isosurface_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, values) == 8, "ph_isosurface_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, nx) == 16, "ph_isosurface_desc.nx offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, ny) == 20, "ph_isosurface_desc.ny offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, nz) == 24, "ph_isosurface_desc.nz offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, x) == 32, "ph_isosurface_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, y) == 48, "ph_isosurface_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, z) == 64, "ph_isosurface_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, level) == 80, "ph_isosurface_desc.level offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, color) == 88, "ph_isosurface_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, name) == 96, "ph_isosurface_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, render_type) == 104, "ph_isosurface_desc.render_type offset");
+
 #endif  /* 64-bit */
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 72);
+  printf("%d struct layouts match the generated bindings\n", 76);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

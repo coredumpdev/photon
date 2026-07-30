@@ -1896,6 +1896,108 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_contour3d_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_contour3d_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range z;
+        /// <summary>offset 56</summary>
+        public int levels;
+        /// <summary>offset 64</summary>
+        public IntPtr level_values;
+        /// <summary>offset 72</summary>
+        public int level_count;
+        /// <summary>offset 76</summary>
+        public uint color;
+        /// <summary>offset 80</summary>
+        public IntPtr colormap;
+        /// <summary>offset 88</summary>
+        public IntPtr name;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_box3d — 56 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_box3d
+    {
+        /// <summary>offset 0</summary>
+        public double x;
+        /// <summary>offset 8</summary>
+        public double y;
+        /// <summary>offset 16</summary>
+        public double z;
+        /// <summary>offset 24</summary>
+        public double w;
+        /// <summary>offset 32</summary>
+        public double h;
+        /// <summary>offset 40</summary>
+        public double d;
+        /// <summary>offset 48</summary>
+        public uint color;
+    }
+
+    /// <summary>ph_boxes3d_desc — 48 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_boxes3d_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr boxes;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 20</summary>
+        public uint color;
+        /// <summary>offset 24</summary>
+        public float opacity;
+        /// <summary>offset 32</summary>
+        public IntPtr name;
+        /// <summary>offset 40</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_isosurface_desc — 112 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_isosurface_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int nx;
+        /// <summary>offset 20</summary>
+        public int ny;
+        /// <summary>offset 24</summary>
+        public int nz;
+        /// <summary>offset 32</summary>
+        public ph_range x;
+        /// <summary>offset 48</summary>
+        public ph_range y;
+        /// <summary>offset 64</summary>
+        public ph_range z;
+        /// <summary>offset 80</summary>
+        public double level;
+        /// <summary>offset 88</summary>
+        public uint color;
+        /// <summary>offset 96</summary>
+        public IntPtr name;
+        /// <summary>offset 104</summary>
+        public int render_type;
+    }
+
     /// <summary>
     ///   Every function in the ABI, by name — so a binding-level test can
     ///   assert it exercised all of them rather than merely intending to.
@@ -2126,6 +2228,12 @@ public static partial class Ph
         "ph_plot3d_add_bars",
         "ph_quiver3d_desc_init",
         "ph_plot3d_add_quiver",
+        "ph_contour3d_desc_init",
+        "ph_plot3d_add_contour",
+        "ph_boxes3d_desc_init",
+        "ph_plot3d_add_boxes",
+        "ph_isosurface_desc_init",
+        "ph_plot3d_add_isosurface",
         "ph_plot3d_pointer_down",
         "ph_plot3d_pointer_move",
         "ph_plot3d_pointer_up",
@@ -3001,6 +3109,33 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_quiver")]
     public static extern int ph_plot3d_add_quiver(ulong plot, in ph_quiver3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_contour3d_desc_init")]
+    public static extern void ph_contour3d_desc_init(out ph_contour3d_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_contour")]
+    public static extern int ph_plot3d_add_contour(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_contour")]
+    public static extern int ph_plot3d_add_contour(ulong plot, in ph_contour3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_boxes3d_desc_init")]
+    public static extern void ph_boxes3d_desc_init(out ph_boxes3d_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_boxes")]
+    public static extern int ph_plot3d_add_boxes(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_boxes")]
+    public static extern int ph_plot3d_add_boxes(ulong plot, in ph_boxes3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_isosurface_desc_init")]
+    public static extern void ph_isosurface_desc_init(out ph_isosurface_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_isosurface")]
+    public static extern int ph_plot3d_add_isosurface(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_isosurface")]
+    public static extern int ph_plot3d_add_isosurface(ulong plot, in ph_isosurface_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_pointer_down")]
     public static extern int ph_plot3d_pointer_down(ulong plot, double px, double py, int button, int mods);

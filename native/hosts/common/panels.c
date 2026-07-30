@@ -85,6 +85,10 @@
 #define CLOUD_POINTS 1200
 /* A 12x12 lattice of bars, which is as many as read cleanly at panel size. */
 #define BARS3D 12
+/* A 40x40 lattice for the floating contour map, and a 32-cube volume for the
+ * isosurface — enough for the level sets to be curves rather than staircases. */
+#define ISOGRID 40
+#define VOXELS 32
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -204,6 +208,9 @@ struct ph_panels {
   double cloud_z[CLOUD_POINTS];
   double cloud_value[CLOUD_POINTS];
   double bars3d[BARS3D * BARS3D];
+  double iso_grid[ISOGRID * ISOGRID];
+  double voxels[VOXELS * VOXELS * VOXELS];
+  ph_box3d city[BARS3D * BARS3D];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -687,6 +694,56 @@ ph_panels* ph_panels_create(void) {
         const double x = (c - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
         const double z = (r - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
         p->bars3d[r * BARS3D + c] = 4.0 * exp(-(x * x + z * z) * 1.6) + 0.3;
+      }
+    }
+
+    /* The same ripples the Terrain scene draws as a surface, at a resolution
+     * the contour lines can follow. */
+    for (int r = 0; r < ISOGRID; r++) {
+      for (int c = 0; c < ISOGRID; c++) {
+        const double x = (c - ISOGRID * 0.5) * 0.26;
+        const double z = (r - ISOGRID * 0.5) * 0.26;
+        p->iso_grid[r * ISOGRID + c] = sin(sqrt(x * x + z * z) * 1.4) * 2.0;
+      }
+    }
+
+    /* Three metaballs: a density field, high inside, which is the convention
+     * marching cubes' negated gradient shades correctly. */
+    {
+      static const double ball[3][4] = {
+          {-0.35, 0.0, 0.0, 0.30}, {0.35, 0.15, 0.0, 0.26}, {0.0, -0.3, 0.25, 0.22}};
+      for (int z = 0; z < VOXELS; z++) {
+        for (int y = 0; y < VOXELS; y++) {
+          for (int x = 0; x < VOXELS; x++) {
+            const double px = (x / (double)(VOXELS - 1)) * 2.0 - 1.0;
+            const double py = (y / (double)(VOXELS - 1)) * 2.0 - 1.0;
+            const double pz = (z / (double)(VOXELS - 1)) * 2.0 - 1.0;
+            double density = 0.0;
+            for (int b = 0; b < 3; b++) {
+              const double dx = px - ball[b][0];
+              const double dy = py - ball[b][1];
+              const double dz = pz - ball[b][2];
+              const double r2 = dx * dx + dy * dy + dz * dz + 1e-6;
+              density += ball[b][3] * ball[b][3] / r2;
+            }
+            p->voxels[x + y * VOXELS + z * VOXELS * VOXELS] = density;
+          }
+        }
+      }
+    }
+
+    /* The bar dome again, as free-standing cuboids rather than a grid. */
+    for (int r = 0; r < BARS3D; r++) {
+      for (int c = 0; c < BARS3D; c++) {
+        const int i = r * BARS3D + c;
+        const double height = p->bars3d[i];
+        p->city[i].x = (c - BARS3D * 0.5 + 0.5) * 0.5;
+        p->city[i].z = (r - BARS3D * 0.5 + 0.5) * 0.5;
+        p->city[i].y = height / 2.0;
+        p->city[i].w = 0.32;
+        p->city[i].h = height;
+        p->city[i].d = 0.32;
+        p->city[i].color = ((r + c) % 2) ? 0x38bdf8ffu : 0x818cf8ffu;
       }
     }
   }
@@ -1606,7 +1663,8 @@ static void build_polar(ph_panels* p, ph_plot plot) {
   ph_plot_add_polar_scatter(plot, &marks, &layer);
 }
 
-static const char* kTitles3D[PH_PANEL_3D_COUNT] = {"Terrain", "Helix", "Towers"};
+static const char* kTitles3D[PH_PANEL_3D_COUNT] = {"Terrain", "Helix",  "Towers",
+                                                   "Isolines", "Blobs", "City"};
 
 const char* ph_panels_title_3d(int index) {
   return kTitles3D[((index % PH_PANEL_3D_COUNT) + PH_PANEL_3D_COUNT) % PH_PANEL_3D_COUNT];
@@ -1695,13 +1753,87 @@ static void build_towers(ph_panels* p, ph_plot3d plot) {
   ph_plot3d_add_bars(plot, &bars, &layer);
 }
 
+/* 3-D scene 3 — the same ripples as stacked iso-height lines. */
+static void build_isolines(ph_panels* p, ph_plot3d plot) {
+  ph_plot3d_set_title(plot, "Isolines");
+  ph_plot3d_set_axis_labels(plot, "x", "height", "z");
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "turbo";
+
+  ph_contour3d_desc iso;
+  ph_contour3d_desc_init(&iso);
+  iso.values = p->iso_grid;
+  iso.cols = ISOGRID;
+  iso.rows = ISOGRID;
+  iso.x.lo = -5.0;
+  iso.x.hi = 5.0;
+  iso.z.lo = -5.0;
+  iso.z.hi = 5.0;
+  iso.levels = 14;
+  iso.colormap = &ramp;
+  iso.name = "height";
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot3d_add_contour(plot, &iso, &layer);
+}
+
+/* 3-D scene 4 — three metaballs as one isosurface, over a bed of cuboids.
+ *
+ * The density field is high inside, which is the convention the marching-cubes
+ * normal is right for; a distance field would light the surface from behind. */
+static void build_blobs(ph_panels* p, ph_plot3d plot) {
+  ph_plot3d_set_title(plot, "Blobs");
+  ph_plot3d_set_axis_labels(plot, "x", "y", "z");
+  ph_plot3d_set_camera(plot, 0.8, 0.35, 3.2);
+
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_isosurface_desc iso;
+  ph_isosurface_desc_init(&iso);
+  iso.values = p->voxels;
+  iso.nx = VOXELS;
+  iso.ny = VOXELS;
+  iso.nz = VOXELS;
+  iso.x.lo = -1.0;
+  iso.x.hi = 1.0;
+  iso.y.lo = -1.0;
+  iso.y.hi = 1.0;
+  iso.z.lo = -1.0;
+  iso.z.hi = 1.0;
+  iso.level = 1.6;
+  iso.color = parse("#f472b6");
+  iso.name = "surface";
+  ph_plot3d_add_isosurface(plot, &iso, &layer);
+}
+
+/* 3-D scene 5 — the Towers data again, as free-standing cuboids.
+ *
+ * Same numbers, different layer: bar3d builds a grid of boxes from a height
+ * field, boxes3d takes the boxes themselves. Side by side they show which one a
+ * caller wants — a lattice, or an arbitrary set of solids. */
+static void build_city(ph_panels* p, ph_plot3d plot) {
+  ph_plot3d_set_title(plot, "City");
+  ph_plot3d_set_axis_labels(plot, "x", "height", "z");
+  ph_plot3d_set_camera(plot, 0.6, 0.35, 3.2);
+
+  ph_boxes3d_desc boxes;
+  ph_boxes3d_desc_init(&boxes);
+  boxes.boxes = p->city;
+  boxes.count = BARS3D * BARS3D;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot3d_add_boxes(plot, &boxes, &layer);
+}
+
 void ph_panels_build_3d(ph_panels* panels, ph_plot3d plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_3D_COUNT) + PH_PANEL_3D_COUNT) % PH_PANEL_3D_COUNT;
   switch (which) {
     case 0: build_terrain(panels, plot); break;
     case 1: build_helix(panels, plot); break;
-    default: build_towers(panels, plot); break;
+    case 2: build_towers(panels, plot); break;
+    case 3: build_isolines(panels, plot); break;
+    case 4: build_blobs(panels, plot); break;
+    default: build_city(panels, plot); break;
   }
 }
 

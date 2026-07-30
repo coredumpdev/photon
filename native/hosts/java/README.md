@@ -1,6 +1,6 @@
 # The Java host
 
-The same thirty-four charts as the GLFW and Qt galleries, plus the three 3-D
+The same thirty-four charts as the GLFW and Qt galleries, plus the six 3-D
 scenes they do not show yet, in a window, driven from Java
 through the generated Panama binding.
 

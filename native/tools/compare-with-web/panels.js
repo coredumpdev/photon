@@ -1,5 +1,5 @@
 /**
- * The thirty-seven demo charts — thirty-four 2-D panels and three 3-D scenes, built with @photonviz/core.
+ * The forty demo charts — thirty-four 2-D panels and six 3-D scenes, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -49,6 +49,8 @@ const TERRAIN = 48;
 const HELIX_POINTS = 400;
 const CLOUD_POINTS = 1200;
 const BARS3D = 12;
+const ISOGRID = 40;
+const VOXELS = 32;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -1014,9 +1016,94 @@ function towers(container) {
   return plot;
 }
 
+function isolines(container) {
+  const values = new Float64Array(ISOGRID * ISOGRID);
+  for (let r = 0; r < ISOGRID; r++) {
+    for (let c = 0; c < ISOGRID; c++) {
+      const x = (c - ISOGRID * 0.5) * 0.26;
+      const z = (r - ISOGRID * 0.5) * 0.26;
+      values[r * ISOGRID + c] = Math.sin(Math.hypot(x, z) * 1.4) * 2;
+    }
+  }
+  const plot = new Plot3D(container, {
+    ...scene3d,
+    title: "Isolines",
+    axisLabels: { x: "x", y: "height", z: "z" },
+  });
+  plot.addContour3D({
+    values, cols: ISOGRID, rows: ISOGRID,
+    extentX: [-5, 5], extentZ: [-5, 5],
+    levels: 14, colormap: "turbo", name: "height",
+  });
+  return plot;
+}
+
+function blobs(container) {
+  // A density field: high inside, which is the convention the marching-cubes
+  // normal is right for. A distance field would light the surface from behind.
+  const ball = [[-0.35, 0, 0, 0.3], [0.35, 0.15, 0, 0.26], [0, -0.3, 0.25, 0.22]];
+  const values = new Float64Array(VOXELS * VOXELS * VOXELS);
+  for (let z = 0; z < VOXELS; z++) {
+    for (let y = 0; y < VOXELS; y++) {
+      for (let x = 0; x < VOXELS; x++) {
+        const px = (x / (VOXELS - 1)) * 2 - 1;
+        const py = (y / (VOXELS - 1)) * 2 - 1;
+        const pz = (z / (VOXELS - 1)) * 2 - 1;
+        let density = 0;
+        for (const b of ball) {
+          const d = (px - b[0]) ** 2 + (py - b[1]) ** 2 + (pz - b[2]) ** 2 + 1e-6;
+          density += (b[3] * b[3]) / d;
+        }
+        values[x + y * VOXELS + z * VOXELS * VOXELS] = density;
+      }
+    }
+  }
+  const plot = new Plot3D(container, {
+    ...scene3d,
+    title: "Blobs",
+    axisLabels: { x: "x", y: "y", z: "z" },
+    azimuth: 0.8,
+    elevation: 0.35,
+    distance: 3.2,
+  });
+  plot.addIsosurface({
+    values, dims: [VOXELS, VOXELS, VOXELS], isoLevel: 1.6,
+    extent: { x: [-1, 1], y: [-1, 1], z: [-1, 1] },
+    color: "#f472b6", name: "surface",
+  });
+  return plot;
+}
+
+function city(container) {
+  const boxes = [];
+  for (let r = 0; r < BARS3D; r++) {
+    for (let c = 0; c < BARS3D; c++) {
+      const nx = (c - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+      const nz = (r - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+      const h = 4 * Math.exp(-(nx * nx + nz * nz) * 1.6) + 0.3;
+      boxes.push({
+        x: (c - BARS3D * 0.5 + 0.5) * 0.5, y: h / 2, z: (r - BARS3D * 0.5 + 0.5) * 0.5,
+        w: 0.32, h, d: 0.32,
+        color: (r + c) % 2 === 1 ? "#38bdf8" : "#818cf8",
+      });
+    }
+  }
+  const plot = new Plot3D(container, {
+    ...scene3d,
+    title: "City",
+    axisLabels: { x: "x", y: "height", z: "z" },
+    azimuth: 0.6,
+    elevation: 0.35,
+    distance: 3.2,
+  });
+  plot.addBoxes3D({ boxes });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
                        candles, bars, density, flow, contour, network, signals,
                        fit, spectrum, roc, embedding, treemap, sunburst, sankey,
                        chord, gauge, parallel, grouped, stacked, histogramPanel,
-                       spectrogramPanel, polar, terrain, helix, towers];
+                       spectrogramPanel, polar, terrain, helix, towers, isolines,
+                       blobs, city];

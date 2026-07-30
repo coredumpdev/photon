@@ -7,6 +7,7 @@
 
 #include "color.hpp"
 #include "gl/program.hpp"
+#include "plot3d/marching_cubes.hpp"
 
 namespace photon::plot3d {
 
@@ -557,6 +558,358 @@ bool Line3DLayer::draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Ligh
 }
 
 void Line3DLayer::release_gl(gl::Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  vao_ = 0;
+  buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- Contour3DLayer ---------------------------------------------------------
+
+namespace {
+
+/// Marching squares: which edge pairs each of the sixteen corner-sign cases
+/// joins. e0 is the bottom edge, then right, top, left.
+constexpr int kSquareCases[16][5] = {
+    {-1},          {3, 0, -1},    {0, 1, -1},    {3, 1, -1},
+    {1, 2, -1},    {3, 0, 1, 2, -1}, {0, 2, -1}, {3, 2, -1},
+    {2, 3, -1},    {2, 0, -1},    {0, 1, 2, 3, -1}, {2, 1, -1},
+    {1, 3, -1},    {1, 0, -1},    {0, 3, -1},    {-1},
+};
+
+}  // namespace
+
+Contour3DLayer::Contour3DLayer(const ph_contour3d_desc& desc) {
+  name_ = desc.name ? desc.name : "";
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  const size_t cols = static_cast<size_t>(std::max(0, desc.cols));
+  const size_t rows = static_cast<size_t>(std::max(0, desc.rows));
+  if (!desc.values || cols < 2 || rows < 2) return;
+
+  const ph_range span = measure(desc.values, cols * rows, ph_range{0.0, 0.0});
+  const double vmin = span.lo;
+  const double vspan = span.hi - span.lo == 0.0 ? 1.0 : span.hi - span.lo;
+
+  std::vector<double> levels;
+  if (desc.level_values && desc.level_count > 0) {
+    levels.assign(desc.level_values, desc.level_values + desc.level_count);
+  } else {
+    const int count = desc.levels > 0 ? desc.levels : 10;
+    for (int i = 0; i < count; ++i) {
+      levels.push_back(vmin + vspan * static_cast<double>(i + 1) / static_cast<double>(count + 1));
+    }
+  }
+
+  const bool fixed = desc.color != PH_COLOR_AUTO;
+  if (!fixed) {
+    const photon::color::Spec spec = spec_of(desc.colormap);
+    lut_ = &photon::color::lut(spec);
+    domain_ = span;
+  }
+  const Rgb3 flat = unpack(desc.color);
+
+  const double x0 = desc.x.lo == desc.x.hi ? 0.0 : desc.x.lo;
+  const double x1 = desc.x.lo == desc.x.hi ? static_cast<double>(cols - 1) : desc.x.hi;
+  const double z0 = desc.z.lo == desc.z.hi ? 0.0 : desc.z.lo;
+  const double z1 = desc.z.lo == desc.z.hi ? static_cast<double>(rows - 1) : desc.z.hi;
+  const auto wx = [&](size_t c) {
+    return x0 + (x1 - x0) * static_cast<double>(c) / static_cast<double>(cols - 1);
+  };
+  const auto wz = [&](size_t r) {
+    return z0 + (z1 - z0) * static_cast<double>(r) / static_cast<double>(rows - 1);
+  };
+  const auto at = [&](size_t c, size_t r) { return desc.values[r * cols + c]; };
+
+  for (const double level : levels) {
+    const Rgb3 color = fixed ? flat : sample(*lut_, domain_, level);
+    for (size_t r = 0; r + 1 < rows; ++r) {
+      for (size_t c = 0; c + 1 < cols; ++c) {
+        const double v0 = at(c, r);
+        const double v1 = at(c + 1, r);
+        const double v2 = at(c + 1, r + 1);
+        const double v3 = at(c, r + 1);
+        const int index = (v0 >= level ? 1 : 0) | (v1 >= level ? 2 : 0) | (v2 >= level ? 4 : 0) |
+                          (v3 >= level ? 8 : 0);
+        if (kSquareCases[index][0] < 0) continue;
+        const auto crossing = [&](int e) {
+          const auto lerp = [](double t, double ax, double az, double bx, double bz) {
+            return std::array<double, 2>{ax + (bx - ax) * t, az + (bz - az) * t};
+          };
+          if (e == 0) return lerp((level - v0) / ((v1 - v0) == 0.0 ? 1e-9 : v1 - v0), wx(c), wz(r), wx(c + 1), wz(r));
+          if (e == 1) return lerp((level - v1) / ((v2 - v1) == 0.0 ? 1e-9 : v2 - v1), wx(c + 1), wz(r), wx(c + 1), wz(r + 1));
+          if (e == 2) return lerp((level - v2) / ((v3 - v2) == 0.0 ? 1e-9 : v3 - v2), wx(c + 1), wz(r + 1), wx(c), wz(r + 1));
+          return lerp((level - v3) / ((v0 - v3) == 0.0 ? 1e-9 : v0 - v3), wx(c), wz(r + 1), wx(c), wz(r));
+        };
+        for (int i = 0; kSquareCases[index][i] >= 0; i += 2) {
+          const std::array<double, 2> pa = crossing(kSquareCases[index][i]);
+          const std::array<double, 2> pb = crossing(kSquareCases[index][i + 1]);
+          // The line sits at its own level's height, which is what stacks the
+          // levels into a floating map instead of flattening them onto a plane.
+          vertices_.insert(vertices_.end(),
+                           {static_cast<float>(pa[0]), static_cast<float>(level),
+                            static_cast<float>(pa[1]), color.r, color.g, color.b,
+                            static_cast<float>(pb[0]), static_cast<float>(level),
+                            static_cast<float>(pb[1]), color.r, color.g, color.b});
+        }
+      }
+    }
+  }
+
+  bounds_.x = ph_range{x0, x1};
+  bounds_.y = span;
+  bounds_.z = ph_range{z0, z1};
+  has_bounds_ = true;
+  pad_degenerate(bounds_);
+}
+
+bool Contour3DLayer::bounds3(Bounds3& out) const {
+  if (!has_bounds_) return false;
+  out = bounds_;
+  return true;
+}
+
+bool Contour3DLayer::color_info(photon::ColorInfo& out) const {
+  if (!lut_) return false;
+  out.lut = lut_;
+  out.domain = domain_;
+  out.label = name_;
+  return true;
+}
+
+bool Contour3DLayer::ensure_gl(gl::Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &buffer_);
+    if (vao_ == 0 || buffer_ == 0) {
+      error = "failed to create the 3-D contour buffers";
+      return false;
+    }
+  }
+  if (!dirty_) return true;
+  api.BindVertexArray(vao_);
+  api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+  api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+                 vertices_.data(), buffer_usage(render_type_));
+  bind_attributes(api, {3, 3});
+  api.BindVertexArray(0);
+  dirty_ = false;
+  return true;
+}
+
+bool Contour3DLayer::draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Light& light,
+                          std::string& error) {
+  if (vertices_.empty()) return true;
+  if (!ensure_gl(api, error)) return false;
+  const Program* program = get_program(api, "plot3d.colorline", kColorLineVert, kColorLineFrag,
+                                       {"uMVP"}, gfx, error);
+  if (!program) return false;
+  api.UseProgram(program->id);
+  api.UniformMatrix4fv(program->uniform("uMVP"), 1, GL_FALSE_, mvp.data());
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size() / 6));
+  api.BindVertexArray(0);
+  (void)light;
+  return true;
+}
+
+void Contour3DLayer::release_gl(gl::Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  vao_ = 0;
+  buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- Boxes3DLayer -----------------------------------------------------------
+
+namespace {
+
+/// A unit cube centred on the origin, six faces with their own normals.
+struct CubeFace {
+  float nx, ny, nz;
+  float v[6][3];
+};
+
+constexpr CubeFace kCubeFaces[6] = {
+    {1, 0, 0, {{0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {0.5f, 0.5f, 0.5f},
+               {0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}}},
+    {-1, 0, 0, {{-0.5f, -0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, -0.5f},
+                {-0.5f, -0.5f, 0.5f}, {-0.5f, 0.5f, -0.5f}, {-0.5f, -0.5f, -0.5f}}},
+    {0, 1, 0, {{-0.5f, 0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {0.5f, 0.5f, 0.5f},
+               {-0.5f, 0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}}},
+    {0, -1, 0, {{-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, -0.5f},
+                {-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, -0.5f}, {-0.5f, -0.5f, -0.5f}}},
+    {0, 0, 1, {{-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}, {0.5f, 0.5f, 0.5f},
+               {-0.5f, -0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}}},
+    {0, 0, -1, {{0.5f, -0.5f, -0.5f}, {-0.5f, -0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
+                {0.5f, -0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}}},
+};
+
+}  // namespace
+
+Boxes3DLayer::Boxes3DLayer(const ph_boxes3d_desc& desc) {
+  name_ = desc.name ? desc.name : "";
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  const size_t n = static_cast<size_t>(std::max(0, desc.count));
+  if (!desc.boxes || n == 0) return;
+
+  const Rgb3 fallback = unpack(desc.color);
+  // Opacity multiplies the colour rather than the alpha: the mesh shader writes
+  // an opaque fragment, so a translucent box is one that is drawn dimmer. That
+  // is a real difference from the web core, which blends — and blending without
+  // depth sorting composites out of order anyway.
+  const float opacity = desc.opacity > 0.0f ? std::min(desc.opacity, 1.0f) : 1.0f;
+
+  bool any = false;
+  vertices_.reserve(n * 36 * 9);
+  for (size_t i = 0; i < n; ++i) {
+    const ph_box3d& box = desc.boxes[i];
+    const Rgb3 base = box.color != PH_COLOR_AUTO ? unpack(box.color) : fallback;
+    const Rgb3 color{base.r * opacity, base.g * opacity, base.b * opacity};
+    extend(bounds_, any, box.x - box.w / 2.0, box.y - box.h / 2.0, box.z - box.d / 2.0);
+    extend(bounds_, any, box.x + box.w / 2.0, box.y + box.h / 2.0, box.z + box.d / 2.0);
+    for (const CubeFace& face : kCubeFaces) {
+      for (int v = 0; v < 6; ++v) {
+        vertices_.insert(vertices_.end(),
+                         {static_cast<float>(box.x + face.v[v][0] * box.w),
+                          static_cast<float>(box.y + face.v[v][1] * box.h),
+                          static_cast<float>(box.z + face.v[v][2] * box.d), face.nx, face.ny,
+                          face.nz, color.r, color.g, color.b});
+      }
+    }
+  }
+  has_bounds_ = any;
+  if (has_bounds_) pad_degenerate(bounds_);
+}
+
+bool Boxes3DLayer::bounds3(Bounds3& out) const {
+  if (!has_bounds_) return false;
+  out = bounds_;
+  return true;
+}
+
+bool Boxes3DLayer::ensure_gl(gl::Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &buffer_);
+    if (vao_ == 0 || buffer_ == 0) {
+      error = "failed to create the 3-D box buffers";
+      return false;
+    }
+  }
+  if (!dirty_) return true;
+  api.BindVertexArray(vao_);
+  api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+  api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+                 vertices_.data(), buffer_usage(render_type_));
+  bind_attributes(api, {3, 3, 3});
+  api.BindVertexArray(0);
+  dirty_ = false;
+  return true;
+}
+
+bool Boxes3DLayer::draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Light& light,
+                        std::string& error) {
+  if (vertices_.empty()) return true;
+  if (!ensure_gl(api, error)) return false;
+  const Program* program = get_program(api, "plot3d.mesh", kMeshVert, kMeshFrag,
+                                       {"uMVP", "uLightDir", "uAmbient"}, gfx, error);
+  if (!program) return false;
+  api.UseProgram(program->id);
+  api.UniformMatrix4fv(program->uniform("uMVP"), 1, GL_FALSE_, mvp.data());
+  api.Uniform3f(program->uniform("uLightDir"), light.x, light.y, light.z);
+  api.Uniform1f(program->uniform("uAmbient"), light.ambient);
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices_.size() / 9));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void Boxes3DLayer::release_gl(gl::Api& api) {
+  if (vao_ == 0) return;
+  api.DeleteVertexArrays(1, &vao_);
+  api.DeleteBuffers(1, &buffer_);
+  vao_ = 0;
+  buffer_ = 0;
+  dirty_ = true;
+}
+
+// -- IsosurfaceLayer --------------------------------------------------------
+
+IsosurfaceLayer::IsosurfaceLayer(const ph_isosurface_desc& desc) {
+  name_ = desc.name ? desc.name : "";
+  color_ = desc.color;
+  render_type_ = desc.render_type;
+  const size_t nx = static_cast<size_t>(std::max(0, desc.nx));
+  const size_t ny = static_cast<size_t>(std::max(0, desc.ny));
+  const size_t nz = static_cast<size_t>(std::max(0, desc.nz));
+  if (!desc.values || nx < 2 || ny < 2 || nz < 2) return;
+
+  const Mesh mesh = marching_cubes(desc.values, nx, ny, nz, desc.level, desc.x.lo, desc.x.hi,
+                                   desc.y.lo, desc.y.hi, desc.z.lo, desc.z.hi);
+  const Rgb3 color = unpack(desc.color);
+  bool any = false;
+  vertices_.reserve(mesh.positions.size() * 3);
+  for (size_t i = 0; i + 2 < mesh.positions.size(); i += 3) {
+    extend(bounds_, any, mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]);
+    vertices_.insert(vertices_.end(),
+                     {mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2],
+                      mesh.normals[i], mesh.normals[i + 1], mesh.normals[i + 2], color.r, color.g,
+                      color.b});
+  }
+  has_bounds_ = any;
+  if (has_bounds_) pad_degenerate(bounds_);
+}
+
+bool IsosurfaceLayer::bounds3(Bounds3& out) const {
+  if (!has_bounds_) return false;
+  out = bounds_;
+  return true;
+}
+
+bool IsosurfaceLayer::ensure_gl(gl::Api& api, std::string& error) {
+  if (vao_ == 0) {
+    api.GenVertexArrays(1, &vao_);
+    api.GenBuffers(1, &buffer_);
+    if (vao_ == 0 || buffer_ == 0) {
+      error = "failed to create the isosurface buffers";
+      return false;
+    }
+  }
+  if (!dirty_) return true;
+  api.BindVertexArray(vao_);
+  api.BindBuffer(GL_ARRAY_BUFFER, buffer_);
+  api.BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+                 vertices_.data(), buffer_usage(render_type_));
+  bind_attributes(api, {3, 3, 3});
+  api.BindVertexArray(0);
+  dirty_ = false;
+  return true;
+}
+
+bool IsosurfaceLayer::draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Light& light,
+                           std::string& error) {
+  if (vertices_.empty()) return true;
+  if (!ensure_gl(api, error)) return false;
+  const Program* program = get_program(api, "plot3d.mesh", kMeshVert, kMeshFrag,
+                                       {"uMVP", "uLightDir", "uAmbient"}, gfx, error);
+  if (!program) return false;
+  api.UseProgram(program->id);
+  api.UniformMatrix4fv(program->uniform("uMVP"), 1, GL_FALSE_, mvp.data());
+  api.Uniform3f(program->uniform("uLightDir"), light.x, light.y, light.z);
+  api.Uniform1f(program->uniform("uAmbient"), light.ambient);
+  api.BindVertexArray(vao_);
+  api.DrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices_.size() / 9));
+  api.BindVertexArray(0);
+  return true;
+}
+
+void IsosurfaceLayer::release_gl(gl::Api& api) {
   if (vao_ == 0) return;
   api.DeleteVertexArrays(1, &vao_);
   api.DeleteBuffers(1, &buffer_);

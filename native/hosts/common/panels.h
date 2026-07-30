@@ -27,7 +27,7 @@ extern "C" {
  * with ph_plot3d_render, so it opts in rather than getting them for free. Only
  * the Java gallery does so far; the GLFW and Qt ones show the 2-D panels.
  */
-#define PH_PANEL_3D_COUNT 3
+#define PH_PANEL_3D_COUNT 6
 
 /**
  * Per-instance state for one set of panels.

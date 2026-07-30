@@ -95,6 +95,72 @@ class Line3DLayer : public Layer3D {
   gl::GLuint buffer_ = 0;
 };
 
+/// Iso-height lines of a grid, each at its own level: a floating contour map.
+class Contour3DLayer : public Layer3D {
+ public:
+  explicit Contour3DLayer(const ph_contour3d_desc& desc);
+  bool bounds3(Bounds3& out) const override;
+  bool color_info(photon::ColorInfo& out) const override;
+  bool draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Light& light,
+            std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<float> vertices_;
+  Bounds3 bounds_;
+  bool has_bounds_ = false;
+  const photon::color::Lut* lut_ = nullptr;
+  ph_range domain_{0.0, 1.0};
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+};
+
+/// Lit cuboids, for a voxel scene or a schematic. Shares the mesh shader.
+class Boxes3DLayer : public Layer3D {
+ public:
+  explicit Boxes3DLayer(const ph_boxes3d_desc& desc);
+  bool bounds3(Bounds3& out) const override;
+  bool draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Light& light,
+            std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<float> vertices_;
+  Bounds3 bounds_;
+  bool has_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+};
+
+/// The level set of a scalar volume, cut by marching cubes and lit.
+class IsosurfaceLayer : public Layer3D {
+ public:
+  explicit IsosurfaceLayer(const ph_isosurface_desc& desc);
+  bool bounds3(Bounds3& out) const override;
+  bool draw(gl::Api& api, ph_gfx_api gfx, const Mat4& mvp, const Light& light,
+            std::string& error) override;
+  void release_gl(gl::Api& api) override;
+
+ private:
+  bool ensure_gl(gl::Api& api, std::string& error);
+
+  std::vector<float> vertices_;
+  Bounds3 bounds_;
+  bool has_bounds_ = false;
+  ph_render_type render_type_ = PH_RENDER_STATIC;
+  bool dirty_ = true;
+  gl::GLuint vao_ = 0;
+  gl::GLuint buffer_ = 0;
+};
+
 /// One lit box per cell of a height grid. Shares the surface's mesh shader.
 class Bar3DLayer : public Layer3D {
  public:

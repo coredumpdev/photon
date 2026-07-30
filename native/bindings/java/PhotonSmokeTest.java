@@ -2265,6 +2265,62 @@ public final class PhotonSmokeTest {
                 "all six arrays are required");
         ran("ph_quiver3d_desc_init", "ph_plot3d_add_quiver");
 
+        MemorySegment contour = ph_contour3d_desc.allocate(arena);
+        ph_contour3d_desc_init(contour);
+        contour.set(ValueLayout.ADDRESS, ph_contour3d_desc.OFFSET_VALUES, grid);
+        contour.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_COLS, 4);
+        contour.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_ROWS, 4);
+        contour.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_LEVELS, 5);
+        checkEq(ph_plot3d_add_contour(scene, contour, handle), PH_OK, "ph_plot3d_add_contour");
+        contour.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_COLS, 1);
+        checkEq(ph_plot3d_add_contour(scene, contour, handle), PH_E_INVALID_ARGUMENT,
+                "a 1-wide grid has no cells to march");
+        ran("ph_contour3d_desc_init", "ph_plot3d_add_contour");
+
+        MemorySegment boxes = arena.allocate(ph_box3d.LAYOUT, 2);
+        for (int i = 0; i < 2; i++) {
+            long base = ph_box3d.SIZE * i;
+            boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_X, i);
+            boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_Y, 0.5);
+            boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_Z, 0);
+            boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_W, 0.8);
+            boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_H, 1.0);
+            boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_D, 0.8);
+        }
+        MemorySegment boxDesc = ph_boxes3d_desc.allocate(arena);
+        ph_boxes3d_desc_init(boxDesc);
+        boxDesc.set(ValueLayout.ADDRESS, ph_boxes3d_desc.OFFSET_BOXES, boxes);
+        boxDesc.set(ValueLayout.JAVA_INT, ph_boxes3d_desc.OFFSET_COUNT, 2);
+        checkEq(ph_plot3d_add_boxes(scene, boxDesc, handle), PH_OK, "ph_plot3d_add_boxes");
+        boxDesc.set(ValueLayout.ADDRESS, ph_boxes3d_desc.OFFSET_BOXES, MemorySegment.NULL);
+        checkEq(ph_plot3d_add_boxes(scene, boxDesc, handle), PH_E_INVALID_ARGUMENT,
+                "a count with no boxes is refused");
+        ran("ph_boxes3d_desc_init", "ph_plot3d_add_boxes");
+
+        // A 6x6x6 distance field, whose level set at radius 2 is a sphere.
+        MemorySegment volume = room(arena, 216);
+        for (int z = 0; z < 6; z++) {
+            for (int y = 0; y < 6; y++) {
+                for (int x = 0; x < 6; x++) {
+                    double d = Math.sqrt(Math.pow(x - 2.5, 2) + Math.pow(y - 2.5, 2)
+                                         + Math.pow(z - 2.5, 2));
+                    volume.setAtIndex(ValueLayout.JAVA_DOUBLE, x + y * 6 + z * 36, d);
+                }
+            }
+        }
+        MemorySegment iso = ph_isosurface_desc.allocate(arena);
+        ph_isosurface_desc_init(iso);
+        iso.set(ValueLayout.ADDRESS, ph_isosurface_desc.OFFSET_VALUES, volume);
+        iso.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NX, 6);
+        iso.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NY, 6);
+        iso.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NZ, 6);
+        iso.set(ValueLayout.JAVA_DOUBLE, ph_isosurface_desc.OFFSET_LEVEL, 2.0);
+        checkEq(ph_plot3d_add_isosurface(scene, iso, handle), PH_OK, "ph_plot3d_add_isosurface");
+        iso.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NZ, 1);
+        checkEq(ph_plot3d_add_isosurface(scene, iso, handle), PH_E_INVALID_ARGUMENT,
+                "a one-deep volume has no cubes to march");
+        ran("ph_isosurface_desc_init", "ph_plot3d_add_isosurface");
+
         checkEq(ph_plot3d_pointer_down(scene, 10, 10, PH_BUTTON_LEFT, PH_MOD_NONE), PH_OK,
                 "ph_plot3d_pointer_down");
         checkEq(ph_plot3d_pointer_move(scene, 60, 10, PH_MOD_NONE), PH_OK,

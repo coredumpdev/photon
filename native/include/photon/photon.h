@@ -2798,12 +2798,101 @@ PH_API void PH_CALL ph_quiver3d_desc_init(ph_quiver3d_desc* out);
 PH_API ph_result PH_CALL ph_plot3d_add_quiver(ph_plot3d plot, const ph_quiver3d_desc* desc,
                                               ph_layer* out);
 
+/**
+ * Mirrors core `Contour3DOptions`: iso-height lines of a grid, each drawn at
+ * its own level so they stack into a floating topographic map.
+ */
+typedef struct ph_contour3d_desc {
+  uint32_t                struct_size;
+  /** Row-major heights, `cols * rows`. */
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  ph_range                x;
+  ph_range                z;
+  /** Evenly-spaced level count. 0 means 10, and is ignored when `level_values` is set. */
+  int32_t                 levels;
+  /** An explicit level list, which beats `levels`. */
+  const double*           level_values;
+  int32_t                 level_count;
+  /** One colour for every line. PH_COLOR_AUTO colours each level by its value. */
+  ph_color                color;
+  const ph_colormap_spec* colormap;
+  const char*             name;
+  ph_render_type          render_type;
+} ph_contour3d_desc;
+
+PH_API void PH_CALL ph_contour3d_desc_init(ph_contour3d_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_contour(ph_plot3d plot, const ph_contour3d_desc* desc,
+                                               ph_layer* out);
+
+/** One axis-aligned cuboid: a centre and a full size on each axis. */
+typedef struct ph_box3d {
+  double   x;
+  double   y;
+  double   z;
+  double   w;
+  double   h;
+  double   d;
+  /** PH_COLOR_AUTO falls back to the layer's colour. */
+  ph_color color;
+} ph_box3d;
+
+/**
+ * Mirrors core `Boxes3DOptions`: lit cuboids, for a voxel scene or a schematic.
+ *
+ * An opacity below 1 blends without depth sorting, so overlapping translucent
+ * boxes can composite out of order — the same caveat the web core carries.
+ */
+typedef struct ph_boxes3d_desc {
+  uint32_t         struct_size;
+  const ph_box3d*  boxes;
+  int32_t          count;
+  /** Fill for boxes that carry no colour of their own. */
+  ph_color         color;
+  float            opacity;
+  const char*      name;
+  ph_render_type   render_type;
+} ph_boxes3d_desc;
+
+PH_API void PH_CALL ph_boxes3d_desc_init(ph_boxes3d_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_boxes(ph_plot3d plot, const ph_boxes3d_desc* desc,
+                                             ph_layer* out);
+
+/**
+ * Mirrors core `IsosurfaceOptions`: the level set of a scalar volume, extracted
+ * by marching cubes and drawn as a lit mesh.
+ *
+ * `values` is `nx * ny * nz` with x varying fastest. A corner counts as inside
+ * when its value is *below* `level`, which is the convention the tables were
+ * written for; normals come from the volume's own gradient, so the surface
+ * shades smoothly rather than showing the lattice it was cut from.
+ */
+typedef struct ph_isosurface_desc {
+  uint32_t       struct_size;
+  const double*  values;
+  int32_t        nx;
+  int32_t        ny;
+  int32_t        nz;
+  /** World extent of the grid. An empty range means 0..n-1. */
+  ph_range       x;
+  ph_range       y;
+  ph_range       z;
+  double         level;
+  ph_color       color;
+  const char*    name;
+  ph_render_type render_type;
+} ph_isosurface_desc;
+
+PH_API void PH_CALL ph_isosurface_desc_init(ph_isosurface_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_isosurface(ph_plot3d plot, const ph_isosurface_desc* desc,
+                                                  ph_layer* out);
+
 /*
- * Four of the web core's nine 3-D layers are here — surface, point cloud, line
- * and bars — plus the quiver above. The other four (isosurface, volume,
- * contour3d, boxes3d) are additive and listed in native/TODO.md: isosurface
- * needs marching cubes and volume needs a 3-D texture, and each of those is its
- * own piece of work rather than another shader over the same plumbing.
+ * Eight of the web core's nine 3-D layers are here. The ninth, `volume`,
+ * raymarches a 3-D texture — which means TexImage3D and TEXTURE_3D in the GL
+ * loader, and a camera in the layer's own local space. It is additive and
+ * listed in native/TODO.md.
  */
 
 /* Interaction, rendering and events, in the same shapes as the 2-D plot. */

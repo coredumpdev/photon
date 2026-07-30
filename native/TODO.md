@@ -181,18 +181,25 @@ All of the above are pure functions with existing unit tests in
       type — the opposite of the polar decision, and for the same reason:
       polar differs in the grid and the projection, this differs in the camera,
       the depth test, the vertex format and what a layer even is.
-- [x] ~~Layers: `line3d` `pointcloud` `quiver3d` `surface` `bar3d`~~ — five of
-      the nine, over three programs: one lit mesh shader the surface and the
+- [x] ~~Layers: `line3d` `pointcloud` `quiver3d` `surface` `bar3d`
+      `contour3d` `boxes3d` `isosurface`~~ — eight of the nine, over three
+      programs: one lit mesh shader the surface and the
       bars share, one point shader, one plain line shader. The surface's
       normals are per-vertex central differences rather than face normals,
       because that is what the web core does and a flat-shaded surface is a
       recognisably different picture.
-- [ ] `isosurface` needs `marching-cubes.ts` — the 256-entry edge and triangle
-      tables, transcribed with its vitest suite.
+- [x] ~~`isosurface`, `contour3d` and `boxes3d`~~ — with `marching-cubes.ts`
+      under the first, tables and all, and `tests/marching_cubes_test.cpp`
+      transcribing its vitest suite plus three cases it does not have.
+- [ ] **The marching-cubes normal is right for one convention and wrong for the
+      other, in both cores.** It is the negated gradient, so it points outwards
+      for a density field (high inside, which is what an isosurface is usually
+      cut from) and inwards for a distance field (low inside, which is what the
+      tables' own "inside" test assumes). A distance field therefore lights
+      from behind. `tests/marching_cubes_test.cpp` pins both directions so
+      nobody "fixes" one core alone; the fix belongs in the web first.
 - [ ] `volume` needs a 3-D texture, which means `TexImage3D` and `TEXTURE_3D`
       in the GL loader; the raymarching shader is otherwise self-contained.
-- [ ] `contour3d` and `boxes3d` are both meshes over the plumbing that now
-      exists — additive, no new decisions.
 - [ ] Only the Java gallery shows the 3-D scenes. The GLFW and Qt hosts hold an
       array of `ph_plot`, so showing a `ph_plot3d` means a second path through
       their panel plumbing; `hosts/common/panels.c` already builds the scenes

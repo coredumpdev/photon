@@ -4080,6 +4080,96 @@ extern "C" ph_result PH_CALL ph_plot3d_add_quiver(ph_plot3d handle, const ph_qui
   }
 }
 
+extern "C" void PH_CALL ph_contour3d_desc_init(ph_contour3d_desc* out) {
+  if (!out) return;
+  *out = ph_contour3d_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_contour3d_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_contour(ph_plot3d handle,
+                                                   const ph_contour3d_desc* desc, ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_contour3d_desc.struct_size is larger than this build's");
+  }
+  const ph_contour3d_desc d = normalize(desc, ph_contour3d_desc_init);
+  if (d.cols < 2 || d.rows < 2) {
+    return fail(PH_E_INVALID_ARGUMENT, "a contour needs at least a 2x2 grid");
+  }
+  if (!d.values) return fail(PH_E_INVALID_ARGUMENT, "values must be non-null");
+  if (d.level_count < 0) return fail(PH_E_INVALID_ARGUMENT, "level_count must be non-negative");
+  if (d.level_count > 0 && !d.level_values) {
+    return fail(PH_E_INVALID_ARGUMENT, "level_values must be non-null when level_count > 0");
+  }
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::Contour3DLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the 3-D contour layer");
+  }
+}
+
+extern "C" void PH_CALL ph_boxes3d_desc_init(ph_boxes3d_desc* out) {
+  if (!out) return;
+  *out = ph_boxes3d_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_boxes3d_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_boxes(ph_plot3d handle, const ph_boxes3d_desc* desc,
+                                                 ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_boxes3d_desc.struct_size is larger than this build's");
+  }
+  const ph_boxes3d_desc d = normalize(desc, ph_boxes3d_desc_init);
+  if (d.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (d.count > 0 && !d.boxes) {
+    return fail(PH_E_INVALID_ARGUMENT, "boxes must be non-null when count > 0");
+  }
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::Boxes3DLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the 3-D box layer");
+  }
+}
+
+extern "C" void PH_CALL ph_isosurface_desc_init(ph_isosurface_desc* out) {
+  if (!out) return;
+  *out = ph_isosurface_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_isosurface_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_isosurface(ph_plot3d handle,
+                                                      const ph_isosurface_desc* desc,
+                                                      ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_isosurface_desc.struct_size is larger than this build's");
+  }
+  const ph_isosurface_desc d = normalize(desc, ph_isosurface_desc_init);
+  if (d.nx < 2 || d.ny < 2 || d.nz < 2) {
+    return fail(PH_E_INVALID_ARGUMENT, "a volume needs at least two samples on every axis");
+  }
+  if (!d.values) return fail(PH_E_INVALID_ARGUMENT, "values must be non-null");
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::IsosurfaceLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the isosurface layer");
+  }
+}
+
 extern "C" ph_result PH_CALL ph_plot3d_pointer_down(ph_plot3d handle, double px, double py,
                                                     ph_button button, ph_modifiers mods) {
   clear_error();

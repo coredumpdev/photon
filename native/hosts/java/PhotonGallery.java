@@ -82,11 +82,13 @@ public final class PhotonGallery {
     private static final int HIST_SAMPLES = 4000;
     private static final int ROSE_POINTS = 361;
     private static final int ROSE_MARKS = 12;
-    private static final int SCENES = 3;
+    private static final int SCENES = 6;
     private static final int TERRAIN = 48;
     private static final int HELIX_POINTS = 400;
     private static final int CLOUD_POINTS = 1200;
     private static final int BARS3D = 12;
+    private static final int ISOGRID = 40;
+    private static final int VOXELS = 32;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -1662,6 +1664,132 @@ public final class PhotonGallery {
         buildTerrain(scenes[0]);
         buildHelix(scenes[1]);
         buildTowers(scenes[2]);
+        buildIsolines(scenes[3]);
+        buildBlobs(scenes[4]);
+        buildCity(scenes[5]);
+    }
+
+    /** Scene 3 — the Terrain ripples as stacked iso-height lines. */
+    private static void buildIsolines(long scene) {
+        MemorySegment values = doubles(ISOGRID * ISOGRID);
+        for (int r = 0; r < ISOGRID; r++) {
+            for (int c = 0; c < ISOGRID; c++) {
+                double x = (c - ISOGRID * 0.5) * 0.26;
+                double z = (r - ISOGRID * 0.5) * 0.26;
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, r * ISOGRID + c,
+                                  Math.sin(Math.hypot(x, z) * 1.4) * 2.0);
+            }
+        }
+        ph_plot3d_set_title(scene, ARENA.allocateFrom("Isolines"));
+        ph_plot3d_set_axis_labels(scene, ARENA.allocateFrom("x"), ARENA.allocateFrom("height"),
+                                  ARENA.allocateFrom("z"));
+
+        MemorySegment desc = ph_contour3d_desc.allocate(ARENA);
+        ph_contour3d_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_contour3d_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_COLS, ISOGRID);
+        desc.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_ROWS, ISOGRID);
+        setRange(desc, ph_contour3d_desc.OFFSET_X, -5, 5);
+        setRange(desc, ph_contour3d_desc.OFFSET_Z, -5, 5);
+        desc.set(ValueLayout.JAVA_INT, ph_contour3d_desc.OFFSET_LEVELS, 14);
+        desc.set(ValueLayout.ADDRESS, ph_contour3d_desc.OFFSET_COLORMAP, ramp("turbo"));
+        desc.set(ValueLayout.ADDRESS, ph_contour3d_desc.OFFSET_NAME, ARENA.allocateFrom("height"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot3d_add_contour(scene, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /**
+     * Scene 4 — three metaballs as one isosurface.
+     *
+     * The density field is high inside, which is the convention the
+     * marching-cubes normal is right for; a distance field would light the
+     * surface from behind.
+     */
+    private static void buildBlobs(long scene) {
+        double[][] ball = {{-0.35, 0.0, 0.0, 0.30}, {0.35, 0.15, 0.0, 0.26}, {0.0, -0.3, 0.25, 0.22}};
+        MemorySegment values = doubles(VOXELS * VOXELS * VOXELS);
+        for (int z = 0; z < VOXELS; z++) {
+            for (int y = 0; y < VOXELS; y++) {
+                for (int x = 0; x < VOXELS; x++) {
+                    double px = (x / (double) (VOXELS - 1)) * 2 - 1;
+                    double py = (y / (double) (VOXELS - 1)) * 2 - 1;
+                    double pz = (z / (double) (VOXELS - 1)) * 2 - 1;
+                    double density = 0;
+                    for (double[] b : ball) {
+                        double dx = px - b[0];
+                        double dy = py - b[1];
+                        double dz = pz - b[2];
+                        density += b[3] * b[3] / (dx * dx + dy * dy + dz * dz + 1e-6);
+                    }
+                    values.setAtIndex(ValueLayout.JAVA_DOUBLE,
+                                      x + y * VOXELS + z * VOXELS * VOXELS, density);
+                }
+            }
+        }
+        ph_plot3d_set_title(scene, ARENA.allocateFrom("Blobs"));
+        ph_plot3d_set_axis_labels(scene, ARENA.allocateFrom("x"), ARENA.allocateFrom("y"),
+                                  ARENA.allocateFrom("z"));
+        ph_plot3d_set_camera(scene, 0.8, 0.35, 3.2);
+
+        MemorySegment desc = ph_isosurface_desc.allocate(ARENA);
+        ph_isosurface_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_isosurface_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NX, VOXELS);
+        desc.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NY, VOXELS);
+        desc.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_NZ, VOXELS);
+        setRange(desc, ph_isosurface_desc.OFFSET_X, -1, 1);
+        setRange(desc, ph_isosurface_desc.OFFSET_Y, -1, 1);
+        setRange(desc, ph_isosurface_desc.OFFSET_Z, -1, 1);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_isosurface_desc.OFFSET_LEVEL, 1.6);
+        desc.set(ValueLayout.JAVA_INT, ph_isosurface_desc.OFFSET_COLOR, color("#f472b6"));
+        desc.set(ValueLayout.ADDRESS, ph_isosurface_desc.OFFSET_NAME, ARENA.allocateFrom("surface"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot3d_add_isosurface(scene, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /**
+     * Scene 5 — the Towers data again, as free-standing cuboids.
+     *
+     * Same numbers, different layer: bar3d builds a grid of boxes from a height
+     * field, boxes3d takes the boxes themselves.
+     */
+    private static void buildCity(long scene) {
+        MemorySegment boxes = ARENA.allocate(ph_box3d.LAYOUT, BARS3D * BARS3D);
+        for (int r = 0; r < BARS3D; r++) {
+            for (int c = 0; c < BARS3D; c++) {
+                double nx = (c - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+                double nz = (r - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+                double height = 4.0 * Math.exp(-(nx * nx + nz * nz) * 1.6) + 0.3;
+                long base = ph_box3d.SIZE * (r * BARS3D + c);
+                boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_X,
+                          (c - BARS3D * 0.5 + 0.5) * 0.5);
+                boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_Y, height / 2);
+                boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_Z,
+                          (r - BARS3D * 0.5 + 0.5) * 0.5);
+                boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_W, 0.32);
+                boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_H, height);
+                boxes.set(ValueLayout.JAVA_DOUBLE, base + ph_box3d.OFFSET_D, 0.32);
+                boxes.set(ValueLayout.JAVA_INT, base + ph_box3d.OFFSET_COLOR,
+                          color((r + c) % 2 == 1 ? "#38bdf8" : "#818cf8"));
+            }
+        }
+        ph_plot3d_set_title(scene, ARENA.allocateFrom("City"));
+        ph_plot3d_set_axis_labels(scene, ARENA.allocateFrom("x"), ARENA.allocateFrom("height"),
+                                  ARENA.allocateFrom("z"));
+        ph_plot3d_set_camera(scene, 0.6, 0.35, 3.2);
+
+        MemorySegment desc = ph_boxes3d_desc.allocate(ARENA);
+        ph_boxes3d_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_boxes3d_desc.OFFSET_BOXES, boxes);
+        desc.set(ValueLayout.JAVA_INT, ph_boxes3d_desc.OFFSET_COUNT, BARS3D * BARS3D);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot3d_add_boxes(scene, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
     }
 
     private static MemorySegment ramp(String name) {

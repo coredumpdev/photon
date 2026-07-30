@@ -2777,6 +2777,159 @@ public final class Photon {
         }
     }
 
+    /** ph_contour3d_desc — 104 bytes, alignment 8. */
+    public static final class ph_contour3d_desc {
+        private ph_contour3d_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("z"),
+            ValueLayout.JAVA_INT.withName("levels"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("level_values"),
+            ValueLayout.JAVA_INT.withName("level_count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_contour3d_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Z = 40L;
+        public static final long OFFSET_LEVELS = 56L;
+        public static final long OFFSET_LEVEL_VALUES = 64L;
+        public static final long OFFSET_LEVEL_COUNT = 72L;
+        public static final long OFFSET_COLOR = 76L;
+        public static final long OFFSET_COLORMAP = 80L;
+        public static final long OFFSET_NAME = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_box3d — 56 bytes, alignment 8. */
+    public static final class ph_box3d {
+        private ph_box3d() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("x"),
+            ValueLayout.JAVA_DOUBLE.withName("y"),
+            ValueLayout.JAVA_DOUBLE.withName("z"),
+            ValueLayout.JAVA_DOUBLE.withName("w"),
+            ValueLayout.JAVA_DOUBLE.withName("h"),
+            ValueLayout.JAVA_DOUBLE.withName("d"),
+            ValueLayout.JAVA_INT.withName("color"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_box3d");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_X = 0L;
+        public static final long OFFSET_Y = 8L;
+        public static final long OFFSET_Z = 16L;
+        public static final long OFFSET_W = 24L;
+        public static final long OFFSET_H = 32L;
+        public static final long OFFSET_D = 40L;
+        public static final long OFFSET_COLOR = 48L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_boxes3d_desc — 48 bytes, alignment 8. */
+    public static final class ph_boxes3d_desc {
+        private ph_boxes3d_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("boxes"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("opacity"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_boxes3d_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_BOXES = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_COLOR = 20L;
+        public static final long OFFSET_OPACITY = 24L;
+        public static final long OFFSET_NAME = 32L;
+        public static final long OFFSET_RENDER_TYPE = 40L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_isosurface_desc — 112 bytes, alignment 8. */
+    public static final class ph_isosurface_desc {
+        private ph_isosurface_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("nx"),
+            ValueLayout.JAVA_INT.withName("ny"),
+            ValueLayout.JAVA_INT.withName("nz"),
+            MemoryLayout.paddingLayout(4),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y"),
+            ph_range.LAYOUT.withName("z"),
+            ValueLayout.JAVA_DOUBLE.withName("level"),
+            ValueLayout.JAVA_INT.withName("color"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_isosurface_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_NX = 16L;
+        public static final long OFFSET_NY = 20L;
+        public static final long OFFSET_NZ = 24L;
+        public static final long OFFSET_X = 32L;
+        public static final long OFFSET_Y = 48L;
+        public static final long OFFSET_Z = 64L;
+        public static final long OFFSET_LEVEL = 80L;
+        public static final long OFFSET_COLOR = 88L;
+        public static final long OFFSET_NAME = 96L;
+        public static final long OFFSET_RENDER_TYPE = 104L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     // ---- entry points ----
 
     /**
@@ -3011,6 +3164,12 @@ public final class Photon {
         "ph_plot3d_add_bars",
         "ph_quiver3d_desc_init",
         "ph_plot3d_add_quiver",
+        "ph_contour3d_desc_init",
+        "ph_plot3d_add_contour",
+        "ph_boxes3d_desc_init",
+        "ph_plot3d_add_boxes",
+        "ph_isosurface_desc_init",
+        "ph_plot3d_add_isosurface",
         "ph_plot3d_pointer_down",
         "ph_plot3d_pointer_move",
         "ph_plot3d_pointer_up",
@@ -3263,6 +3422,12 @@ public final class Photon {
     private static final MethodHandle PH_PLOT3D_ADD_BARS = handle("ph_plot3d_add_bars", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_QUIVER3D_DESC_INIT = handle("ph_quiver3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT3D_ADD_QUIVER = handle("ph_plot3d_add_quiver", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_CONTOUR3D_DESC_INIT = handle("ph_contour3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_CONTOUR = handle("ph_plot3d_add_contour", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_BOXES3D_DESC_INIT = handle("ph_boxes3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_BOXES = handle("ph_plot3d_add_boxes", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_ISOSURFACE_DESC_INIT = handle("ph_isosurface_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_ISOSURFACE = handle("ph_plot3d_add_isosurface", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT3D_POINTER_DOWN = handle("ph_plot3d_pointer_down", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT3D_POINTER_MOVE = handle("ph_plot3d_pointer_move", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT3D_POINTER_UP = handle("ph_plot3d_pointer_up", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
@@ -5086,6 +5251,54 @@ public final class Photon {
             return (int) PH_PLOT3D_ADD_QUIVER.invokeExact(plot, desc, out);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot3d_add_quiver failed", photonFailure);
+        }
+    }
+
+    public static void ph_contour3d_desc_init(MemorySegment out) {
+        try {
+            PH_CONTOUR3D_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_contour3d_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_contour(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_CONTOUR.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_contour failed", photonFailure);
+        }
+    }
+
+    public static void ph_boxes3d_desc_init(MemorySegment out) {
+        try {
+            PH_BOXES3D_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_boxes3d_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_boxes(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_BOXES.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_boxes failed", photonFailure);
+        }
+    }
+
+    public static void ph_isosurface_desc_init(MemorySegment out) {
+        try {
+            PH_ISOSURFACE_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_isosurface_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_isosurface(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_ISOSURFACE.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_isosurface failed", photonFailure);
         }
     }
 
