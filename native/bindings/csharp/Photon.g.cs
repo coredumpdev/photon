@@ -185,6 +185,80 @@ public static partial class Ph
         public int discrete_steps;
     }
 
+    /// <summary>ph_pivot_levels — 56 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_pivot_levels
+    {
+        /// <summary>offset 0</summary>
+        public double pivot;
+        /// <summary>offset 8</summary>
+        public double r1;
+        /// <summary>offset 16</summary>
+        public double r2;
+        /// <summary>offset 24</summary>
+        public double r3;
+        /// <summary>offset 32</summary>
+        public double s1;
+        /// <summary>offset 40</summary>
+        public double s2;
+        /// <summary>offset 48</summary>
+        public double s3;
+    }
+
+    /// <summary>ph_brick — 24 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_brick
+    {
+        /// <summary>offset 0</summary>
+        public double open;
+        /// <summary>offset 8</summary>
+        public double close;
+        /// <summary>offset 16</summary>
+        public int x;
+        /// <summary>offset 20</summary>
+        public int up;
+    }
+
+    /// <summary>ph_pf_column — 24 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_pf_column
+    {
+        /// <summary>offset 0</summary>
+        public double from;
+        /// <summary>offset 8</summary>
+        public double to;
+        /// <summary>offset 16</summary>
+        public int col;
+        /// <summary>offset 20</summary>
+        public int kind;
+    }
+
+    /// <summary>ph_volume_profile — 32 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_volume_profile
+    {
+        /// <summary>offset 0</summary>
+        public double bin_size;
+        /// <summary>offset 8</summary>
+        public double price_min;
+        /// <summary>offset 16</summary>
+        public double price_max;
+        /// <summary>offset 24</summary>
+        public int poc_index;
+    }
+
+    /// <summary>ph_drawdown — 16 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_drawdown
+    {
+        /// <summary>offset 0</summary>
+        public double max_drawdown;
+        /// <summary>offset 8</summary>
+        public int trough_index;
+        /// <summary>offset 12</summary>
+        public int peak_index;
+    }
+
     /// <summary>ph_margin — 16 bytes, alignment 4.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_margin
@@ -1038,6 +1112,40 @@ public static partial class Ph
         "ph_palette_count",
         "ph_palette_name",
         "ph_palette_color",
+        "ph_fin_sma",
+        "ph_fin_wma",
+        "ph_fin_ema",
+        "ph_fin_rolling_std",
+        "ph_fin_bollinger",
+        "ph_fin_rsi",
+        "ph_fin_macd",
+        "ph_fin_vwap",
+        "ph_fin_true_range",
+        "ph_fin_atr",
+        "ph_fin_first_finite",
+        "ph_fin_stochastic",
+        "ph_fin_keltner",
+        "ph_fin_obv",
+        "ph_fin_ichimoku",
+        "ph_fin_adx",
+        "ph_fin_supertrend",
+        "ph_fin_cci",
+        "ph_fin_mfi",
+        "ph_fin_williams_r",
+        "ph_fin_aroon",
+        "ph_fin_donchian",
+        "ph_fin_parabolic_sar",
+        "ph_fin_fib_ratios",
+        "ph_fin_fib_retracements",
+        "ph_fin_pivot_points",
+        "ph_fin_heikin_ashi",
+        "ph_fin_renko",
+        "ph_fin_line_break",
+        "ph_fin_point_and_figure",
+        "ph_fin_volume_profile",
+        "ph_fin_depth",
+        "ph_fin_resample_ohlc",
+        "ph_fin_drawdown",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -1172,6 +1280,108 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_palette_color")]
     public static extern uint ph_palette_color([MarshalAs(UnmanagedType.LPUTF8Str)] string name, int index);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_sma")]
+    public static extern int ph_fin_sma(double[] values, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_wma")]
+    public static extern int ph_fin_wma(double[] values, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_ema")]
+    public static extern int ph_fin_ema(double[] values, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_rolling_std")]
+    public static extern int ph_fin_rolling_std(double[] values, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_bollinger")]
+    public static extern int ph_fin_bollinger(double[] close, int count, int period, double k, out double out_middle, out double out_upper, out double out_lower);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_rsi")]
+    public static extern int ph_fin_rsi(double[] close, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_macd")]
+    public static extern int ph_fin_macd(double[] close, int count, int fast, int slow, int signal_period, out double out_macd, out double out_signal, out double out_histogram);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_vwap")]
+    public static extern int ph_fin_vwap(double[] high, double[] low, double[] close, double[] volume, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_true_range")]
+    public static extern int ph_fin_true_range(double[] high, double[] low, double[] close, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_atr")]
+    public static extern int ph_fin_atr(double[] high, double[] low, double[] close, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_first_finite")]
+    public static extern int ph_fin_first_finite(double[] values, int count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_stochastic")]
+    public static extern int ph_fin_stochastic(double[] high, double[] low, double[] close, int count, int k_period, int d_period, out double out_k, out double out_d);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_keltner")]
+    public static extern int ph_fin_keltner(double[] high, double[] low, double[] close, int count, int period, double mult, int atr_period, out double out_middle, out double out_upper, out double out_lower);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_obv")]
+    public static extern int ph_fin_obv(double[] close, double[] volume, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_ichimoku")]
+    public static extern int ph_fin_ichimoku(double[] high, double[] low, int count, int conv_period, int base_period, int span_b_period, out double out_conversion, out double out_base, out double out_span_a, out double out_span_b);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_adx")]
+    public static extern int ph_fin_adx(double[] high, double[] low, double[] close, int count, int period, out double out_adx, out double out_plus_di, out double out_minus_di);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_supertrend")]
+    public static extern int ph_fin_supertrend(double[] high, double[] low, double[] close, int count, int period, double mult, out double out_trend, out double out_direction);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_cci")]
+    public static extern int ph_fin_cci(double[] high, double[] low, double[] close, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_mfi")]
+    public static extern int ph_fin_mfi(double[] high, double[] low, double[] close, double[] volume, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_williams_r")]
+    public static extern int ph_fin_williams_r(double[] high, double[] low, double[] close, int count, int period, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_aroon")]
+    public static extern int ph_fin_aroon(double[] high, double[] low, int count, int period, out double out_up, out double out_down, out double out_oscillator);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_donchian")]
+    public static extern int ph_fin_donchian(double[] high, double[] low, int count, int period, out double out_middle, out double out_upper, out double out_lower);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_parabolic_sar")]
+    public static extern int ph_fin_parabolic_sar(double[] high, double[] low, int count, double step, double max_step, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_fib_ratios")]
+    public static extern IntPtr ph_fin_fib_ratios(out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_fib_retracements")]
+    public static extern int ph_fin_fib_retracements(double high, double low, double[] ratios, int count, out double out_price);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_pivot_points")]
+    public static extern int ph_fin_pivot_points(double high, double low, double close, out ph_pivot_levels @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_heikin_ashi")]
+    public static extern int ph_fin_heikin_ashi(double[] open, double[] high, double[] low, double[] close, int count, out double out_open, out double out_high, out double out_low, out double out_close);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_renko")]
+    public static extern int ph_fin_renko(double[] close, int count, double brick_size, out ph_brick @out, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_line_break")]
+    public static extern int ph_fin_line_break(double[] close, int count, int lines, out ph_brick @out, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_point_and_figure")]
+    public static extern int ph_fin_point_and_figure(double[] high, double[] low, int count, double box_size, int reversal, out ph_pf_column @out, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_volume_profile")]
+    public static extern int ph_fin_volume_profile(double[] price, double[] volume, int count, int bins, out double out_levels, out double out_volume, out ph_volume_profile out_info);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_depth")]
+    public static extern int ph_fin_depth(double[] bid_price, double[] bid_size, int bid_count, double[] ask_price, double[] ask_size, int ask_count, out double out_bid_price, out double out_bid_cum, out double out_ask_price, out double out_ask_cum);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_resample_ohlc")]
+    public static extern int ph_fin_resample_ohlc(double[] time, double[] open, double[] high, double[] low, double[] close, double[] volume, int count, double bucket_ms, out double out_time, out double out_open, out double out_high, out double out_low, out double out_close, out double out_volume, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_drawdown")]
+    public static extern int ph_fin_drawdown(double[] equity, int count, out double out_values, out double out_peak, out ph_drawdown out_info);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_abi_version")]
     public static extern uint ph_abi_version();

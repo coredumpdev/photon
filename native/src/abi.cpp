@@ -24,6 +24,8 @@
 
 #include "color/colormap.hpp"
 #include "error.hpp"
+#include "finance/indicators.hpp"
+#include "finance/transforms.hpp"
 #include "layer.hpp"
 #include "plot.hpp"
 #include "registry.hpp"
@@ -334,6 +336,552 @@ extern "C" const char* PH_CALL ph_palette_name(int32_t index) {
 
 extern "C" ph_color PH_CALL ph_palette_color(const char* name, int32_t index) {
   return photon::color::palette_color(name ? name : "tableau10", index);
+}
+
+// ---------------------------------------------------------------------------
+// Analysis — pure functions over arrays
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Validate one (pointer, count) input pair. Every analysis call starts here.
+ph_result check_series(const double* values, int32_t count, const char* what) {
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (count > 0 && !values) {
+    return fail(PH_E_INVALID_ARGUMENT, std::string(what) + " must be non-null when count > 0");
+  }
+  return PH_OK;
+}
+
+/// The same for the OHLC quartet, which half the indicators take.
+ph_result check_hlc(const double* high, const double* low, const double* close, int32_t count) {
+  ph_result r = check_series(high, count, "high");
+  if (r != PH_OK) return r;
+  r = check_series(low, count, "low");
+  if (r != PH_OK) return r;
+  return check_series(close, count, "close");
+}
+
+/// Hand one computed series back, if the caller asked for it. A NULL output is
+/// "I do not want this one", which is why every multi-output call takes several.
+void emit(const std::vector<double>& src, double* out) {
+  if (out && !src.empty()) std::memcpy(out, src.data(), src.size() * sizeof(double));
+}
+
+/**
+ * Hand back a counted result: write what fits, report what there was.
+ *
+ * `out_count` is deliberately the number produced rather than the number
+ * written. A caller that passed a short buffer gets a truncated array and a
+ * count that says so; a caller that passed capacity 0 gets the size to
+ * allocate. Reporting the written count instead would make those two
+ * indistinguishable from success.
+ */
+template <typename Out, typename In, typename Convert>
+ph_result emit_counted(const std::vector<In>& src, Out* out, int32_t capacity, int32_t* out_count,
+                       Convert convert) {
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  if (capacity > 0 && !out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null when capacity > 0");
+  *out_count = static_cast<int32_t>(src.size());
+  const size_t writable = std::min(src.size(), static_cast<size_t>(capacity));
+  for (size_t i = 0; i < writable; ++i) out[i] = convert(src[i]);
+  return PH_OK;
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_fin_sma(const double* values, int32_t count, int32_t period,
+                                        double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::sma(values, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_wma(const double* values, int32_t count, int32_t period,
+                                        double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::wma(values, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_ema(const double* values, int32_t count, int32_t period,
+                                        double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::ema(values, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_rolling_std(const double* values, int32_t count, int32_t period,
+                                                double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::rolling_std(values, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_bollinger(const double* close, int32_t count, int32_t period,
+                                              double k, double* out_middle, double* out_upper,
+                                              double* out_lower) {
+  clear_error();
+  const ph_result r = check_series(close, count, "close");
+  if (r != PH_OK) return r;
+  const photon::finance::Band band =
+      photon::finance::bollinger(close, static_cast<size_t>(count), period, k);
+  emit(band.middle, out_middle);
+  emit(band.upper, out_upper);
+  emit(band.lower, out_lower);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_rsi(const double* close, int32_t count, int32_t period,
+                                        double* out) {
+  clear_error();
+  const ph_result r = check_series(close, count, "close");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::rsi(close, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_macd(const double* close, int32_t count, int32_t fast,
+                                         int32_t slow, int32_t signal_period, double* out_macd,
+                                         double* out_signal, double* out_histogram) {
+  clear_error();
+  const ph_result r = check_series(close, count, "close");
+  if (r != PH_OK) return r;
+  const photon::finance::Macd m =
+      photon::finance::macd(close, static_cast<size_t>(count), fast, slow, signal_period);
+  emit(m.macd, out_macd);
+  emit(m.signal, out_signal);
+  emit(m.histogram, out_histogram);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_vwap(const double* high, const double* low, const double* close,
+                                         const double* volume, int32_t count, double* out) {
+  clear_error();
+  ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  r = check_series(volume, count, "volume");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::vwap(high, low, close, volume, static_cast<size_t>(count)), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_true_range(const double* high, const double* low,
+                                               const double* close, int32_t count, double* out) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::true_range(high, low, close, static_cast<size_t>(count)), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_atr(const double* high, const double* low, const double* close,
+                                        int32_t count, int32_t period, double* out) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::atr(high, low, close, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" int32_t PH_CALL ph_fin_first_finite(const double* values, int32_t count) {
+  if (count <= 0) return -1;
+  return photon::finance::first_finite(values, static_cast<size_t>(count));
+}
+
+extern "C" ph_result PH_CALL ph_fin_stochastic(const double* high, const double* low,
+                                               const double* close, int32_t count,
+                                               int32_t k_period, int32_t d_period, double* out_k,
+                                               double* out_d) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  const photon::finance::Stochastic s =
+      photon::finance::stochastic(high, low, close, static_cast<size_t>(count), k_period, d_period);
+  emit(s.k, out_k);
+  emit(s.d, out_d);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_keltner(const double* high, const double* low,
+                                            const double* close, int32_t count, int32_t period,
+                                            double mult, int32_t atr_period, double* out_middle,
+                                            double* out_upper, double* out_lower) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  const photon::finance::Band band = photon::finance::keltner(
+      high, low, close, static_cast<size_t>(count), period, mult, atr_period);
+  emit(band.middle, out_middle);
+  emit(band.upper, out_upper);
+  emit(band.lower, out_lower);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_obv(const double* close, const double* volume, int32_t count,
+                                        double* out) {
+  clear_error();
+  ph_result r = check_series(close, count, "close");
+  if (r != PH_OK) return r;
+  r = check_series(volume, count, "volume");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::obv(close, volume, static_cast<size_t>(count)), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_ichimoku(const double* high, const double* low, int32_t count,
+                                             int32_t conv_period, int32_t base_period,
+                                             int32_t span_b_period, double* out_conversion,
+                                             double* out_base, double* out_span_a,
+                                             double* out_span_b) {
+  clear_error();
+  ph_result r = check_series(high, count, "high");
+  if (r != PH_OK) return r;
+  r = check_series(low, count, "low");
+  if (r != PH_OK) return r;
+  const photon::finance::Ichimoku ich = photon::finance::ichimoku(
+      high, low, static_cast<size_t>(count), conv_period, base_period, span_b_period);
+  emit(ich.conversion, out_conversion);
+  emit(ich.base, out_base);
+  emit(ich.span_a, out_span_a);
+  emit(ich.span_b, out_span_b);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_adx(const double* high, const double* low, const double* close,
+                                        int32_t count, int32_t period, double* out_adx,
+                                        double* out_plus_di, double* out_minus_di) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  const photon::finance::Adx a =
+      photon::finance::adx(high, low, close, static_cast<size_t>(count), period);
+  emit(a.adx, out_adx);
+  emit(a.plus_di, out_plus_di);
+  emit(a.minus_di, out_minus_di);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_supertrend(const double* high, const double* low,
+                                               const double* close, int32_t count, int32_t period,
+                                               double mult, double* out_trend,
+                                               double* out_direction) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  const photon::finance::SuperTrend st =
+      photon::finance::super_trend(high, low, close, static_cast<size_t>(count), period, mult);
+  emit(st.trend, out_trend);
+  emit(st.direction, out_direction);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_cci(const double* high, const double* low, const double* close,
+                                        int32_t count, int32_t period, double* out) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::cci(high, low, close, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_mfi(const double* high, const double* low, const double* close,
+                                        const double* volume, int32_t count, int32_t period,
+                                        double* out) {
+  clear_error();
+  ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  r = check_series(volume, count, "volume");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::mfi(high, low, close, volume, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_williams_r(const double* high, const double* low,
+                                               const double* close, int32_t count, int32_t period,
+                                               double* out) {
+  clear_error();
+  const ph_result r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::williams_r(high, low, close, static_cast<size_t>(count), period), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_aroon(const double* high, const double* low, int32_t count,
+                                          int32_t period, double* out_up, double* out_down,
+                                          double* out_oscillator) {
+  clear_error();
+  ph_result r = check_series(high, count, "high");
+  if (r != PH_OK) return r;
+  r = check_series(low, count, "low");
+  if (r != PH_OK) return r;
+  const photon::finance::Aroon a =
+      photon::finance::aroon(high, low, static_cast<size_t>(count), period);
+  emit(a.up, out_up);
+  emit(a.down, out_down);
+  emit(a.oscillator, out_oscillator);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_donchian(const double* high, const double* low, int32_t count,
+                                             int32_t period, double* out_middle, double* out_upper,
+                                             double* out_lower) {
+  clear_error();
+  ph_result r = check_series(high, count, "high");
+  if (r != PH_OK) return r;
+  r = check_series(low, count, "low");
+  if (r != PH_OK) return r;
+  const photon::finance::Band band =
+      photon::finance::donchian(high, low, static_cast<size_t>(count), period);
+  emit(band.middle, out_middle);
+  emit(band.upper, out_upper);
+  emit(band.lower, out_lower);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_parabolic_sar(const double* high, const double* low,
+                                                  int32_t count, double step, double max_step,
+                                                  double* out) {
+  clear_error();
+  ph_result r = check_series(high, count, "high");
+  if (r != PH_OK) return r;
+  r = check_series(low, count, "low");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::finance::parabolic_sar(high, low, static_cast<size_t>(count), step, max_step), out);
+  return PH_OK;
+}
+
+namespace {
+constexpr double kFibRatios[7] = {0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0};
+}  // namespace
+
+extern "C" const double* PH_CALL ph_fin_fib_ratios(int32_t* out_count) {
+  if (out_count) *out_count = 7;
+  return kFibRatios;
+}
+
+extern "C" ph_result PH_CALL ph_fin_fib_retracements(double high, double low, const double* ratios,
+                                                     int32_t count, double* out_price) {
+  clear_error();
+  if (!out_price) return fail(PH_E_INVALID_ARGUMENT, "out_price must be non-null");
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (!ratios && count < 7) {
+    return fail(PH_E_INVALID_ARGUMENT, "the standard ratios need room for seven prices");
+  }
+  const double* source = ratios ? ratios : kFibRatios;
+  const int32_t n = ratios ? count : 7;
+  const double span = high - low;
+  for (int32_t i = 0; i < n; ++i) out_price[i] = high - span * source[i];
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_pivot_points(double high, double low, double close,
+                                                 ph_pivot_levels* out) {
+  clear_error();
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  const photon::finance::PivotLevels p = photon::finance::pivot_points(high, low, close);
+  out->pivot = p.pivot;
+  out->r1 = p.r1;
+  out->r2 = p.r2;
+  out->r3 = p.r3;
+  out->s1 = p.s1;
+  out->s2 = p.s2;
+  out->s3 = p.s3;
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_heikin_ashi(const double* open, const double* high,
+                                                const double* low, const double* close,
+                                                int32_t count, double* out_open, double* out_high,
+                                                double* out_low, double* out_close) {
+  clear_error();
+  ph_result r = check_series(open, count, "open");
+  if (r != PH_OK) return r;
+  r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  const photon::finance::OhlcArrays ha =
+      photon::finance::heikin_ashi(open, high, low, close, static_cast<size_t>(count));
+  emit(ha.open, out_open);
+  emit(ha.high, out_high);
+  emit(ha.low, out_low);
+  emit(ha.close, out_close);
+  return PH_OK;
+}
+
+namespace {
+
+ph_brick to_abi(const photon::finance::Brick& b) {
+  ph_brick out{};
+  out.open = b.open;
+  out.close = b.close;
+  out.x = b.x;
+  out.up = b.up ? 1 : 0;
+  return out;
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_fin_renko(const double* close, int32_t count, double brick_size,
+                                          ph_brick* out, int32_t capacity, int32_t* out_count) {
+  clear_error();
+  const ph_result r = check_series(close, count, "close");
+  if (r != PH_OK) return r;
+  const std::vector<photon::finance::Brick> bricks =
+      photon::finance::renko(close, static_cast<size_t>(count), brick_size);
+  return emit_counted(bricks, out, capacity, out_count, to_abi);
+}
+
+extern "C" ph_result PH_CALL ph_fin_line_break(const double* close, int32_t count, int32_t lines,
+                                               ph_brick* out, int32_t capacity,
+                                               int32_t* out_count) {
+  clear_error();
+  const ph_result r = check_series(close, count, "close");
+  if (r != PH_OK) return r;
+  const std::vector<photon::finance::Brick> bricks =
+      photon::finance::line_break(close, static_cast<size_t>(count), lines);
+  return emit_counted(bricks, out, capacity, out_count, to_abi);
+}
+
+extern "C" ph_result PH_CALL ph_fin_point_and_figure(const double* high, const double* low,
+                                                     int32_t count, double box_size,
+                                                     int32_t reversal, ph_pf_column* out,
+                                                     int32_t capacity, int32_t* out_count) {
+  clear_error();
+  ph_result r = check_series(high, count, "high");
+  if (r != PH_OK) return r;
+  r = check_series(low, count, "low");
+  if (r != PH_OK) return r;
+  const std::vector<photon::finance::PfColumn> cols =
+      photon::finance::point_and_figure(high, low, static_cast<size_t>(count), box_size, reversal);
+  return emit_counted(cols, out, capacity, out_count, [](const photon::finance::PfColumn& c) {
+    ph_pf_column o{};
+    o.from = c.from;
+    o.to = c.to;
+    o.col = c.col;
+    o.kind = static_cast<int32_t>(static_cast<unsigned char>(c.kind));
+    return o;
+  });
+}
+
+extern "C" ph_result PH_CALL ph_fin_volume_profile(const double* price, const double* volume,
+                                                   int32_t count, int32_t bins, double* out_levels,
+                                                   double* out_volume, ph_volume_profile* out_info) {
+  clear_error();
+  ph_result r = check_series(price, count, "price");
+  if (r != PH_OK) return r;
+  r = check_series(volume, count, "volume");
+  if (r != PH_OK) return r;
+  if (bins <= 0) return fail(PH_E_INVALID_ARGUMENT, "bins must be positive");
+  const photon::finance::VolumeProfile vp =
+      photon::finance::volume_profile(price, volume, static_cast<size_t>(count), bins);
+  emit(vp.levels, out_levels);
+  emit(vp.volume, out_volume);
+  if (out_info) {
+    out_info->bin_size = vp.bin_size;
+    out_info->price_min = vp.price_min;
+    out_info->price_max = vp.price_max;
+    out_info->poc_index = vp.poc_index;
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_depth(const double* bid_price, const double* bid_size,
+                                          int32_t bid_count, const double* ask_price,
+                                          const double* ask_size, int32_t ask_count,
+                                          double* out_bid_price, double* out_bid_cum,
+                                          double* out_ask_price, double* out_ask_cum) {
+  clear_error();
+  ph_result r = check_series(bid_price, bid_count, "bid_price");
+  if (r != PH_OK) return r;
+  r = check_series(bid_size, bid_count, "bid_size");
+  if (r != PH_OK) return r;
+  r = check_series(ask_price, ask_count, "ask_price");
+  if (r != PH_OK) return r;
+  r = check_series(ask_size, ask_count, "ask_size");
+  if (r != PH_OK) return r;
+  const photon::finance::DepthCurves d =
+      photon::finance::depth(bid_price, bid_size, static_cast<size_t>(bid_count), ask_price,
+                             ask_size, static_cast<size_t>(ask_count));
+  emit(d.bid_price, out_bid_price);
+  emit(d.bid_cum, out_bid_cum);
+  emit(d.ask_price, out_ask_price);
+  emit(d.ask_cum, out_ask_cum);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_resample_ohlc(
+    const double* time, const double* open, const double* high, const double* low,
+    const double* close, const double* volume, int32_t count, double bucket_ms, double* out_time,
+    double* out_open, double* out_high, double* out_low, double* out_close, double* out_volume,
+    int32_t capacity, int32_t* out_count) {
+  clear_error();
+  ph_result r = check_series(time, count, "time");
+  if (r != PH_OK) return r;
+  r = check_series(open, count, "open");
+  if (r != PH_OK) return r;
+  r = check_hlc(high, low, close, count);
+  if (r != PH_OK) return r;
+  if (volume) {
+    r = check_series(volume, count, "volume");
+    if (r != PH_OK) return r;
+  }
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::finance::ResampledOhlc res =
+      photon::finance::resample_ohlc(time, open, high, low, close, volume,
+                                     static_cast<size_t>(count), bucket_ms);
+  *out_count = static_cast<int32_t>(res.time.size());
+  const size_t writable = std::min(res.time.size(), static_cast<size_t>(capacity));
+  const auto copy = [writable](const std::vector<double>& src, double* dst) {
+    if (dst && writable > 0 && !src.empty()) std::memcpy(dst, src.data(), writable * sizeof(double));
+  };
+  copy(res.time, out_time);
+  copy(res.open, out_open);
+  copy(res.high, out_high);
+  copy(res.low, out_low);
+  copy(res.close, out_close);
+  copy(res.volume, out_volume);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_fin_drawdown(const double* equity, int32_t count,
+                                             double* out_values, double* out_peak,
+                                             ph_drawdown* out_info) {
+  clear_error();
+  const ph_result r = check_series(equity, count, "equity");
+  if (r != PH_OK) return r;
+  const photon::finance::Drawdown dd =
+      photon::finance::drawdown(equity, static_cast<size_t>(count));
+  emit(dd.values, out_values);
+  emit(dd.peak, out_peak);
+  if (out_info) {
+    out_info->max_drawdown = dd.max_drawdown;
+    out_info->trough_index = dd.trough_index;
+    out_info->peak_index = dd.peak_index;
+  }
+  return PH_OK;
 }
 
 // ---------------------------------------------------------------------------

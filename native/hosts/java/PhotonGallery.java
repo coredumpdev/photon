@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 18;
+    private static final int PANELS = 19;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -61,6 +61,7 @@ public final class PhotonGallery {
     private static final int ISO_LEVELS = 9;
     private static final int NODES = 48;
     private static final int GRAPH_EDGES = 72;
+    private static final int BOLLINGER_PERIOD = 10;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -963,6 +964,47 @@ public final class PhotonGallery {
         }
     }
 
+    /**
+     * Panel 18 — the same sessions with Bollinger Bands over them.
+     *
+     * The indicator is not a layer: `ph_fin_bollinger` turns one array into
+     * three and three ordinary line layers draw them. Which also makes this the
+     * one panel that proves the analysis half marshals — it is real output from
+     * the library, not numbers this file computed in Java.
+     */
+    private static void buildSignals(long plot, Sessions s) {
+        setTitle(plot, "Signals");
+        sessionAxis(plot, s);
+
+        MemorySegment desc = ph_candlestick_desc.allocate(ARENA);
+        ph_candlestick_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_X, s.index());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_OPEN, s.open());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_HIGH, s.high());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_LOW, s.low());
+        desc.set(ValueLayout.ADDRESS, ph_candlestick_desc.OFFSET_CLOSE, s.close());
+        desc.set(ValueLayout.JAVA_INT, ph_candlestick_desc.OFFSET_COUNT, SESSIONS);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_candlestick(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        MemorySegment mid = doubles(SESSIONS);
+        MemorySegment up = doubles(SESSIONS);
+        MemorySegment dn = doubles(SESSIONS);
+        if (ph_fin_bollinger(s.close(), SESSIONS, BOLLINGER_PERIOD, 2.0, mid, up, dn) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        MemorySegment dash = ARENA.allocate(ValueLayout.JAVA_FLOAT, 2);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 4.0f);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 1, 3.0f);
+        addLine(plot, s.index(), mid, SESSIONS, "#facc15", 1.25f, null, 0, 0, "SMA 10");
+        // The two edges share a colour and a dash: they are one band, drawn twice.
+        addLine(plot, s.index(), up, SESSIONS, "#38bdf8", 1.25f, dash, 2, 0, "+2 sigma");
+        addLine(plot, s.index(), dn, SESSIONS, "#38bdf8", 1.25f, dash, 2, 0, "-2 sigma");
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1198,6 +1240,7 @@ public final class PhotonGallery {
         buildFlow(plots[15]);
         buildContour(plots[16]);
         buildNetwork(plots[17]);
+        buildSignals(plots[18], bars);
 
         installCallbacks();
 

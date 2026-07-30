@@ -192,8 +192,11 @@ function findGrid(image, ox, oy, region) {
 const args = process.argv.slice(2);
 const outIndex = args.indexOf("--out");
 const diffFile = outIndex >= 0 ? args[outIndex + 1] : null;
+// Without `--out`, outIndex is -1 and outIndex + 1 is 0 — which would drop the
+// first positional argument. Hence the explicit guard rather than the shorter
+// arithmetic.
 const [nativeFile, webFile] = args.filter((a, i) =>
-  a !== "--out" && i !== outIndex + 1);
+  a !== "--out" && (outIndex < 0 || i !== outIndex + 1));
 if (!nativeFile || !webFile) {
   console.error("usage: node compare.mjs native.png web.png [--out diff.png]");
   process.exit(2);
@@ -221,6 +224,7 @@ const PANELS = [
   ["Sprite", 640, 840], ["Candles", 1280, 840], ["Bars", 1920, 840],
   ["Density", 2560, 840],
   ["Flow", 0, 1260], ["Contour", 640, 1260], ["Network", 1280, 1260],
+  ["Signals", 1920, 1260],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

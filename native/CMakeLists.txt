@@ -79,6 +79,8 @@ set(PHOTON_SOURCES
   src/scale.cpp
   src/axes/axis.cpp
   src/axes/ticks.cpp
+  src/finance/indicators.cpp
+  src/finance/transforms.cpp
   src/geo/earcut.cpp
   src/layers/pick.cpp
   src/graph/force.cpp

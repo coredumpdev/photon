@@ -46,6 +46,20 @@ public final class PhotonSmokeTest {
         return arena.allocateFrom(text);
     }
 
+    /** A native double[] holding `values`. */
+    static MemorySegment doubles(Arena arena, double... values) {
+        return arena.allocateFrom(ValueLayout.JAVA_DOUBLE, values);
+    }
+
+    /** Room for `n` doubles, zeroed. */
+    static MemorySegment room(Arena arena, int n) {
+        return arena.allocate(ValueLayout.JAVA_DOUBLE, n);
+    }
+
+    static double at(MemorySegment s, int i) {
+        return s.getAtIndex(ValueLayout.JAVA_DOUBLE, i);
+    }
+
     /**
      * Print and flush.
      *
@@ -1241,6 +1255,192 @@ public final class PhotonSmokeTest {
         ran("ph_plot_destroy");
     }
 
+    /**
+     * The analysis family: indicators and chart transforms.
+     *
+     * These need no plot and no GL, which is the point of them — but they are
+     * the widest pointer-out surface in the ABI, and a `double*` written to the
+     * wrong side of a Panama boundary is silent. So every one is called, and
+     * the ones with a value worth pinning are pinned; the arithmetic itself is
+     * checked against the TypeScript in tests/finance_test.cpp.
+     */
+    static void analysis(Arena arena) {
+        MemorySegment values = doubles(arena, 1, 2, 3, 4, 5);
+        MemorySegment out = room(arena, 8);
+
+        checkEq(ph_fin_sma(values, 5, 3, out), PH_OK, "ph_fin_sma");
+        check(Double.isNaN(at(out, 1)), "the SMA warm-up arrives as NaN");
+        check(at(out, 2) == 2.0, "and the first real value is the trailing mean");
+        checkEq(ph_fin_wma(values, 5, 3, out), PH_OK, "ph_fin_wma");
+        checkEq(ph_fin_ema(values, 5, 3, out), PH_OK, "ph_fin_ema");
+        checkEq(ph_fin_rolling_std(values, 5, 3, out), PH_OK, "ph_fin_rolling_std");
+        checkEq(ph_fin_rsi(values, 5, 2, out), PH_OK, "ph_fin_rsi");
+        check(at(out, 4) == 100.0, "a monotonic rise pins the RSI at 100");
+        checkEq(ph_fin_first_finite(out, 5), 2, "ph_fin_first_finite");
+        ran("ph_fin_sma", "ph_fin_wma", "ph_fin_ema", "ph_fin_rolling_std", "ph_fin_rsi",
+            "ph_fin_first_finite");
+
+        // Three outputs at once, and a NULL for one of them means "not this one".
+        MemorySegment mid = room(arena, 5);
+        MemorySegment up = room(arena, 5);
+        MemorySegment down = room(arena, 5);
+        checkEq(ph_fin_bollinger(values, 5, 3, 2.0, mid, up, down), PH_OK, "ph_fin_bollinger");
+        check(at(up, 4) - at(mid, 4) == at(mid, 4) - at(down, 4), "the bands are symmetric");
+        checkEq(ph_fin_bollinger(values, 5, 3, 2.0, mid, MemorySegment.NULL, MemorySegment.NULL),
+                PH_OK, "a NULL output is skipped, not a fault");
+        checkEq(ph_fin_macd(values, 5, 2, 3, 2, mid, up, down), PH_OK, "ph_fin_macd");
+        ran("ph_fin_bollinger", "ph_fin_macd");
+
+        MemorySegment high = doubles(arena, 11, 12, 13, 14, 15, 16, 17, 18);
+        MemorySegment low = doubles(arena, 9, 10, 11, 12, 13, 14, 15, 16);
+        MemorySegment close = doubles(arena, 10, 11, 12, 13, 14, 15, 16, 17);
+        MemorySegment volume = doubles(arena, 1, 1, 1, 1, 1, 1, 1, 1);
+        MemorySegment a = room(arena, 8);
+        MemorySegment b = room(arena, 8);
+        MemorySegment c = room(arena, 8);
+
+        checkEq(ph_fin_vwap(high, low, close, volume, 8, out), PH_OK, "ph_fin_vwap");
+        checkEq(ph_fin_true_range(high, low, close, 8, out), PH_OK, "ph_fin_true_range");
+        check(at(out, 0) == 2.0, "the first true range is high minus low");
+        checkEq(ph_fin_atr(high, low, close, 8, 3, out), PH_OK, "ph_fin_atr");
+        checkEq(ph_fin_stochastic(high, low, close, 8, 5, 3, a, b), PH_OK, "ph_fin_stochastic");
+        checkEq(ph_fin_keltner(high, low, close, 8, 4, 2.0, 4, a, b, c), PH_OK, "ph_fin_keltner");
+        check(at(b, 7) > at(a, 7) && at(a, 7) > at(c, 7), "upper > middle > lower");
+        checkEq(ph_fin_obv(close, volume, 8, out), PH_OK, "ph_fin_obv");
+        check(at(out, 7) == 7.0, "OBV accumulates one unit a bar on a rise");
+        checkEq(ph_fin_ichimoku(high, low, 8, 3, 5, 7, a, b, c, out), PH_OK, "ph_fin_ichimoku");
+        checkEq(ph_fin_adx(high, low, close, 8, 2, a, b, c), PH_OK, "ph_fin_adx");
+        checkEq(ph_fin_supertrend(high, low, close, 8, 3, 2.0, a, b), PH_OK, "ph_fin_supertrend");
+        checkEq(ph_fin_cci(high, low, close, 8, 4, out), PH_OK, "ph_fin_cci");
+        checkEq(ph_fin_mfi(high, low, close, volume, 8, 3, out), PH_OK, "ph_fin_mfi");
+        checkEq(ph_fin_williams_r(high, low, close, 8, 4, out), PH_OK, "ph_fin_williams_r");
+        check(at(out, 7) >= -100.0 && at(out, 7) <= 0.0, "Williams %R stays in its band");
+        checkEq(ph_fin_aroon(high, low, 8, 4, a, b, c), PH_OK, "ph_fin_aroon");
+        checkEq(ph_fin_donchian(high, low, 8, 4, a, b, c), PH_OK, "ph_fin_donchian");
+        checkEq(ph_fin_parabolic_sar(high, low, 8, 0.02, 0.2, out), PH_OK, "ph_fin_parabolic_sar");
+        ran("ph_fin_vwap", "ph_fin_true_range", "ph_fin_atr", "ph_fin_stochastic", "ph_fin_keltner",
+            "ph_fin_obv", "ph_fin_ichimoku", "ph_fin_adx", "ph_fin_supertrend", "ph_fin_cci",
+            "ph_fin_mfi", "ph_fin_williams_r", "ph_fin_aroon", "ph_fin_donchian",
+            "ph_fin_parabolic_sar");
+
+        // A pointer the library owns, returned across the boundary: Panama hands
+        // back a zero-length segment, so reading it at all needs a reinterpret.
+        MemorySegment ratioCount = arena.allocate(ValueLayout.JAVA_INT);
+        MemorySegment ratios = ph_fin_fib_ratios(ratioCount).reinterpret(7 * 8);
+        checkEq(ratioCount.get(ValueLayout.JAVA_INT, 0), 7, "ph_fin_fib_ratios");
+        check(at(ratios, 0) == 0.0 && at(ratios, 6) == 1.0, "the ratios run 0 to 1");
+        MemorySegment prices = room(arena, 7);
+        checkEq(ph_fin_fib_retracements(100.0, 0.0, MemorySegment.NULL, 7, prices), PH_OK,
+                "ph_fin_fib_retracements");
+        check(at(prices, 0) == 100.0 && at(prices, 3) == 50.0 && at(prices, 6) == 0.0,
+              "the standard retracements land on the high, the half and the low");
+        checkEq(ph_fin_fib_retracements(100.0, 0.0, MemorySegment.NULL, 3, prices),
+                PH_E_INVALID_ARGUMENT, "the default set will not write past a short buffer");
+
+        MemorySegment pivots = ph_pivot_levels.allocate(arena);
+        checkEq(ph_fin_pivot_points(110.0, 90.0, 100.0, pivots), PH_OK, "ph_fin_pivot_points");
+        check(pivots.get(ValueLayout.JAVA_DOUBLE, ph_pivot_levels.OFFSET_PIVOT) == 100.0,
+              "the pivot is the mean of high, low and close");
+        check(pivots.get(ValueLayout.JAVA_DOUBLE, ph_pivot_levels.OFFSET_R1) == 110.0, "R1");
+        ran("ph_fin_fib_ratios", "ph_fin_fib_retracements", "ph_fin_pivot_points");
+
+        checkEq(ph_fin_heikin_ashi(close, high, low, close, 8, a, b, c, out), PH_OK,
+                "ph_fin_heikin_ashi");
+        ran("ph_fin_heikin_ashi");
+
+        // Counted outputs: ask for the size, allocate, ask again.
+        MemorySegment countOut = arena.allocate(ValueLayout.JAVA_INT);
+        MemorySegment ladder = doubles(arena, 100, 101, 102, 103);
+        checkEq(ph_fin_renko(ladder, 4, 1.0, MemorySegment.NULL, 0, countOut), PH_OK,
+                "ph_fin_renko sizing pass");
+        int brickCount = countOut.get(ValueLayout.JAVA_INT, 0);
+        checkEq(brickCount, 3, "three full one-point rises are three bricks");
+        MemorySegment bricks = arena.allocate(ph_brick.LAYOUT, brickCount);
+        checkEq(ph_fin_renko(ladder, 4, 1.0, bricks, brickCount, countOut), PH_OK, "ph_fin_renko");
+        check(bricks.get(ValueLayout.JAVA_INT, ph_brick.SIZE * 2 + ph_brick.OFFSET_X) == 2,
+              "the third brick knows it is the third");
+        check(bricks.get(ValueLayout.JAVA_INT, ph_brick.OFFSET_UP) != 0, "and they are up bricks");
+        // A short buffer truncates and still reports what there was.
+        checkEq(ph_fin_renko(ladder, 4, 1.0, bricks, 1, countOut), PH_OK, "a short buffer");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 3, "reports the count, not what it wrote");
+        checkEq(ph_fin_line_break(ladder, 4, 3, bricks, brickCount, countOut), PH_OK,
+                "ph_fin_line_break");
+        ran("ph_fin_renko", "ph_fin_line_break");
+
+        MemorySegment pfHigh = doubles(arena, 10, 11, 12, 11, 8, 9);
+        MemorySegment pfLow = doubles(arena, 9, 10, 11, 8, 7, 8);
+        checkEq(ph_fin_point_and_figure(pfHigh, pfLow, 6, 1.0, 3, MemorySegment.NULL, 0, countOut),
+                PH_OK, "ph_fin_point_and_figure sizing pass");
+        int colCount = countOut.get(ValueLayout.JAVA_INT, 0);
+        check(colCount > 0, "the sample data makes at least one column");
+        MemorySegment cols = arena.allocate(ph_pf_column.LAYOUT, colCount);
+        checkEq(ph_fin_point_and_figure(pfHigh, pfLow, 6, 1.0, 3, cols, colCount, countOut), PH_OK,
+                "ph_fin_point_and_figure");
+        int kind = cols.get(ValueLayout.JAVA_INT, ph_pf_column.OFFSET_KIND);
+        check(kind == 'X' || kind == 'O', "the column kind arrives as a character code");
+        ran("ph_fin_point_and_figure");
+
+        MemorySegment price = doubles(arena, 1, 2, 3);
+        MemorySegment traded = doubles(arena, 10, 20, 30);
+        MemorySegment levels = room(arena, 3);
+        MemorySegment binned = room(arena, 3);
+        MemorySegment vpInfo = ph_volume_profile.allocate(arena);
+        checkEq(ph_fin_volume_profile(price, traded, 3, 3, levels, binned, vpInfo), PH_OK,
+                "ph_fin_volume_profile");
+        checkEq(vpInfo.get(ValueLayout.JAVA_INT, ph_volume_profile.OFFSET_POC_INDEX), 2,
+                "the point of control is the busiest level");
+        check(at(binned, 0) + at(binned, 1) + at(binned, 2) == 60.0, "and volume is conserved");
+        checkEq(ph_fin_volume_profile(price, traded, 3, 0, levels, binned, vpInfo),
+                PH_E_INVALID_ARGUMENT, "zero bins is refused");
+        ran("ph_fin_volume_profile");
+
+        MemorySegment bidPrice = doubles(arena, 10, 9);
+        MemorySegment bidSize = doubles(arena, 5, 3);
+        MemorySegment askPrice = doubles(arena, 11, 12);
+        MemorySegment askSize = doubles(arena, 4, 2);
+        MemorySegment bp = room(arena, 2);
+        MemorySegment bc = room(arena, 2);
+        MemorySegment ap = room(arena, 2);
+        MemorySegment ac = room(arena, 2);
+        checkEq(ph_fin_depth(bidPrice, bidSize, 2, askPrice, askSize, 2, bp, bc, ap, ac), PH_OK,
+                "ph_fin_depth");
+        check(at(bp, 0) == 9.0 && at(bp, 1) == 10.0, "the bid side comes back ascending");
+        check(at(bc, 0) == 8.0 && at(ac, 1) == 6.0, "both sides are cumulative");
+        ran("ph_fin_depth");
+
+        MemorySegment time = doubles(arena, 0, 60000, 120000, 300000);
+        MemorySegment ro = room(arena, 4);
+        MemorySegment rh = room(arena, 4);
+        MemorySegment rl = room(arena, 4);
+        MemorySegment rc = room(arena, 4);
+        MemorySegment rt = room(arena, 4);
+        MemorySegment rv = room(arena, 4);
+        MemorySegment bars = doubles(arena, 1, 2, 3, 4);
+        checkEq(ph_fin_resample_ohlc(time, bars, bars, bars, bars, bars, 4, 300000.0, rt, ro, rh,
+                                     rl, rc, rv, 4, countOut),
+                PH_OK, "ph_fin_resample_ohlc");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 2, "four minute bars roll into two buckets");
+        check(at(rt, 1) == 300000.0, "aligned to a multiple of the bucket");
+        check(at(rv, 0) == 6.0, "with volume summed across the bucket");
+        ran("ph_fin_resample_ohlc");
+
+        MemorySegment equity = doubles(arena, 100, 120, 90, 130, 65);
+        MemorySegment ddValues = room(arena, 5);
+        MemorySegment ddPeak = room(arena, 5);
+        MemorySegment ddInfo = ph_drawdown.allocate(arena);
+        checkEq(ph_fin_drawdown(equity, 5, ddValues, ddPeak, ddInfo), PH_OK, "ph_fin_drawdown");
+        checkEq(ddInfo.get(ValueLayout.JAVA_INT, ph_drawdown.OFFSET_TROUGH_INDEX), 4,
+                "the deepest drawdown bottoms at the end");
+        checkEq(ddInfo.get(ValueLayout.JAVA_INT, ph_drawdown.OFFSET_PEAK_INDEX), 3,
+                "and fell from the peak before it");
+        check(at(ddPeak, 2) == 120.0, "the running peak holds through the dip");
+        ran("ph_fin_drawdown");
+
+        // A negative count is refused rather than turned into a huge unsigned one.
+        checkEq(ph_fin_sma(values, -1, 3, out), PH_E_INVALID_ARGUMENT, "a negative count");
+        check(Photon.lastError().contains("non-negative"), "and it says so");
+    }
+
     public static void main(String[] args) {
         try (Arena arena = Arena.ofConfined()) {
             step("versionAndInit");
@@ -1251,6 +1451,8 @@ public final class PhotonSmokeTest {
             colors(arena);
             step("colormaps");
             colormaps(arena);
+            step("analysis");
+            analysis(arena);
             step("buildPlot");
             long plot = buildPlot(arena);
             step("axes");

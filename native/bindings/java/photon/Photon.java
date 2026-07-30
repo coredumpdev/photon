@@ -246,6 +246,131 @@ public final class Photon {
         }
     }
 
+    /** ph_pivot_levels — 56 bytes, alignment 8. */
+    public static final class ph_pivot_levels {
+        private ph_pivot_levels() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("pivot"),
+            ValueLayout.JAVA_DOUBLE.withName("r1"),
+            ValueLayout.JAVA_DOUBLE.withName("r2"),
+            ValueLayout.JAVA_DOUBLE.withName("r3"),
+            ValueLayout.JAVA_DOUBLE.withName("s1"),
+            ValueLayout.JAVA_DOUBLE.withName("s2"),
+            ValueLayout.JAVA_DOUBLE.withName("s3")
+        ).withName("ph_pivot_levels");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_PIVOT = 0L;
+        public static final long OFFSET_R1 = 8L;
+        public static final long OFFSET_R2 = 16L;
+        public static final long OFFSET_R3 = 24L;
+        public static final long OFFSET_S1 = 32L;
+        public static final long OFFSET_S2 = 40L;
+        public static final long OFFSET_S3 = 48L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_brick — 24 bytes, alignment 8. */
+    public static final class ph_brick {
+        private ph_brick() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("open"),
+            ValueLayout.JAVA_DOUBLE.withName("close"),
+            ValueLayout.JAVA_INT.withName("x"),
+            ValueLayout.JAVA_INT.withName("up")
+        ).withName("ph_brick");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_OPEN = 0L;
+        public static final long OFFSET_CLOSE = 8L;
+        public static final long OFFSET_X = 16L;
+        public static final long OFFSET_UP = 20L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_pf_column — 24 bytes, alignment 8. */
+    public static final class ph_pf_column {
+        private ph_pf_column() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("from"),
+            ValueLayout.JAVA_DOUBLE.withName("to"),
+            ValueLayout.JAVA_INT.withName("col"),
+            ValueLayout.JAVA_INT.withName("kind")
+        ).withName("ph_pf_column");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_FROM = 0L;
+        public static final long OFFSET_TO = 8L;
+        public static final long OFFSET_COL = 16L;
+        public static final long OFFSET_KIND = 20L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_volume_profile — 32 bytes, alignment 8. */
+    public static final class ph_volume_profile {
+        private ph_volume_profile() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("bin_size"),
+            ValueLayout.JAVA_DOUBLE.withName("price_min"),
+            ValueLayout.JAVA_DOUBLE.withName("price_max"),
+            ValueLayout.JAVA_INT.withName("poc_index"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_volume_profile");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_BIN_SIZE = 0L;
+        public static final long OFFSET_PRICE_MIN = 8L;
+        public static final long OFFSET_PRICE_MAX = 16L;
+        public static final long OFFSET_POC_INDEX = 24L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_drawdown — 16 bytes, alignment 8. */
+    public static final class ph_drawdown {
+        private ph_drawdown() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("max_drawdown"),
+            ValueLayout.JAVA_INT.withName("trough_index"),
+            ValueLayout.JAVA_INT.withName("peak_index")
+        ).withName("ph_drawdown");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_MAX_DRAWDOWN = 0L;
+        public static final long OFFSET_TROUGH_INDEX = 8L;
+        public static final long OFFSET_PEAK_INDEX = 12L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_margin — 16 bytes, alignment 4. */
     public static final class ph_margin {
         private ph_margin() {}
@@ -1449,6 +1574,40 @@ public final class Photon {
         "ph_palette_count",
         "ph_palette_name",
         "ph_palette_color",
+        "ph_fin_sma",
+        "ph_fin_wma",
+        "ph_fin_ema",
+        "ph_fin_rolling_std",
+        "ph_fin_bollinger",
+        "ph_fin_rsi",
+        "ph_fin_macd",
+        "ph_fin_vwap",
+        "ph_fin_true_range",
+        "ph_fin_atr",
+        "ph_fin_first_finite",
+        "ph_fin_stochastic",
+        "ph_fin_keltner",
+        "ph_fin_obv",
+        "ph_fin_ichimoku",
+        "ph_fin_adx",
+        "ph_fin_supertrend",
+        "ph_fin_cci",
+        "ph_fin_mfi",
+        "ph_fin_williams_r",
+        "ph_fin_aroon",
+        "ph_fin_donchian",
+        "ph_fin_parabolic_sar",
+        "ph_fin_fib_ratios",
+        "ph_fin_fib_retracements",
+        "ph_fin_pivot_points",
+        "ph_fin_heikin_ashi",
+        "ph_fin_renko",
+        "ph_fin_line_break",
+        "ph_fin_point_and_figure",
+        "ph_fin_volume_profile",
+        "ph_fin_depth",
+        "ph_fin_resample_ohlc",
+        "ph_fin_drawdown",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -1561,6 +1720,40 @@ public final class Photon {
     private static final MethodHandle PH_PALETTE_COUNT = handle("ph_palette_count", FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PALETTE_NAME = handle("ph_palette_name", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PALETTE_COLOR = handle("ph_palette_color", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_FIN_SMA = handle("ph_fin_sma", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_WMA = handle("ph_fin_wma", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_EMA = handle("ph_fin_ema", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_ROLLING_STD = handle("ph_fin_rolling_std", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_BOLLINGER = handle("ph_fin_bollinger", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_RSI = handle("ph_fin_rsi", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_MACD = handle("ph_fin_macd", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_VWAP = handle("ph_fin_vwap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_TRUE_RANGE = handle("ph_fin_true_range", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_ATR = handle("ph_fin_atr", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_FIRST_FINITE = handle("ph_fin_first_finite", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_FIN_STOCHASTIC = handle("ph_fin_stochastic", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_KELTNER = handle("ph_fin_keltner", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_OBV = handle("ph_fin_obv", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_ICHIMOKU = handle("ph_fin_ichimoku", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_ADX = handle("ph_fin_adx", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_SUPERTREND = handle("ph_fin_supertrend", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_CCI = handle("ph_fin_cci", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_MFI = handle("ph_fin_mfi", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_WILLIAMS_R = handle("ph_fin_williams_r", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_AROON = handle("ph_fin_aroon", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_DONCHIAN = handle("ph_fin_donchian", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_PARABOLIC_SAR = handle("ph_fin_parabolic_sar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_FIB_RATIOS = handle("ph_fin_fib_ratios", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_FIB_RETRACEMENTS = handle("ph_fin_fib_retracements", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_PIVOT_POINTS = handle("ph_fin_pivot_points", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_HEIKIN_ASHI = handle("ph_fin_heikin_ashi", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_RENKO = handle("ph_fin_renko", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_LINE_BREAK = handle("ph_fin_line_break", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_POINT_AND_FIGURE = handle("ph_fin_point_and_figure", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_VOLUME_PROFILE = handle("ph_fin_volume_profile", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_DEPTH = handle("ph_fin_depth", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_RESAMPLE_OHLC = handle("ph_fin_resample_ohlc", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_FIN_DRAWDOWN = handle("ph_fin_drawdown", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_ABI_VERSION = handle("ph_abi_version", FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle PH_VERSION = handle("ph_version", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_INIT = handle("ph_init", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
@@ -1739,6 +1932,278 @@ public final class Photon {
             return (int) PH_PALETTE_COLOR.invokeExact(name, index);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_palette_color failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_sma(MemorySegment values, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_SMA.invokeExact(values, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_sma failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_wma(MemorySegment values, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_WMA.invokeExact(values, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_wma failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_ema(MemorySegment values, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_EMA.invokeExact(values, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_ema failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_rolling_std(MemorySegment values, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_ROLLING_STD.invokeExact(values, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_rolling_std failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_bollinger(MemorySegment close, int count, int period, double k, MemorySegment out_middle, MemorySegment out_upper, MemorySegment out_lower) {
+        try {
+            return (int) PH_FIN_BOLLINGER.invokeExact(close, count, period, k, out_middle, out_upper, out_lower);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_bollinger failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_rsi(MemorySegment close, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_RSI.invokeExact(close, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_rsi failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_macd(MemorySegment close, int count, int fast, int slow, int signal_period, MemorySegment out_macd, MemorySegment out_signal, MemorySegment out_histogram) {
+        try {
+            return (int) PH_FIN_MACD.invokeExact(close, count, fast, slow, signal_period, out_macd, out_signal, out_histogram);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_macd failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_vwap(MemorySegment high, MemorySegment low, MemorySegment close, MemorySegment volume, int count, MemorySegment out) {
+        try {
+            return (int) PH_FIN_VWAP.invokeExact(high, low, close, volume, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_vwap failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_true_range(MemorySegment high, MemorySegment low, MemorySegment close, int count, MemorySegment out) {
+        try {
+            return (int) PH_FIN_TRUE_RANGE.invokeExact(high, low, close, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_true_range failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_atr(MemorySegment high, MemorySegment low, MemorySegment close, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_ATR.invokeExact(high, low, close, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_atr failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_first_finite(MemorySegment values, int count) {
+        try {
+            return (int) PH_FIN_FIRST_FINITE.invokeExact(values, count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_first_finite failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_stochastic(MemorySegment high, MemorySegment low, MemorySegment close, int count, int k_period, int d_period, MemorySegment out_k, MemorySegment out_d) {
+        try {
+            return (int) PH_FIN_STOCHASTIC.invokeExact(high, low, close, count, k_period, d_period, out_k, out_d);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_stochastic failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_keltner(MemorySegment high, MemorySegment low, MemorySegment close, int count, int period, double mult, int atr_period, MemorySegment out_middle, MemorySegment out_upper, MemorySegment out_lower) {
+        try {
+            return (int) PH_FIN_KELTNER.invokeExact(high, low, close, count, period, mult, atr_period, out_middle, out_upper, out_lower);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_keltner failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_obv(MemorySegment close, MemorySegment volume, int count, MemorySegment out) {
+        try {
+            return (int) PH_FIN_OBV.invokeExact(close, volume, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_obv failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_ichimoku(MemorySegment high, MemorySegment low, int count, int conv_period, int base_period, int span_b_period, MemorySegment out_conversion, MemorySegment out_base, MemorySegment out_span_a, MemorySegment out_span_b) {
+        try {
+            return (int) PH_FIN_ICHIMOKU.invokeExact(high, low, count, conv_period, base_period, span_b_period, out_conversion, out_base, out_span_a, out_span_b);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_ichimoku failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_adx(MemorySegment high, MemorySegment low, MemorySegment close, int count, int period, MemorySegment out_adx, MemorySegment out_plus_di, MemorySegment out_minus_di) {
+        try {
+            return (int) PH_FIN_ADX.invokeExact(high, low, close, count, period, out_adx, out_plus_di, out_minus_di);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_adx failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_supertrend(MemorySegment high, MemorySegment low, MemorySegment close, int count, int period, double mult, MemorySegment out_trend, MemorySegment out_direction) {
+        try {
+            return (int) PH_FIN_SUPERTREND.invokeExact(high, low, close, count, period, mult, out_trend, out_direction);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_supertrend failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_cci(MemorySegment high, MemorySegment low, MemorySegment close, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_CCI.invokeExact(high, low, close, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_cci failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_mfi(MemorySegment high, MemorySegment low, MemorySegment close, MemorySegment volume, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_MFI.invokeExact(high, low, close, volume, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_mfi failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_williams_r(MemorySegment high, MemorySegment low, MemorySegment close, int count, int period, MemorySegment out) {
+        try {
+            return (int) PH_FIN_WILLIAMS_R.invokeExact(high, low, close, count, period, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_williams_r failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_aroon(MemorySegment high, MemorySegment low, int count, int period, MemorySegment out_up, MemorySegment out_down, MemorySegment out_oscillator) {
+        try {
+            return (int) PH_FIN_AROON.invokeExact(high, low, count, period, out_up, out_down, out_oscillator);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_aroon failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_donchian(MemorySegment high, MemorySegment low, int count, int period, MemorySegment out_middle, MemorySegment out_upper, MemorySegment out_lower) {
+        try {
+            return (int) PH_FIN_DONCHIAN.invokeExact(high, low, count, period, out_middle, out_upper, out_lower);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_donchian failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_parabolic_sar(MemorySegment high, MemorySegment low, int count, double step, double max_step, MemorySegment out) {
+        try {
+            return (int) PH_FIN_PARABOLIC_SAR.invokeExact(high, low, count, step, max_step, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_parabolic_sar failed", photonFailure);
+        }
+    }
+
+    public static MemorySegment ph_fin_fib_ratios(MemorySegment out_count) {
+        try {
+            return (MemorySegment) PH_FIN_FIB_RATIOS.invokeExact(out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_fib_ratios failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_fib_retracements(double high, double low, MemorySegment ratios, int count, MemorySegment out_price) {
+        try {
+            return (int) PH_FIN_FIB_RETRACEMENTS.invokeExact(high, low, ratios, count, out_price);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_fib_retracements failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_pivot_points(double high, double low, double close, MemorySegment out) {
+        try {
+            return (int) PH_FIN_PIVOT_POINTS.invokeExact(high, low, close, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_pivot_points failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_heikin_ashi(MemorySegment open, MemorySegment high, MemorySegment low, MemorySegment close, int count, MemorySegment out_open, MemorySegment out_high, MemorySegment out_low, MemorySegment out_close) {
+        try {
+            return (int) PH_FIN_HEIKIN_ASHI.invokeExact(open, high, low, close, count, out_open, out_high, out_low, out_close);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_heikin_ashi failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_renko(MemorySegment close, int count, double brick_size, MemorySegment out, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_FIN_RENKO.invokeExact(close, count, brick_size, out, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_renko failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_line_break(MemorySegment close, int count, int lines, MemorySegment out, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_FIN_LINE_BREAK.invokeExact(close, count, lines, out, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_line_break failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_point_and_figure(MemorySegment high, MemorySegment low, int count, double box_size, int reversal, MemorySegment out, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_FIN_POINT_AND_FIGURE.invokeExact(high, low, count, box_size, reversal, out, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_point_and_figure failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_volume_profile(MemorySegment price, MemorySegment volume, int count, int bins, MemorySegment out_levels, MemorySegment out_volume, MemorySegment out_info) {
+        try {
+            return (int) PH_FIN_VOLUME_PROFILE.invokeExact(price, volume, count, bins, out_levels, out_volume, out_info);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_volume_profile failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_depth(MemorySegment bid_price, MemorySegment bid_size, int bid_count, MemorySegment ask_price, MemorySegment ask_size, int ask_count, MemorySegment out_bid_price, MemorySegment out_bid_cum, MemorySegment out_ask_price, MemorySegment out_ask_cum) {
+        try {
+            return (int) PH_FIN_DEPTH.invokeExact(bid_price, bid_size, bid_count, ask_price, ask_size, ask_count, out_bid_price, out_bid_cum, out_ask_price, out_ask_cum);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_depth failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_resample_ohlc(MemorySegment time, MemorySegment open, MemorySegment high, MemorySegment low, MemorySegment close, MemorySegment volume, int count, double bucket_ms, MemorySegment out_time, MemorySegment out_open, MemorySegment out_high, MemorySegment out_low, MemorySegment out_close, MemorySegment out_volume, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_FIN_RESAMPLE_OHLC.invokeExact(time, open, high, low, close, volume, count, bucket_ms, out_time, out_open, out_high, out_low, out_close, out_volume, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_resample_ohlc failed", photonFailure);
+        }
+    }
+
+    public static int ph_fin_drawdown(MemorySegment equity, int count, MemorySegment out_values, MemorySegment out_peak, MemorySegment out_info) {
+        try {
+            return (int) PH_FIN_DRAWDOWN.invokeExact(equity, count, out_values, out_peak, out_info);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_fin_drawdown failed", photonFailure);
         }
     }
 

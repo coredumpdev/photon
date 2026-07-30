@@ -407,6 +407,255 @@ PH_API const char* PH_CALL ph_palette_name(int32_t index);
 PH_API ph_color PH_CALL ph_palette_color(const char* name, int32_t index);
 
 /* ------------------------------------------------------------------------ */
+/* Analysis — pure functions over arrays                                      */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Indicators, transforms, regressions, filters and metrics. None of these
+ * touch a plot: they take arrays and produce arrays, and what makes the result
+ * a chart is what the caller does with it. That is exactly how the web core is
+ * arranged, and keeping it that way here means a host can compute an RSI on a
+ * worker thread and never involve the render thread at all.
+ *
+ * Two output shapes, and the difference is whether the length is known up front:
+ *
+ *   Fixed  — `out` holds `count` doubles, one per input sample. The leading
+ *            run is NaN over the warm-up period; layers skip non-finite points,
+ *            so an unfinished indicator simply does not draw.
+ *   Counted — the result's length depends on the data (Renko bricks, P&F
+ *            columns). Call with `capacity = 0` and a NULL buffer to learn the
+ *            count, allocate, call again. `out_count` is always the number the
+ *            function *would* have produced, never the number written, so a
+ *            short buffer truncates rather than lying.
+ *
+ * A NULL output pointer means "I do not want this one" wherever a function
+ * produces more than one series.
+ */
+
+/** Simple, weighted and exponential moving averages, and the rolling std dev. */
+PH_API ph_result PH_CALL ph_fin_sma(const double* values, int32_t count, int32_t period,
+                                    double* out);
+PH_API ph_result PH_CALL ph_fin_wma(const double* values, int32_t count, int32_t period,
+                                    double* out);
+PH_API ph_result PH_CALL ph_fin_ema(const double* values, int32_t count, int32_t period,
+                                    double* out);
+PH_API ph_result PH_CALL ph_fin_rolling_std(const double* values, int32_t count, int32_t period,
+                                            double* out);
+
+/** Bollinger Bands: SMA(period) +/- k * rolling std. */
+PH_API ph_result PH_CALL ph_fin_bollinger(const double* close, int32_t count, int32_t period,
+                                          double k, double* out_middle, double* out_upper,
+                                          double* out_lower);
+
+/** Wilder's RSI. 0..100. */
+PH_API ph_result PH_CALL ph_fin_rsi(const double* close, int32_t count, int32_t period,
+                                    double* out);
+
+/** MACD line, signal line and histogram. */
+PH_API ph_result PH_CALL ph_fin_macd(const double* close, int32_t count, int32_t fast, int32_t slow,
+                                     int32_t signal_period, double* out_macd, double* out_signal,
+                                     double* out_histogram);
+
+/** Cumulative volume-weighted average price. */
+PH_API ph_result PH_CALL ph_fin_vwap(const double* high, const double* low, const double* close,
+                                     const double* volume, int32_t count, double* out);
+
+/** True range per bar, and Wilder's average of it. */
+PH_API ph_result PH_CALL ph_fin_true_range(const double* high, const double* low,
+                                           const double* close, int32_t count, double* out);
+PH_API ph_result PH_CALL ph_fin_atr(const double* high, const double* low, const double* close,
+                                    int32_t count, int32_t period, double* out);
+
+/** Index of the first non-NaN value, or -1 — the end of an indicator's warm-up. */
+PH_API int32_t PH_CALL ph_fin_first_finite(const double* values, int32_t count);
+
+/** Stochastic oscillator: %K over `k_period`, %D = SMA(%K, d_period). */
+PH_API ph_result PH_CALL ph_fin_stochastic(const double* high, const double* low,
+                                           const double* close, int32_t count, int32_t k_period,
+                                           int32_t d_period, double* out_k, double* out_d);
+
+/** Keltner Channels: EMA(period) +/- mult * ATR(atr_period). */
+PH_API ph_result PH_CALL ph_fin_keltner(const double* high, const double* low, const double* close,
+                                        int32_t count, int32_t period, double mult,
+                                        int32_t atr_period, double* out_middle, double* out_upper,
+                                        double* out_lower);
+
+/** On-Balance Volume — a running signed volume total, with no warm-up. */
+PH_API ph_result PH_CALL ph_fin_obv(const double* close, const double* volume, int32_t count,
+                                    double* out);
+
+/**
+ * Ichimoku lines. The spans come back *unshifted*: projecting the cloud forward
+ * by `base_period` bars is a charting decision, and doing it here would hide it.
+ */
+PH_API ph_result PH_CALL ph_fin_ichimoku(const double* high, const double* low, int32_t count,
+                                         int32_t conv_period, int32_t base_period,
+                                         int32_t span_b_period, double* out_conversion,
+                                         double* out_base, double* out_span_a, double* out_span_b);
+
+/** Wilder's ADX and its two directional indicators. */
+PH_API ph_result PH_CALL ph_fin_adx(const double* high, const double* low, const double* close,
+                                    int32_t count, int32_t period, double* out_adx,
+                                    double* out_plus_di, double* out_minus_di);
+
+/** SuperTrend: the line, and +1/-1 for which side of price it sits on. */
+PH_API ph_result PH_CALL ph_fin_supertrend(const double* high, const double* low,
+                                           const double* close, int32_t count, int32_t period,
+                                           double mult, double* out_trend, double* out_direction);
+
+/** Commodity Channel Index, Money Flow Index and Williams %R. */
+PH_API ph_result PH_CALL ph_fin_cci(const double* high, const double* low, const double* close,
+                                    int32_t count, int32_t period, double* out);
+PH_API ph_result PH_CALL ph_fin_mfi(const double* high, const double* low, const double* close,
+                                    const double* volume, int32_t count, int32_t period,
+                                    double* out);
+PH_API ph_result PH_CALL ph_fin_williams_r(const double* high, const double* low,
+                                           const double* close, int32_t count, int32_t period,
+                                           double* out);
+
+/** Aroon Up/Down and their oscillator. */
+PH_API ph_result PH_CALL ph_fin_aroon(const double* high, const double* low, int32_t count,
+                                      int32_t period, double* out_up, double* out_down,
+                                      double* out_oscillator);
+
+/** Donchian Channels: the rolling high, low and midline. */
+PH_API ph_result PH_CALL ph_fin_donchian(const double* high, const double* low, int32_t count,
+                                         int32_t period, double* out_middle, double* out_upper,
+                                         double* out_lower);
+
+/** Parabolic SAR — the trailing stop-and-reverse dots. Wilder's 0.02 / 0.2. */
+PH_API ph_result PH_CALL ph_fin_parabolic_sar(const double* high, const double* low, int32_t count,
+                                              double step, double max_step, double* out);
+
+/**
+ * The standard Fibonacci ratios — 0, .236, .382, .5, .618, .786, 1 — as a
+ * pointer valid for the life of the process. Split from the retracement call
+ * because the web core takes the ratios as an argument with these as its
+ * default, and a host that wants its own set should not have to reinvent them.
+ */
+PH_API const double* PH_CALL ph_fin_fib_ratios(int32_t* out_count);
+
+/**
+ * Retracement prices for `count` ratios between a high and a low. `out_price`
+ * holds `count` doubles; a NULL `ratios` uses the standard seven, in which case
+ * `count` must be at least 7.
+ */
+PH_API ph_result PH_CALL ph_fin_fib_retracements(double high, double low, const double* ratios,
+                                                 int32_t count, double* out_price);
+
+/** Floor-trader pivots for the session after the one described. */
+typedef struct ph_pivot_levels {
+  double pivot;
+  double r1;
+  double r2;
+  double r3;
+  double s1;
+  double s2;
+  double s3;
+} ph_pivot_levels;
+PH_API ph_result PH_CALL ph_fin_pivot_points(double high, double low, double close,
+                                             ph_pivot_levels* out);
+
+/** Heikin-Ashi candles — smoothed OHLC, same length, for a candlestick layer. */
+PH_API ph_result PH_CALL ph_fin_heikin_ashi(const double* open, const double* high,
+                                            const double* low, const double* close, int32_t count,
+                                            double* out_open, double* out_high, double* out_low,
+                                            double* out_close);
+
+/** One Renko / line-break brick: a wickless candle body at a sequential index. */
+typedef struct ph_brick {
+  double  open;
+  double  close;
+  int32_t x;
+  ph_bool up;
+} ph_brick;
+
+/** Renko bricks, one per full `brick_size` move. Counted output. */
+PH_API ph_result PH_CALL ph_fin_renko(const double* close, int32_t count, double brick_size,
+                                      ph_brick* out, int32_t capacity, int32_t* out_count);
+
+/** Line-break bricks over the last `lines` brick closes. Counted output. */
+PH_API ph_result PH_CALL ph_fin_line_break(const double* close, int32_t count, int32_t lines,
+                                           ph_brick* out, int32_t capacity, int32_t* out_count);
+
+/**
+ * One Point & Figure column. `kind` is 'X' (rising) or 'O' (falling) as a
+ * character code. The box centres the web core also returns are omitted
+ * deliberately: they are `min(from,to) + box_size/2` stepping by `box_size`,
+ * and a nested variable-length array is the one shape this ABI has no good way
+ * to hand back.
+ */
+typedef struct ph_pf_column {
+  double  from;
+  double  to;
+  int32_t col;
+  int32_t kind;
+} ph_pf_column;
+
+/** Point & Figure columns. Counted output. */
+PH_API ph_result PH_CALL ph_fin_point_and_figure(const double* high, const double* low,
+                                                 int32_t count, double box_size, int32_t reversal,
+                                                 ph_pf_column* out, int32_t capacity,
+                                                 int32_t* out_count);
+
+/** What a volume profile found, beside the per-bin arrays. */
+typedef struct ph_volume_profile {
+  double  bin_size;
+  double  price_min;
+  double  price_max;
+  /** Bin index of the highest-volume level — the Point of Control. */
+  int32_t poc_index;
+} ph_volume_profile;
+
+/**
+ * Volume by price level. `out_levels` and `out_volume` each hold `bins`
+ * doubles; either may be NULL. Plot it as horizontal bars against `levels`.
+ */
+PH_API ph_result PH_CALL ph_fin_volume_profile(const double* price, const double* volume,
+                                               int32_t count, int32_t bins, double* out_levels,
+                                               double* out_volume, ph_volume_profile* out_info);
+
+/**
+ * Order-book depth curves from `[price, size]` given as two parallel arrays per
+ * side. Each output holds as many doubles as its side has levels; the bid side
+ * comes back with prices ascending toward the mid, so both plot left to right.
+ */
+PH_API ph_result PH_CALL ph_fin_depth(const double* bid_price, const double* bid_size,
+                                      int32_t bid_count, const double* ask_price,
+                                      const double* ask_size, int32_t ask_count,
+                                      double* out_bid_price, double* out_bid_cum,
+                                      double* out_ask_price, double* out_ask_cum);
+
+/**
+ * Roll bars up to a coarser timeframe — 1m into 1h, daily into weekly. Buckets
+ * are aligned to multiples of `bucket_ms` from the epoch, so the same input
+ * always gives the same boundaries, and empty buckets are skipped rather than
+ * filled. Counted output: each non-NULL array receives `out_count` doubles.
+ */
+PH_API ph_result PH_CALL ph_fin_resample_ohlc(const double* time, const double* open,
+                                              const double* high, const double* low,
+                                              const double* close, const double* volume,
+                                              int32_t count, double bucket_ms, double* out_time,
+                                              double* out_open, double* out_high, double* out_low,
+                                              double* out_close, double* out_volume,
+                                              int32_t capacity, int32_t* out_count);
+
+/** Where the deepest drawdown of an equity curve started and bottomed. */
+typedef struct ph_drawdown {
+  /** The deepest drawdown as a negative fraction: -0.32 is -32%. */
+  double  max_drawdown;
+  int32_t trough_index;
+  int32_t peak_index;
+} ph_drawdown;
+
+/**
+ * The underwater curve of an equity series. `out_values` and `out_peak` each
+ * hold `count` doubles; either may be NULL.
+ */
+PH_API ph_result PH_CALL ph_fin_drawdown(const double* equity, int32_t count, double* out_values,
+                                         double* out_peak, ph_drawdown* out_info);
+
+/* ------------------------------------------------------------------------ */
 /* Descriptors                                                                */
 /* ------------------------------------------------------------------------ */
 

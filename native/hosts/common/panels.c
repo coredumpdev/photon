@@ -36,6 +36,9 @@
 /* A small-world graph: enough nodes to need a layout, few enough to read. */
 #define NODES 48
 #define GRAPH_EDGES 72
+/* Short enough that the bands cover most of the 34 sessions rather than warming
+ * up through half of them. */
+#define BOLLINGER_PERIOD 10
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -96,13 +99,19 @@ struct ph_panels {
   double flow_v[FLOW * FLOW];
 
   ph_edge graph_edges[GRAPH_EDGES];
+
+  /* Bollinger Bands over the session closes, computed once at build time.
+   * The leading BOLLINGER_PERIOD-1 samples are NaN and simply do not draw. */
+  double band_mid[SESSIONS];
+  double band_up[SESSIONS];
+  double band_dn[SESSIONS];
 };
 
-static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay",    "Scatter", "Streaming",
-                                              "Revenue", "Funnel",       "Share",   "Impulse",
-                                              "Yield",   "Latency",      "Field",   "Sprite",
-                                              "Candles", "Bars",         "Density", "Flow",
-                                              "Contour", "Network"};
+static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
+                                              "Revenue", "Funnel",    "Share",   "Impulse",
+                                              "Yield",   "Latency",   "Field",   "Sprite",
+                                              "Candles", "Bars",      "Density", "Flow",
+                                              "Contour", "Network",   "Signals"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -357,6 +366,11 @@ ph_panels* ph_panels_create(void) {
     p->graph_edges[i].a = a;
     p->graph_edges[i].b = b == a ? (a + NODES / 2) % NODES : b;
   }
+
+  /* The indicators are ordinary arithmetic over the session closes, so they are
+   * baked here with the rest of the data rather than recomputed per frame. */
+  ph_fin_bollinger(p->bar_close, SESSIONS, BOLLINGER_PERIOD, 2.0, p->band_mid, p->band_up,
+                   p->band_dn);
 
   return p;
 }
@@ -860,6 +874,53 @@ static void build_network(ph_panels* p, ph_plot plot) {
   ph_plot_add_graph(plot, &graph, &layer);
 }
 
+/* Panel 18 — the same sessions with Bollinger Bands over them.
+ *
+ * The indicator is not a layer and not a chart type: `ph_fin_bollinger` turns
+ * one array into three, and three ordinary line layers draw them. That is the
+ * whole argument for keeping the analysis half pure — nothing here knows it is
+ * being plotted. */
+static void build_signals(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Signals");
+  session_axis(p, plot);
+  style_axis(plot, "x", "session", 0);
+  style_axis(plot, "y", "price", 0);
+
+  ph_candlestick_desc candles;
+  ph_candlestick_desc_init(&candles);
+  candles.x = p->session_index;
+  candles.open = p->bar_open;
+  candles.high = p->bar_high;
+  candles.low = p->bar_low;
+  candles.close = p->bar_close;
+  candles.count = SESSIONS;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_candlestick(plot, &candles, &layer);
+
+  static const float dash[2] = {4.0f, 3.0f};
+  ph_line_desc line;
+  ph_line_desc_init(&line);
+  line.x = p->session_index;
+  line.count = SESSIONS;
+  line.width = 1.25f;
+
+  line.y = p->band_mid;
+  line.name = "SMA 10";
+  line.color = parse("#facc15");
+  ph_plot_add_line(plot, &line, &layer);
+
+  /* The two edges share a colour and a dash: they are one band, drawn twice. */
+  line.color = parse("#38bdf8");
+  line.dash = dash;
+  line.dash_count = 2;
+  line.y = p->band_up;
+  line.name = "+2 sigma";
+  ph_plot_add_line(plot, &line, &layer);
+  line.y = p->band_dn;
+  line.name = "-2 sigma";
+  ph_plot_add_line(plot, &line, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -881,7 +942,8 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 14: build_density(panels, plot); break;
     case 15: build_flow(panels, plot); break;
     case 16: build_contour(panels, plot); break;
-    default: build_network(panels, plot); break;
+    case 17: build_network(panels, plot); break;
+    default: build_signals(panels, plot); break;
   }
 }
 

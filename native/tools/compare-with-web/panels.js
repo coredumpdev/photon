@@ -1,5 +1,5 @@
 /**
- * The eighteen demo charts, built with @photonviz/core.
+ * The nineteen demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -7,7 +7,7 @@
  * if one changes, both must.
  */
 
-import { Plot } from "@photonviz/core";
+import { Plot, bollinger } from "@photonviz/core";
 
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
@@ -26,6 +26,7 @@ const FLOW = 14;
 const ISO_LEVELS = 9;
 const NODES = 48;
 const GRAPH_EDGES = 72;
+const BOLLINGER_PERIOD = 10;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -515,6 +516,22 @@ function network(container) {
   return plot;
 }
 
+function signals(container) {
+  const plot = sessionPlot(container, "Signals");
+  const { index, open, high, low, close } = SESSION_BARS;
+  plot.addCandlestick({ x: index, open, high, low, close });
+  // The indicator is not a layer: bollinger() turns one array into three and
+  // three ordinary line layers draw them. Exactly what panels.c does through
+  // ph_fin_bollinger, which is the point of comparing this panel at all.
+  const { middle, upper, lower } = bollinger(close, BOLLINGER_PERIOD, 2);
+  plot.addLine({ x: index, y: middle, color: "#facc15", width: 1.25, name: "SMA 10" });
+  // The two edges share a colour and a dash: they are one band, drawn twice.
+  const edge = { color: "#38bdf8", width: 1.25, dash: [4, 3] };
+  plot.addLine({ x: index, y: upper, ...edge, name: "+2 sigma" });
+  plot.addLine({ x: index, y: lower, ...edge, name: "-2 sigma" });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
-                       candles, bars, density, flow, contour, network];
+                       candles, bars, density, flow, contour, network, signals];

@@ -1,7 +1,7 @@
-// The QML gallery: the same eighteen charts as the GLFW one, in a 5x4 grid.
+// The QML gallery: the same nineteen charts as the GLFW one, in a 5x4 grid.
 //
 // Each cell is a PhotonPlot, which is a QQuickFramebufferObject — so this is
-// eighteen independent plots, each on Qt's render thread, composited by the scene
+// nineteen independent plots, each on Qt's render thread, composited by the scene
 // graph alongside ordinary QML controls.
 
 import QtQuick
@@ -83,7 +83,7 @@ ApplicationWindow {
         Repeater {
             // Mirrors PH_PANEL_COUNT in hosts/common/panels.h, which QML cannot
             // see. If one changes, so does the other.
-            model: 18
+            model: 19
             PhotonPlot {
                 required property int index
                 panel: index

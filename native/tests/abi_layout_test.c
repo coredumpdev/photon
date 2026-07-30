@@ -62,6 +62,43 @@ PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, stop_count) == 24, "ph_colormap_spec
 PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, reverse) == 28, "ph_colormap_spec.reverse offset");
 PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, discrete_steps) == 32, "ph_colormap_spec.discrete_steps offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_pivot_levels) == 56, "ph_pivot_levels size");
+PH_ASSERT_LAYOUT(_Alignof(ph_pivot_levels) == 8, "ph_pivot_levels alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, pivot) == 0, "ph_pivot_levels.pivot offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, r1) == 8, "ph_pivot_levels.r1 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, r2) == 16, "ph_pivot_levels.r2 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, r3) == 24, "ph_pivot_levels.r3 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, s1) == 32, "ph_pivot_levels.s1 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, s2) == 40, "ph_pivot_levels.s2 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, s3) == 48, "ph_pivot_levels.s3 offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_brick) == 24, "ph_brick size");
+PH_ASSERT_LAYOUT(_Alignof(ph_brick) == 8, "ph_brick alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_brick, open) == 0, "ph_brick.open offset");
+PH_ASSERT_LAYOUT(offsetof(ph_brick, close) == 8, "ph_brick.close offset");
+PH_ASSERT_LAYOUT(offsetof(ph_brick, x) == 16, "ph_brick.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_brick, up) == 20, "ph_brick.up offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_pf_column) == 24, "ph_pf_column size");
+PH_ASSERT_LAYOUT(_Alignof(ph_pf_column) == 8, "ph_pf_column alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_pf_column, from) == 0, "ph_pf_column.from offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pf_column, to) == 8, "ph_pf_column.to offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pf_column, col) == 16, "ph_pf_column.col offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pf_column, kind) == 20, "ph_pf_column.kind offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_volume_profile) == 32, "ph_volume_profile size");
+PH_ASSERT_LAYOUT(_Alignof(ph_volume_profile) == 8, "ph_volume_profile alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_volume_profile, bin_size) == 0, "ph_volume_profile.bin_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_volume_profile, price_min) == 8, "ph_volume_profile.price_min offset");
+PH_ASSERT_LAYOUT(offsetof(ph_volume_profile, price_max) == 16, "ph_volume_profile.price_max offset");
+PH_ASSERT_LAYOUT(offsetof(ph_volume_profile, poc_index) == 24, "ph_volume_profile.poc_index offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_drawdown) == 16, "ph_drawdown size");
+PH_ASSERT_LAYOUT(_Alignof(ph_drawdown) == 8, "ph_drawdown alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_drawdown, max_drawdown) == 0, "ph_drawdown.max_drawdown offset");
+PH_ASSERT_LAYOUT(offsetof(ph_drawdown, trough_index) == 8, "ph_drawdown.trough_index offset");
+PH_ASSERT_LAYOUT(offsetof(ph_drawdown, peak_index) == 12, "ph_drawdown.peak_index offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_margin) == 16, "ph_margin size");
 PH_ASSERT_LAYOUT(_Alignof(ph_margin) == 4, "ph_margin alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_margin, top) == 0, "ph_margin.top offset");
@@ -485,7 +522,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid o
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 32);
+  printf("%d struct layouts match the generated bindings\n", 37);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");
