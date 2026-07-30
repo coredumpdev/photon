@@ -90,10 +90,30 @@ typedef int32_t ph_bool;
 /** Opaque generation-tagged handles. 0 is always invalid. */
 typedef uint64_t ph_plot;
 typedef uint64_t ph_layer;
+/** A 3-D scene. Its layers use ph_layer, from the same table as a plot's. */
+typedef uint64_t ph_plot3d;
 /** A parsed CSV. Owns its strings, and belongs to no plot. */
 typedef uint64_t ph_table;
 
 #define PH_NULL_HANDLE ((uint64_t)0)
+
+/* Pointer input ----------------------------------------------------------- */
+
+typedef int32_t ph_button;
+enum {
+  PH_BUTTON_LEFT   = 0,
+  PH_BUTTON_MIDDLE = 1,
+  PH_BUTTON_RIGHT  = 2
+};
+
+typedef int32_t ph_modifiers;
+enum {
+  PH_MOD_NONE  = 0,
+  PH_MOD_SHIFT = 1 << 0,
+  PH_MOD_CTRL  = 1 << 1,
+  PH_MOD_ALT   = 1 << 2,
+  PH_MOD_SUPER = 1 << 3
+};
 
 /**
  * Packed RGBA, one byte per channel, red in the most significant byte:
@@ -1932,24 +1952,6 @@ typedef struct ph_event {
   ph_bool       point_valid;
 } ph_event;
 
-/* Pointer input ----------------------------------------------------------- */
-
-typedef int32_t ph_button;
-enum {
-  PH_BUTTON_LEFT   = 0,
-  PH_BUTTON_MIDDLE = 1,
-  PH_BUTTON_RIGHT  = 2
-};
-
-typedef int32_t ph_modifiers;
-enum {
-  PH_MOD_NONE  = 0,
-  PH_MOD_SHIFT = 1 << 0,
-  PH_MOD_CTRL  = 1 << 1,
-  PH_MOD_ALT   = 1 << 2,
-  PH_MOD_SUPER = 1 << 3
-};
-
 /* ------------------------------------------------------------------------ */
 /* Library lifecycle                                                          */
 /* ------------------------------------------------------------------------ */
@@ -2595,6 +2597,233 @@ PH_API ph_result PH_CALL ph_layer_bounds(ph_layer layer, ph_range* x, ph_range* 
 
 /** Remove a layer from its plot and free its GPU resources. */
 PH_API ph_result PH_CALL ph_layer_destroy(ph_layer layer);
+
+/* ------------------------------------------------------------------------ */
+/* 3-D                                                                        */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A 3-D plot is its own type, which is the opposite of the decision polar got.
+ * The reason is the same in both cases: what actually differs. Polar differs in
+ * the grid and the projection and nothing else. This differs in every one of
+ * them — the camera, the depth test, the vertex format, what a "layer" even is
+ * — so sharing ph_plot would mean a plot whose every call had two behaviours.
+ *
+ * Layers still use ph_layer, from the same table, so ph_layer_set_visible and
+ * ph_layer_destroy work on a 3-D layer exactly as they do on a 2-D one.
+ */
+
+/** How a data extent is mapped into the view cube. */
+typedef int32_t ph_aspect_mode;
+enum {
+  /** Stretch each axis to fill the cube — best for a surface, where the shape
+   *  matters more than the units. */
+  PH_ASPECT_CUBE = 0,
+  /** One shared scale, so a long thin scene stays long and thin. */
+  PH_ASPECT_DATA = 1
+};
+
+/** Camera projection. */
+typedef int32_t ph_projection;
+enum {
+  /** The natural choice for a surface or a point cloud. */
+  PH_PROJECTION_PERSPECTIVE  = 0,
+  /** No perspective divide, so a long scene keeps one scale end to end —
+   *  which is what a diagram wants. `distance` then sets the visible
+   *  half-height rather than the eye distance. */
+  PH_PROJECTION_ORTHOGRAPHIC = 1
+};
+
+typedef struct ph_plot3d_desc {
+  uint32_t       struct_size;
+  int32_t        width;
+  int32_t        height;
+  ph_theme       theme;
+  /** Scene background. PH_COLOR_AUTO takes the theme's. */
+  ph_color       background;
+  const char*    title;
+  /** Axis titles along the x, y (height) and z edges. */
+  const char*    x_label;
+  const char*    y_label;
+  const char*    z_label;
+  /** Orbit angle in radians. 0 means 0.7, the core's default. */
+  double         azimuth;
+  /** Elevation in radians, clamped to +/-1.5. 0 means 0.5. */
+  double         elevation;
+  /** Eye distance, or the visible half-height under an orthographic camera.
+   *  0 means 3.6. */
+  double         distance;
+  ph_aspect_mode aspect_mode;
+  ph_projection  projection;
+  /** The bounding box, its ticks and its labels are drawn unless this is set. */
+  ph_bool        no_axes;
+  /** Grid lines on the back walls of the cube are drawn unless this is set. */
+  ph_bool        no_grid_planes;
+  /** Drag to orbit and wheel to dolly are on unless this is set. */
+  ph_bool        no_interaction;
+} ph_plot3d_desc;
+
+PH_API void PH_CALL ph_plot3d_desc_init(ph_plot3d_desc* out);
+
+PH_API ph_result PH_CALL ph_plot3d_create(const ph_plot3d_desc* desc, ph_plot3d* out);
+PH_API ph_result PH_CALL ph_plot3d_destroy(ph_plot3d plot);
+PH_API ph_bool PH_CALL ph_plot3d_valid(ph_plot3d plot);
+
+PH_API ph_result PH_CALL ph_plot3d_set_size(ph_plot3d plot, int32_t width, int32_t height);
+PH_API ph_result PH_CALL ph_plot3d_set_theme(ph_plot3d plot, ph_theme theme);
+PH_API ph_result PH_CALL ph_plot3d_set_title(ph_plot3d plot, const char* title);
+PH_API ph_result PH_CALL ph_plot3d_set_axis_labels(ph_plot3d plot, const char* x, const char* y,
+                                                   const char* z);
+
+/** Where the camera sits. Elevation is clamped to +/-1.5 radians either way. */
+PH_API ph_result PH_CALL ph_plot3d_set_camera(ph_plot3d plot, double azimuth, double elevation,
+                                              double distance);
+PH_API ph_result PH_CALL ph_plot3d_get_camera(ph_plot3d plot, double* out_azimuth,
+                                              double* out_elevation, double* out_distance);
+
+/**
+ * The scene's one directional light. `x`, `y`, `z` point *towards* it in cube
+ * space; `ambient` is how much a surface facing away still receives. An
+ * all-zero direction leaves the light where it was.
+ */
+PH_API ph_result PH_CALL ph_plot3d_set_light(ph_plot3d plot, float x, float y, float z,
+                                             float ambient);
+
+/** Back to the camera the plot was created with. */
+PH_API ph_result PH_CALL ph_plot3d_reset_view(ph_plot3d plot);
+
+/** Mirrors core `SurfaceOptions`: a height grid, lit and colour-mapped. */
+typedef struct ph_surface_desc {
+  uint32_t                struct_size;
+  /** Row-major heights, `cols * rows`. */
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  /** World footprint. An empty range means 0..cols-1 / 0..rows-1. */
+  ph_range                x;
+  ph_range                z;
+  const ph_colormap_spec* colormap;
+  /** Value range the ramp covers. Empty measures it from the data. */
+  ph_range                domain;
+  /** Draw the grid as lines instead of a lit filled surface. */
+  ph_bool                 wireframe;
+  const char*             name;
+  ph_render_type          render_type;
+} ph_surface_desc;
+
+PH_API void PH_CALL ph_surface_desc_init(ph_surface_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_surface(ph_plot3d plot, const ph_surface_desc* desc,
+                                               ph_layer* out);
+
+/** Mirrors core `PointCloudOptions`. */
+typedef struct ph_pointcloud_desc {
+  uint32_t                struct_size;
+  const double*           x;
+  const double*           y;
+  const double*           z;
+  int32_t                 count;
+  /** Point diameter in pixels. 0 means 4. */
+  float                   size;
+  ph_color                color;
+  /** One value per point through `colormap`. NULL uses the flat colour. */
+  const double*           values;
+  const ph_colormap_spec* colormap;
+  ph_range                domain;
+  const char*             name;
+  ph_render_type          render_type;
+} ph_pointcloud_desc;
+
+PH_API void PH_CALL ph_pointcloud_desc_init(ph_pointcloud_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_pointcloud(ph_plot3d plot, const ph_pointcloud_desc* desc,
+                                                  ph_layer* out);
+
+/** Mirrors core `Line3DOptions`: a polyline through space. */
+typedef struct ph_line3d_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  y;
+  const double*  z;
+  int32_t        count;
+  ph_color       color;
+  const char*    name;
+  ph_render_type render_type;
+} ph_line3d_desc;
+
+PH_API void PH_CALL ph_line3d_desc_init(ph_line3d_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_line(ph_plot3d plot, const ph_line3d_desc* desc,
+                                            ph_layer* out);
+
+/** Mirrors core `Bar3DOptions`: one lit box per cell of a grid. */
+typedef struct ph_bar3d_desc {
+  uint32_t                struct_size;
+  /** Row-major heights, `cols * rows`. */
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  ph_range                x;
+  ph_range                z;
+  /** Bar footprint as a fraction of the cell. 0 means 0.8. */
+  double                  fill;
+  const ph_colormap_spec* colormap;
+  ph_range                domain;
+  const char*             name;
+  ph_render_type          render_type;
+} ph_bar3d_desc;
+
+PH_API void PH_CALL ph_bar3d_desc_init(ph_bar3d_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_bars(ph_plot3d plot, const ph_bar3d_desc* desc,
+                                            ph_layer* out);
+
+/** Mirrors core `Quiver3DOptions`: an arrow per sample, drawn as line segments. */
+typedef struct ph_quiver3d_desc {
+  uint32_t                struct_size;
+  const double*           x;
+  const double*           y;
+  const double*           z;
+  const double*           u;
+  const double*           v;
+  const double*           w;
+  int32_t                 count;
+  /** Multiplier on the vector length. 0 means 1. */
+  double                  scale;
+  ph_color                color;
+  /** Colour by magnitude through a ramp instead of the flat colour. */
+  ph_bool                 color_by_magnitude;
+  const ph_colormap_spec* colormap;
+  const char*             name;
+  ph_render_type          render_type;
+} ph_quiver3d_desc;
+
+PH_API void PH_CALL ph_quiver3d_desc_init(ph_quiver3d_desc* out);
+PH_API ph_result PH_CALL ph_plot3d_add_quiver(ph_plot3d plot, const ph_quiver3d_desc* desc,
+                                              ph_layer* out);
+
+/*
+ * Four of the web core's nine 3-D layers are here — surface, point cloud, line
+ * and bars — plus the quiver above. The other four (isosurface, volume,
+ * contour3d, boxes3d) are additive and listed in native/TODO.md: isosurface
+ * needs marching cubes and volume needs a 3-D texture, and each of those is its
+ * own piece of work rather than another shader over the same plumbing.
+ */
+
+/* Interaction, rendering and events, in the same shapes as the 2-D plot. */
+
+PH_API ph_result PH_CALL ph_plot3d_pointer_down(ph_plot3d plot, double px, double py,
+                                                ph_button button, ph_modifiers mods);
+PH_API ph_result PH_CALL ph_plot3d_pointer_move(ph_plot3d plot, double px, double py,
+                                                ph_modifiers mods);
+PH_API ph_result PH_CALL ph_plot3d_pointer_up(ph_plot3d plot, double px, double py,
+                                              ph_button button, ph_modifiers mods);
+PH_API ph_result PH_CALL ph_plot3d_wheel(ph_plot3d plot, double px, double py, double delta_y,
+                                         ph_modifiers mods);
+
+PH_API ph_result PH_CALL ph_plot3d_render(ph_plot3d plot, const ph_frame_target* target);
+PH_API ph_result PH_CALL ph_plot3d_render_pixels(ph_plot3d plot, int32_t width, int32_t height,
+                                                 float dpr, uint8_t* out_rgba,
+                                                 int32_t stride_bytes);
+PH_API ph_bool PH_CALL ph_plot3d_needs_redraw(ph_plot3d plot);
+PH_API ph_result PH_CALL ph_plot3d_poll_event(ph_plot3d plot, ph_event* out);
+PH_API ph_result PH_CALL ph_plot3d_clear_events(ph_plot3d plot);
 
 /* ------------------------------------------------------------------------ */
 /* Interaction                                                                */

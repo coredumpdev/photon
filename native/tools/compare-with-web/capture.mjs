@@ -44,9 +44,11 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM ?? "/usr/bin/chromium",
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
-// Tall enough for any grid; the real height comes from the page below.
+// A starting size only; the page is measured and the viewport resized to fit
+// below, because `clip` cannot reach past the viewport and a grid that outgrows
+// it would be silently cropped.
 const page = await browser.newPage({
-  viewport: { width: 3200, height: 3200 },
+  viewport: { width: 3200, height: 1200 },
   deviceScaleFactor: 1,
 });
 page.on("console", (message) => {
@@ -62,6 +64,7 @@ const size = await page.evaluate(() => {
   const grid = document.getElementById("grid");
   return { width: grid.scrollWidth, height: grid.scrollHeight };
 });
+await page.setViewportSize(size);
 await page.screenshot({ path: out, clip: { x: 0, y: 0, ...size } });
 await browser.close();
 server.close();

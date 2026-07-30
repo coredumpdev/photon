@@ -1,5 +1,5 @@
 /**
- * The thirty-four demo charts, built with @photonviz/core.
+ * The thirty-seven demo charts — thirty-four 2-D panels and three 3-D scenes, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -10,7 +10,7 @@
 import {
   Plot, addChord, addGauge, addParallelCoordinates, addSankey, addSunburst, addTreemap,
   bollinger, linearTrend, loess, pca, rocCurve, welch,
-  PolarPlot,
+  PolarPlot, Plot3D,
 } from "@photonviz/core";
 
 const SAMPLES = 512;
@@ -45,6 +45,10 @@ const STREAMS = 3;
 const HIST_SAMPLES = 4000;
 const ROSE_POINTS = 361;
 const ROSE_MARKS = 12;
+const TERRAIN = 48;
+const HELIX_POINTS = 400;
+const CLOUD_POINTS = 1200;
+const BARS3D = 12;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -902,9 +906,117 @@ function polar(container) {
   return plot;
 }
 
+/**
+ * The three 3-D scenes, and the second place the two cores are laid out
+ * differently on purpose.
+ *
+ * Both draw the same camera, the same normalize matrix and the same lit
+ * geometry, but the web core's Plot3D writes its labels with Canvas2D over the
+ * blitted frame while this one projects them into the same SDF batch the 2-D
+ * overlay uses. They belong side by side; they do not belong in a pixel
+ * comparison, so compare.mjs does not list them.
+ */
+const scene3d = { theme: "dark", hover: false, resetButton: false, downloadButton: false };
+
+function terrain(container) {
+  const values = new Float64Array(TERRAIN * TERRAIN);
+  for (let r = 0; r < TERRAIN; r++) {
+    for (let c = 0; c < TERRAIN; c++) {
+      const x = (c - TERRAIN * 0.5) * 0.22;
+      const z = (r - TERRAIN * 0.5) * 0.22;
+      const d1 = Math.hypot(x + 2, z);
+      const d2 = Math.hypot(x - 2, z);
+      values[r * TERRAIN + c] = Math.sin(d1 * 1.6) + Math.sin(d2 * 1.6);
+    }
+  }
+  const plot = new Plot3D(container, {
+    ...scene3d,
+    title: "Terrain",
+    axisLabels: { x: "x", y: "height", z: "z" },
+  });
+  plot.addSurface({
+    values, cols: TERRAIN, rows: TERRAIN,
+    extentX: [-5, 5], extentZ: [-5, 5],
+    colormap: "viridis", name: "height",
+  });
+  return plot;
+}
+
+function helix(container) {
+  const hx = new Float64Array(HELIX_POINTS);
+  const hy = new Float64Array(HELIX_POINTS);
+  const hz = new Float64Array(HELIX_POINTS);
+  for (let i = 0; i < HELIX_POINTS; i++) {
+    const t = i * 0.06;
+    hx[i] = Math.cos(t) * 2;
+    hy[i] = t * 0.25 - 3;
+    hz[i] = Math.sin(t) * 2;
+  }
+  const cx = new Float64Array(CLOUD_POINTS);
+  const cy = new Float64Array(CLOUD_POINTS);
+  const cz = new Float64Array(CLOUD_POINTS);
+  let seed = 86428642;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < CLOUD_POINTS; i++) {
+    const u = nextUnit();
+    const v = nextUnit();
+    const g = Math.sqrt(-2 * Math.log(u + 1e-12));
+    const a = 2 * Math.PI * v;
+    const t = i * 0.02;
+    cx[i] = Math.cos(t) * 2 + g * Math.cos(a) * 0.45;
+    cy[i] = t * 0.25 - 3 + g * Math.sin(a) * 0.45;
+    cz[i] = Math.sin(t) * 2 + g * Math.cos(a + 1) * 0.45;
+  }
+  const plot = new Plot3D(container, {
+    ...scene3d,
+    title: "Helix",
+    axisLabels: { x: "x", y: "t", z: "z" },
+  });
+  plot.addPointCloud({
+    x: cx, y: cy, z: cz, size: 3,
+    colorBy: { values: cy, colormap: "plasma" },
+    name: "t",
+  });
+  plot.addLine3D({ x: hx, y: hy, z: hz, color: "#e2e8f0", name: "path" });
+  return plot;
+}
+
+function towers(container) {
+  const xs = [];
+  const zs = [];
+  const ys = [];
+  for (let r = 0; r < BARS3D; r++) {
+    for (let c = 0; c < BARS3D; c++) {
+      const nx = (c - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+      const nz = (r - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+      xs.push(nx * 3);
+      zs.push(nz * 3);
+      ys.push(4 * Math.exp(-(nx * nx + nz * nz) * 1.6) + 0.3);
+    }
+  }
+  const plot = new Plot3D(container, {
+    ...scene3d,
+    title: "Towers",
+    axisLabels: { x: "x", y: "value", z: "z" },
+    azimuth: 0.9,
+    elevation: 0.6,
+    distance: 3.4,
+  });
+  plot.addBar3D({
+    x: xs, z: zs, y: ys,
+    width: (6 / BARS3D) * 0.7,
+    colorBy: { colormap: "turbo" },
+    name: "value",
+  });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
                        candles, bars, density, flow, contour, network, signals,
                        fit, spectrum, roc, embedding, treemap, sunburst, sankey,
                        chord, gauge, parallel, grouped, stacked, histogramPanel,
-                       spectrogramPanel, polar];
+                       spectrogramPanel, polar, terrain, helix, towers];

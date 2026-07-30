@@ -174,10 +174,32 @@ All of the above are pure functions with existing unit tests in
 
 ### 3D
 
-- [ ] `plot3d/plot3d.ts` (1031 lines) + `mat4.ts` + `marching-cubes.ts`
-- [ ] Layers: `bar3d` `boxes3d` `contour3d` `isosurface` `line3d` `pointcloud`
-      `quiver3d` `surface` `volume`
-- [ ] Needs `begin3D` state (depth test on) and a `ph_plot3d` handle type.
+- [x] ~~`plot3d/plot3d.ts` (1031 lines) + `mat4.ts`~~ — the orbit camera, the
+      normalize matrix, the bounding box with its ticks and back-wall grid
+      planes, the depth-tested render and its own offscreen target (the 2-D
+      one has no depth attachment on purpose). `ph_plot3d` is its own handle
+      type — the opposite of the polar decision, and for the same reason:
+      polar differs in the grid and the projection, this differs in the camera,
+      the depth test, the vertex format and what a layer even is.
+- [x] ~~Layers: `line3d` `pointcloud` `quiver3d` `surface` `bar3d`~~ — five of
+      the nine, over three programs: one lit mesh shader the surface and the
+      bars share, one point shader, one plain line shader. The surface's
+      normals are per-vertex central differences rather than face normals,
+      because that is what the web core does and a flat-shaded surface is a
+      recognisably different picture.
+- [ ] `isosurface` needs `marching-cubes.ts` — the 256-entry edge and triangle
+      tables, transcribed with its vitest suite.
+- [ ] `volume` needs a 3-D texture, which means `TexImage3D` and `TEXTURE_3D`
+      in the GL loader; the raymarching shader is otherwise self-contained.
+- [ ] `contour3d` and `boxes3d` are both meshes over the plumbing that now
+      exists — additive, no new decisions.
+- [ ] Only the Java gallery shows the 3-D scenes. The GLFW and Qt hosts hold an
+      array of `ph_plot`, so showing a `ph_plot3d` means a second path through
+      their panel plumbing; `hosts/common/panels.c` already builds the scenes
+      (`ph_panels_build_3d`) and is waiting for them.
+- [ ] No hover picking in 3-D. `Layer3D::pickData` in the web core projects
+      every point and finds the nearest; the ABI has the event for it
+      (`PH_EVENT_POINT_PICKED`) and nothing raises it here yet.
 
 ### Polar
 

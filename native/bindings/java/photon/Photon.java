@@ -47,6 +47,14 @@ public final class Photon {
 
     public static final long PH_NULL_HANDLE = 0L;
     public static final int PH_COLOR_AUTO = 0;
+    public static final int PH_BUTTON_LEFT = 0;
+    public static final int PH_BUTTON_MIDDLE = 1;
+    public static final int PH_BUTTON_RIGHT = 2;
+    public static final int PH_MOD_NONE = 0;
+    public static final int PH_MOD_SHIFT = 1;
+    public static final int PH_MOD_CTRL = 2;
+    public static final int PH_MOD_ALT = 4;
+    public static final int PH_MOD_SUPER = 8;
     public static final int PH_OK = 0;
     public static final int PH_E_INVALID_HANDLE = -1;
     public static final int PH_E_INVALID_ARGUMENT = -2;
@@ -130,14 +138,10 @@ public final class Photon {
     public static final int PH_EVENT_LAYER_VISIBILITY = 4;
     public static final int PH_EVENT_REDRAW_REQUESTED = 5;
     public static final int PH_EVENT_POINT_PICKED = 6;
-    public static final int PH_BUTTON_LEFT = 0;
-    public static final int PH_BUTTON_MIDDLE = 1;
-    public static final int PH_BUTTON_RIGHT = 2;
-    public static final int PH_MOD_NONE = 0;
-    public static final int PH_MOD_SHIFT = 1;
-    public static final int PH_MOD_CTRL = 2;
-    public static final int PH_MOD_ALT = 4;
-    public static final int PH_MOD_SUPER = 8;
+    public static final int PH_ASPECT_CUBE = 0;
+    public static final int PH_ASPECT_DATA = 1;
+    public static final int PH_PROJECTION_PERSPECTIVE = 0;
+    public static final int PH_PROJECTION_ORTHOGRAPHIC = 1;
 
     // ---- descriptor layouts ----
 
@@ -2516,6 +2520,263 @@ public final class Photon {
         }
     }
 
+    /** ph_plot3d_desc — 104 bytes, alignment 8. */
+    public static final class ph_plot3d_desc {
+        private ph_plot3d_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            ValueLayout.JAVA_INT.withName("width"),
+            ValueLayout.JAVA_INT.withName("height"),
+            ValueLayout.JAVA_INT.withName("theme"),
+            ValueLayout.JAVA_INT.withName("background"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("title"),
+            ValueLayout.ADDRESS.withName("x_label"),
+            ValueLayout.ADDRESS.withName("y_label"),
+            ValueLayout.ADDRESS.withName("z_label"),
+            ValueLayout.JAVA_DOUBLE.withName("azimuth"),
+            ValueLayout.JAVA_DOUBLE.withName("elevation"),
+            ValueLayout.JAVA_DOUBLE.withName("distance"),
+            ValueLayout.JAVA_INT.withName("aspect_mode"),
+            ValueLayout.JAVA_INT.withName("projection"),
+            ValueLayout.JAVA_INT.withName("no_axes"),
+            ValueLayout.JAVA_INT.withName("no_grid_planes"),
+            ValueLayout.JAVA_INT.withName("no_interaction"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_plot3d_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_WIDTH = 4L;
+        public static final long OFFSET_HEIGHT = 8L;
+        public static final long OFFSET_THEME = 12L;
+        public static final long OFFSET_BACKGROUND = 16L;
+        public static final long OFFSET_TITLE = 24L;
+        public static final long OFFSET_X_LABEL = 32L;
+        public static final long OFFSET_Y_LABEL = 40L;
+        public static final long OFFSET_Z_LABEL = 48L;
+        public static final long OFFSET_AZIMUTH = 56L;
+        public static final long OFFSET_ELEVATION = 64L;
+        public static final long OFFSET_DISTANCE = 72L;
+        public static final long OFFSET_ASPECT_MODE = 80L;
+        public static final long OFFSET_PROJECTION = 84L;
+        public static final long OFFSET_NO_AXES = 88L;
+        public static final long OFFSET_NO_GRID_PLANES = 92L;
+        public static final long OFFSET_NO_INTERACTION = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_surface_desc — 104 bytes, alignment 8. */
+    public static final class ph_surface_desc {
+        private ph_surface_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("z"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.JAVA_INT.withName("wireframe"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_surface_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Z = 40L;
+        public static final long OFFSET_COLORMAP = 56L;
+        public static final long OFFSET_DOMAIN = 64L;
+        public static final long OFFSET_WIREFRAME = 80L;
+        public static final long OFFSET_NAME = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_pointcloud_desc — 96 bytes, alignment 8. */
+    public static final class ph_pointcloud_desc {
+        private ph_pointcloud_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.ADDRESS.withName("z"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_FLOAT.withName("size"),
+            ValueLayout.JAVA_INT.withName("color"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_pointcloud_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_Z = 24L;
+        public static final long OFFSET_COUNT = 32L;
+        public static final long OFFSET_SIZE = 36L;
+        public static final long OFFSET_COLOR = 40L;
+        public static final long OFFSET_VALUES = 48L;
+        public static final long OFFSET_COLORMAP = 56L;
+        public static final long OFFSET_DOMAIN = 64L;
+        public static final long OFFSET_NAME = 80L;
+        public static final long OFFSET_RENDER_TYPE = 88L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_line3d_desc — 56 bytes, alignment 8. */
+    public static final class ph_line3d_desc {
+        private ph_line3d_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.ADDRESS.withName("z"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_line3d_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_Z = 24L;
+        public static final long OFFSET_COUNT = 32L;
+        public static final long OFFSET_COLOR = 36L;
+        public static final long OFFSET_NAME = 40L;
+        public static final long OFFSET_RENDER_TYPE = 48L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_bar3d_desc — 104 bytes, alignment 8. */
+    public static final class ph_bar3d_desc {
+        private ph_bar3d_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("z"),
+            ValueLayout.JAVA_DOUBLE.withName("fill"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_bar3d_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Z = 40L;
+        public static final long OFFSET_FILL = 56L;
+        public static final long OFFSET_COLORMAP = 64L;
+        public static final long OFFSET_DOMAIN = 72L;
+        public static final long OFFSET_NAME = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_quiver3d_desc — 104 bytes, alignment 8. */
+    public static final class ph_quiver3d_desc {
+        private ph_quiver3d_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.ADDRESS.withName("z"),
+            ValueLayout.ADDRESS.withName("u"),
+            ValueLayout.ADDRESS.withName("v"),
+            ValueLayout.ADDRESS.withName("w"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("scale"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_INT.withName("color_by_magnitude"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_quiver3d_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_Z = 24L;
+        public static final long OFFSET_U = 32L;
+        public static final long OFFSET_V = 40L;
+        public static final long OFFSET_W = 48L;
+        public static final long OFFSET_COUNT = 56L;
+        public static final long OFFSET_SCALE = 64L;
+        public static final long OFFSET_COLOR = 72L;
+        public static final long OFFSET_COLOR_BY_MAGNITUDE = 76L;
+        public static final long OFFSET_COLORMAP = 80L;
+        public static final long OFFSET_NAME = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     // ---- entry points ----
 
     /**
@@ -2728,6 +2989,37 @@ public final class Photon {
         "ph_layer_valid",
         "ph_layer_bounds",
         "ph_layer_destroy",
+        "ph_plot3d_desc_init",
+        "ph_plot3d_create",
+        "ph_plot3d_destroy",
+        "ph_plot3d_valid",
+        "ph_plot3d_set_size",
+        "ph_plot3d_set_theme",
+        "ph_plot3d_set_title",
+        "ph_plot3d_set_axis_labels",
+        "ph_plot3d_set_camera",
+        "ph_plot3d_get_camera",
+        "ph_plot3d_set_light",
+        "ph_plot3d_reset_view",
+        "ph_surface_desc_init",
+        "ph_plot3d_add_surface",
+        "ph_pointcloud_desc_init",
+        "ph_plot3d_add_pointcloud",
+        "ph_line3d_desc_init",
+        "ph_plot3d_add_line",
+        "ph_bar3d_desc_init",
+        "ph_plot3d_add_bars",
+        "ph_quiver3d_desc_init",
+        "ph_plot3d_add_quiver",
+        "ph_plot3d_pointer_down",
+        "ph_plot3d_pointer_move",
+        "ph_plot3d_pointer_up",
+        "ph_plot3d_wheel",
+        "ph_plot3d_render",
+        "ph_plot3d_render_pixels",
+        "ph_plot3d_needs_redraw",
+        "ph_plot3d_poll_event",
+        "ph_plot3d_clear_events",
         "ph_plot_set_mode",
         "ph_plot_get_mode",
         "ph_plot_pointer_down",
@@ -2949,6 +3241,37 @@ public final class Photon {
     private static final MethodHandle PH_LAYER_VALID = handle("ph_layer_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_LAYER_BOUNDS = handle("ph_layer_bounds", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_DESTROY = handle("ph_layer_destroy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+    private static final MethodHandle PH_PLOT3D_DESC_INIT = handle("ph_plot3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_CREATE = handle("ph_plot3d_create", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_DESTROY = handle("ph_plot3d_destroy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+    private static final MethodHandle PH_PLOT3D_VALID = handle("ph_plot3d_valid", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+    private static final MethodHandle PH_PLOT3D_SET_SIZE = handle("ph_plot3d_set_size", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_SET_THEME = handle("ph_plot3d_set_theme", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_SET_TITLE = handle("ph_plot3d_set_title", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_SET_AXIS_LABELS = handle("ph_plot3d_set_axis_labels", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_SET_CAMERA = handle("ph_plot3d_set_camera", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE));
+    private static final MethodHandle PH_PLOT3D_GET_CAMERA = handle("ph_plot3d_get_camera", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_SET_LIGHT = handle("ph_plot3d_set_light", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT));
+    private static final MethodHandle PH_PLOT3D_RESET_VIEW = handle("ph_plot3d_reset_view", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+    private static final MethodHandle PH_SURFACE_DESC_INIT = handle("ph_surface_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_SURFACE = handle("ph_plot3d_add_surface", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_POINTCLOUD_DESC_INIT = handle("ph_pointcloud_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_POINTCLOUD = handle("ph_plot3d_add_pointcloud", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LINE3D_DESC_INIT = handle("ph_line3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_LINE = handle("ph_plot3d_add_line", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_BAR3D_DESC_INIT = handle("ph_bar3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_BARS = handle("ph_plot3d_add_bars", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_QUIVER3D_DESC_INIT = handle("ph_quiver3d_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_ADD_QUIVER = handle("ph_plot3d_add_quiver", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_POINTER_DOWN = handle("ph_plot3d_pointer_down", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_POINTER_MOVE = handle("ph_plot3d_pointer_move", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_POINTER_UP = handle("ph_plot3d_pointer_up", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_WHEEL = handle("ph_plot3d_wheel", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_RENDER = handle("ph_plot3d_render", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_RENDER_PIXELS = handle("ph_plot3d_render_pixels", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_FLOAT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_PLOT3D_NEEDS_REDRAW = handle("ph_plot3d_needs_redraw", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+    private static final MethodHandle PH_PLOT3D_POLL_EVENT = handle("ph_plot3d_poll_event", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT3D_CLEAR_EVENTS = handle("ph_plot3d_clear_events", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
     private static final MethodHandle PH_PLOT_SET_MODE = handle("ph_plot_set_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_GET_MODE = handle("ph_plot_get_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_POINTER_DOWN = handle("ph_plot_pointer_down", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
@@ -4587,6 +4910,254 @@ public final class Photon {
             return (int) PH_LAYER_DESTROY.invokeExact(layer);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_layer_destroy failed", photonFailure);
+        }
+    }
+
+    public static void ph_plot3d_desc_init(MemorySegment out) {
+        try {
+            PH_PLOT3D_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_create(MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_CREATE.invokeExact(desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_create failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_destroy(long plot) {
+        try {
+            return (int) PH_PLOT3D_DESTROY.invokeExact(plot);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_destroy failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_valid(long plot) {
+        try {
+            return (int) PH_PLOT3D_VALID.invokeExact(plot);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_valid failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_set_size(long plot, int width, int height) {
+        try {
+            return (int) PH_PLOT3D_SET_SIZE.invokeExact(plot, width, height);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_set_size failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_set_theme(long plot, int theme) {
+        try {
+            return (int) PH_PLOT3D_SET_THEME.invokeExact(plot, theme);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_set_theme failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_set_title(long plot, MemorySegment title) {
+        try {
+            return (int) PH_PLOT3D_SET_TITLE.invokeExact(plot, title);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_set_title failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_set_axis_labels(long plot, MemorySegment x, MemorySegment y, MemorySegment z) {
+        try {
+            return (int) PH_PLOT3D_SET_AXIS_LABELS.invokeExact(plot, x, y, z);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_set_axis_labels failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_set_camera(long plot, double azimuth, double elevation, double distance) {
+        try {
+            return (int) PH_PLOT3D_SET_CAMERA.invokeExact(plot, azimuth, elevation, distance);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_set_camera failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_get_camera(long plot, MemorySegment out_azimuth, MemorySegment out_elevation, MemorySegment out_distance) {
+        try {
+            return (int) PH_PLOT3D_GET_CAMERA.invokeExact(plot, out_azimuth, out_elevation, out_distance);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_get_camera failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_set_light(long plot, float x, float y, float z, float ambient) {
+        try {
+            return (int) PH_PLOT3D_SET_LIGHT.invokeExact(plot, x, y, z, ambient);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_set_light failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_reset_view(long plot) {
+        try {
+            return (int) PH_PLOT3D_RESET_VIEW.invokeExact(plot);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_reset_view failed", photonFailure);
+        }
+    }
+
+    public static void ph_surface_desc_init(MemorySegment out) {
+        try {
+            PH_SURFACE_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_surface_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_surface(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_SURFACE.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_surface failed", photonFailure);
+        }
+    }
+
+    public static void ph_pointcloud_desc_init(MemorySegment out) {
+        try {
+            PH_POINTCLOUD_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_pointcloud_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_pointcloud(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_POINTCLOUD.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_pointcloud failed", photonFailure);
+        }
+    }
+
+    public static void ph_line3d_desc_init(MemorySegment out) {
+        try {
+            PH_LINE3D_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_line3d_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_line(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_LINE.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_line failed", photonFailure);
+        }
+    }
+
+    public static void ph_bar3d_desc_init(MemorySegment out) {
+        try {
+            PH_BAR3D_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_bar3d_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_bars(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_BARS.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_bars failed", photonFailure);
+        }
+    }
+
+    public static void ph_quiver3d_desc_init(MemorySegment out) {
+        try {
+            PH_QUIVER3D_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_quiver3d_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_add_quiver(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_ADD_QUIVER.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_add_quiver failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_pointer_down(long plot, double px, double py, int button, int mods) {
+        try {
+            return (int) PH_PLOT3D_POINTER_DOWN.invokeExact(plot, px, py, button, mods);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_pointer_down failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_pointer_move(long plot, double px, double py, int mods) {
+        try {
+            return (int) PH_PLOT3D_POINTER_MOVE.invokeExact(plot, px, py, mods);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_pointer_move failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_pointer_up(long plot, double px, double py, int button, int mods) {
+        try {
+            return (int) PH_PLOT3D_POINTER_UP.invokeExact(plot, px, py, button, mods);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_pointer_up failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_wheel(long plot, double px, double py, double delta_y, int mods) {
+        try {
+            return (int) PH_PLOT3D_WHEEL.invokeExact(plot, px, py, delta_y, mods);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_wheel failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_render(long plot, MemorySegment target) {
+        try {
+            return (int) PH_PLOT3D_RENDER.invokeExact(plot, target);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_render failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_render_pixels(long plot, int width, int height, float dpr, MemorySegment out_rgba, int stride_bytes) {
+        try {
+            return (int) PH_PLOT3D_RENDER_PIXELS.invokeExact(plot, width, height, dpr, out_rgba, stride_bytes);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_render_pixels failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_needs_redraw(long plot) {
+        try {
+            return (int) PH_PLOT3D_NEEDS_REDRAW.invokeExact(plot);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_needs_redraw failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_poll_event(long plot, MemorySegment out) {
+        try {
+            return (int) PH_PLOT3D_POLL_EVENT.invokeExact(plot, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_poll_event failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot3d_clear_events(long plot) {
+        try {
+            return (int) PH_PLOT3D_CLEAR_EVENTS.invokeExact(plot);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot3d_clear_events failed", photonFailure);
         }
     }
 

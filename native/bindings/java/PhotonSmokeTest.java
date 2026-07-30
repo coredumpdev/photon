@@ -2140,6 +2140,178 @@ public final class PhotonSmokeTest {
         ph_plot_set_polar(plot, config);
     }
 
+    /**
+     * The 3-D scene.
+     *
+     * Its own handle type, but the same ph_layer table — so what is checked
+     * here beside the marshalling is that ph_layer_destroy and
+     * ph_layer_set_visible work on a 3-D layer, and that handing a 3-D layer to
+     * a 2-D call says which kind it is rather than resolving to the wrong
+     * pointer.
+     */
+    static void scene3d(Arena arena) {
+        MemorySegment desc = ph_plot3d_desc.allocate(arena);
+        ph_plot3d_desc_init(desc);
+        checkEq(desc.get(ValueLayout.JAVA_INT, ph_plot3d_desc.OFFSET_WIDTH), 640,
+                "ph_plot3d_desc_init");
+        desc.set(ValueLayout.ADDRESS, ph_plot3d_desc.OFFSET_TITLE, utf8(arena, "Scene"));
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        checkEq(ph_plot3d_create(desc, handle), PH_OK, "ph_plot3d_create");
+        long scene = handle.get(ValueLayout.JAVA_LONG, 0);
+        check(ph_plot3d_valid(scene) != 0, "the scene handle is live");
+        ran("ph_plot3d_desc_init", "ph_plot3d_create", "ph_plot3d_valid");
+
+        checkEq(ph_plot3d_set_size(scene, 800, 600), PH_OK, "ph_plot3d_set_size");
+        checkEq(ph_plot3d_set_size(scene, 0, 600), PH_E_INVALID_ARGUMENT, "a zero size is refused");
+        checkEq(ph_plot3d_set_theme(scene, PH_THEME_LIGHT), PH_OK, "ph_plot3d_set_theme");
+        checkEq(ph_plot3d_set_title(scene, utf8(arena, "Terrain")), PH_OK, "ph_plot3d_set_title");
+        checkEq(ph_plot3d_set_axis_labels(scene, utf8(arena, "x"), utf8(arena, "height"),
+                                          utf8(arena, "z")),
+                PH_OK, "ph_plot3d_set_axis_labels");
+        ran("ph_plot3d_set_size", "ph_plot3d_set_theme", "ph_plot3d_set_title",
+            "ph_plot3d_set_axis_labels");
+
+        MemorySegment az = arena.allocate(ValueLayout.JAVA_DOUBLE);
+        MemorySegment el = arena.allocate(ValueLayout.JAVA_DOUBLE);
+        MemorySegment dist = arena.allocate(ValueLayout.JAVA_DOUBLE);
+        checkEq(ph_plot3d_set_camera(scene, 1.2, 0.4, 5.0), PH_OK, "ph_plot3d_set_camera");
+        checkEq(ph_plot3d_get_camera(scene, az, el, dist), PH_OK, "ph_plot3d_get_camera");
+        check(az.get(ValueLayout.JAVA_DOUBLE, 0) == 1.2, "the azimuth came back");
+        check(dist.get(ValueLayout.JAVA_DOUBLE, 0) == 5.0, "and the distance");
+        // Elevation is clamped so the camera never passes through the poles.
+        ph_plot3d_set_camera(scene, 0.0, 99.0, 5.0);
+        ph_plot3d_get_camera(scene, az, el, dist);
+        check(el.get(ValueLayout.JAVA_DOUBLE, 0) == 1.5, "and elevation is clamped");
+        checkEq(ph_plot3d_reset_view(scene), PH_OK, "ph_plot3d_reset_view");
+        ph_plot3d_get_camera(scene, az, el, dist);
+        check(dist.get(ValueLayout.JAVA_DOUBLE, 0) == 3.6, "back to the camera it was made with");
+        checkEq(ph_plot3d_set_light(scene, 0.4f, 0.9f, 0.2f, 0.25f), PH_OK, "ph_plot3d_set_light");
+        ran("ph_plot3d_set_camera", "ph_plot3d_get_camera", "ph_plot3d_reset_view",
+            "ph_plot3d_set_light");
+
+        // A 4x4 height grid: enough for two triangles a cell and a real bounds.
+        MemorySegment grid = room(arena, 16);
+        for (int i = 0; i < 16; i++) {
+            grid.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.sin(i * 0.7) * 2.0);
+        }
+        MemorySegment surface = ph_surface_desc.allocate(arena);
+        ph_surface_desc_init(surface);
+        surface.set(ValueLayout.ADDRESS, ph_surface_desc.OFFSET_VALUES, grid);
+        surface.set(ValueLayout.JAVA_INT, ph_surface_desc.OFFSET_COLS, 4);
+        surface.set(ValueLayout.JAVA_INT, ph_surface_desc.OFFSET_ROWS, 4);
+        surface.set(ValueLayout.ADDRESS, ph_surface_desc.OFFSET_NAME, utf8(arena, "height"));
+        checkEq(ph_plot3d_add_surface(scene, surface, handle), PH_OK, "ph_plot3d_add_surface");
+        long surfaceLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        check(ph_layer_valid(surfaceLayer) != 0, "a 3-D layer is a live ph_layer");
+        // The 2-D calls refuse it by name rather than reading the wrong pointer.
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(surfaceLayer, bx, by), PH_E_INVALID_ARGUMENT,
+                "a 3-D layer is refused by the 2-D bounds call");
+        check(Photon.lastError().contains("3-D"), "and the message says which kind it is");
+        checkEq(ph_layer_set_visible(surfaceLayer, 0), PH_OK, "but visibility is shared");
+        checkEq(ph_layer_set_visible(surfaceLayer, 1), PH_OK, "and back");
+        surface.set(ValueLayout.JAVA_INT, ph_surface_desc.OFFSET_COLS, 1);
+        checkEq(ph_plot3d_add_surface(scene, surface, handle), PH_E_INVALID_ARGUMENT,
+                "a 1-wide grid is not a surface");
+        ran("ph_surface_desc_init", "ph_plot3d_add_surface");
+
+        MemorySegment xs = doubles(arena, 0, 1, 2, 3);
+        MemorySegment ys = doubles(arena, 0, 1, 0, 1);
+        MemorySegment zs = doubles(arena, 0, 0, 1, 1);
+        MemorySegment cloud = ph_pointcloud_desc.allocate(arena);
+        ph_pointcloud_desc_init(cloud);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_X, xs);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_Y, ys);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_Z, zs);
+        cloud.set(ValueLayout.JAVA_INT, ph_pointcloud_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot3d_add_pointcloud(scene, cloud, handle), PH_OK, "ph_plot3d_add_pointcloud");
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_Z, MemorySegment.NULL);
+        checkEq(ph_plot3d_add_pointcloud(scene, cloud, handle), PH_E_INVALID_ARGUMENT,
+                "all three axes are required");
+        ran("ph_pointcloud_desc_init", "ph_plot3d_add_pointcloud");
+
+        MemorySegment line = ph_line3d_desc.allocate(arena);
+        ph_line3d_desc_init(line);
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_X, xs);
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_Y, ys);
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_Z, zs);
+        line.set(ValueLayout.JAVA_INT, ph_line3d_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot3d_add_line(scene, line, handle), PH_OK, "ph_plot3d_add_line");
+        ran("ph_line3d_desc_init", "ph_plot3d_add_line");
+
+        MemorySegment bars = ph_bar3d_desc.allocate(arena);
+        ph_bar3d_desc_init(bars);
+        bars.set(ValueLayout.ADDRESS, ph_bar3d_desc.OFFSET_VALUES, grid);
+        bars.set(ValueLayout.JAVA_INT, ph_bar3d_desc.OFFSET_COLS, 4);
+        bars.set(ValueLayout.JAVA_INT, ph_bar3d_desc.OFFSET_ROWS, 4);
+        checkEq(ph_plot3d_add_bars(scene, bars, handle), PH_OK, "ph_plot3d_add_bars");
+        ran("ph_bar3d_desc_init", "ph_plot3d_add_bars");
+
+        MemorySegment us = doubles(arena, 1, 0, 0, 1);
+        MemorySegment quiver = ph_quiver3d_desc.allocate(arena);
+        ph_quiver3d_desc_init(quiver);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_X, xs);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_Y, ys);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_Z, zs);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_U, us);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_V, us);
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_W, us);
+        quiver.set(ValueLayout.JAVA_INT, ph_quiver3d_desc.OFFSET_COUNT, 4);
+        quiver.set(ValueLayout.JAVA_INT, ph_quiver3d_desc.OFFSET_COLOR_BY_MAGNITUDE, 1);
+        checkEq(ph_plot3d_add_quiver(scene, quiver, handle), PH_OK, "ph_plot3d_add_quiver");
+        quiver.set(ValueLayout.ADDRESS, ph_quiver3d_desc.OFFSET_W, MemorySegment.NULL);
+        checkEq(ph_plot3d_add_quiver(scene, quiver, handle), PH_E_INVALID_ARGUMENT,
+                "all six arrays are required");
+        ran("ph_quiver3d_desc_init", "ph_plot3d_add_quiver");
+
+        checkEq(ph_plot3d_pointer_down(scene, 10, 10, PH_BUTTON_LEFT, PH_MOD_NONE), PH_OK,
+                "ph_plot3d_pointer_down");
+        checkEq(ph_plot3d_pointer_move(scene, 60, 10, PH_MOD_NONE), PH_OK,
+                "ph_plot3d_pointer_move");
+        ph_plot3d_get_camera(scene, az, el, dist);
+        check(az.get(ValueLayout.JAVA_DOUBLE, 0) != 0.7, "dragging orbited the camera");
+        checkEq(ph_plot3d_pointer_up(scene, 60, 10, PH_BUTTON_LEFT, PH_MOD_NONE), PH_OK,
+                "ph_plot3d_pointer_up");
+        checkEq(ph_plot3d_wheel(scene, 0, 0, 200, PH_MOD_NONE), PH_OK, "ph_plot3d_wheel");
+        ph_plot3d_get_camera(scene, az, el, dist);
+        check(dist.get(ValueLayout.JAVA_DOUBLE, 0) > 3.6, "and the wheel pulled the eye back");
+        ran("ph_plot3d_pointer_down", "ph_plot3d_pointer_move", "ph_plot3d_pointer_up",
+            "ph_plot3d_wheel");
+
+        check(ph_plot3d_needs_redraw(scene) != 0, "a scene that changed owes a frame");
+        MemorySegment event = ph_event.allocate(arena);
+        checkEq(ph_plot3d_poll_event(scene, event), PH_OK, "ph_plot3d_poll_event");
+        check(event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE) != PH_EVENT_NONE,
+              "and the orbit queued events");
+        checkEq(ph_plot3d_clear_events(scene), PH_OK, "ph_plot3d_clear_events");
+        checkEq(ph_plot3d_poll_event(scene, event), PH_OK, "the queue drains");
+        checkEq(event.get(ValueLayout.JAVA_INT, ph_event.OFFSET_TYPE), PH_EVENT_NONE, "to empty");
+        ran("ph_plot3d_needs_redraw", "ph_plot3d_poll_event", "ph_plot3d_clear_events");
+
+        // No GL context here, so both render paths must fail by naming what is
+        // missing rather than by crashing.
+        MemorySegment target = ph_frame_target.allocate(arena);
+        ph_frame_target_init(target);
+        target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_WIDTH, 100);
+        target.set(ValueLayout.JAVA_INT, ph_frame_target.OFFSET_HEIGHT, 100);
+        checkEq(ph_plot3d_render(scene, target), PH_E_GL, "ph_plot3d_render without a context");
+        check(Photon.lastError().contains("get_proc_address"), "and it says what is missing");
+        MemorySegment pixels = arena.allocate(4L * 4 * 4);
+        checkEq(ph_plot3d_render_pixels(scene, 4, 4, 1.0f, pixels, 16), PH_E_GL,
+                "ph_plot3d_render_pixels without a context");
+        checkEq(ph_plot3d_render_pixels(scene, 4, 4, 1.0f, pixels, 4), PH_E_INVALID_ARGUMENT,
+                "and a short stride is caught before GL is");
+        ran("ph_plot3d_render", "ph_plot3d_render_pixels");
+
+        // Destroying the scene invalidates every layer handle it minted.
+        checkEq(ph_plot3d_destroy(scene), PH_OK, "ph_plot3d_destroy");
+        check(ph_plot3d_valid(scene) == 0, "the scene handle is stale");
+        check(ph_layer_valid(surfaceLayer) == 0, "and so is its layer's");
+        checkEq(ph_plot3d_destroy(PH_NULL_HANDLE), PH_OK, "destroying nothing is fine");
+        ran("ph_plot3d_destroy");
+    }
+
     /** A NUL-terminated UTF-8 copy, kept alive by `arena`. */
     static MemorySegment ARENA_TEXT(Arena arena, String text) {
         return arena.allocateFrom(text);
@@ -2197,6 +2369,8 @@ public final class PhotonSmokeTest {
             multiSeries(arena, plot);
             step("polar");
             polar(arena, plot);
+            step("scene3d");
+            scene3d(arena);
             step("interaction");
             interaction(arena, plot);
             step("events");

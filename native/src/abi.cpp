@@ -35,6 +35,7 @@
 #include "ml/metrics.hpp"
 #include "ml/reduce.hpp"
 #include "plot.hpp"
+#include "plot3d/layers3d.hpp"
 #include "registry.hpp"
 #include "stats/regression.hpp"
 #include "stats/signal.hpp"
@@ -161,12 +162,18 @@ extern "C" void PH_CALL ph_shutdown(void) {
     for (const uint64_t handle : registry.plots.handles()) {
       if (Plot* plot = registry.plots.get(handle)) plot->release_gl(registry.gl);
     }
+    for (const uint64_t handle : registry.plots3d.handles()) {
+      if (photon::plot3d::Plot3D* plot = registry.plots3d.get(handle)) {
+        plot->release_gl(registry.gl);
+      }
+    }
     photon::text::release_atlas_gl(registry.gl);
     photon::gl::clear_program_cache(registry.gl);
   }
   // Layers first: their refs point at plots that are about to go away.
   registry.layers.clear();
   registry.plots.clear();
+  registry.plots3d.clear();
   // Tables hold no GPU objects and belong to no plot, so their order is free.
   registry.tables.clear();
   registry.host = ph_host_desc{};
@@ -3683,6 +3690,15 @@ extern "C" ph_result PH_CALL ph_layer_set_contour(ph_layer handle, const ph_cont
 
 extern "C" ph_result PH_CALL ph_layer_set_visible(ph_layer handle, ph_bool visible) {
   clear_error();
+  photon::plot3d::Plot3D* scene = nullptr;
+  photon::plot3d::Layer3D* layer3d = nullptr;
+  if (photon::resolve_layer3d(handle, &scene, &layer3d) == PH_OK) {
+    clear_error();
+    layer3d->set_visible(visible != 0);
+    scene->refit();
+    return PH_OK;
+  }
+  clear_error();
   Plot* plot = nullptr;
   photon::Layer* layer = nullptr;
   const ph_result r = photon::resolve_layer(handle, &plot, &layer);
@@ -3695,7 +3711,10 @@ extern "C" ph_result PH_CALL ph_layer_set_visible(ph_layer handle, ph_bool visib
 extern "C" ph_bool PH_CALL ph_layer_valid(ph_layer handle) {
   Plot* plot = nullptr;
   photon::Layer* layer = nullptr;
-  return photon::resolve_layer(handle, &plot, &layer) == PH_OK ? 1 : 0;
+  if (photon::resolve_layer(handle, &plot, &layer) == PH_OK) return 1;
+  photon::plot3d::Plot3D* scene = nullptr;
+  photon::plot3d::Layer3D* layer3d = nullptr;
+  return photon::resolve_layer3d(handle, &scene, &layer3d) == PH_OK ? 1 : 0;
 }
 
 extern "C" ph_result PH_CALL ph_layer_bounds(ph_layer handle, ph_range* x, ph_range* y) {
@@ -3712,6 +3731,19 @@ extern "C" ph_result PH_CALL ph_layer_bounds(ph_layer handle, ph_range* x, ph_ra
 extern "C" ph_result PH_CALL ph_layer_destroy(ph_layer handle) {
   clear_error();
   if (handle == PH_NULL_HANDLE) return PH_OK;
+  // A 3-D layer comes out of the same table, so this call serves both.
+  photon::plot3d::Plot3D* scene = nullptr;
+  photon::plot3d::Layer3D* layer3d = nullptr;
+  if (photon::resolve_layer3d(handle, &scene, &layer3d) == PH_OK) {
+    clear_error();
+    auto& handles3d = scene->layer_handles;
+    handles3d.erase(std::remove(handles3d.begin(), handles3d.end(), handle), handles3d.end());
+    Registry::get().layers.erase(handle);
+    Registry& registry = Registry::get();
+    scene->remove_layer(layer3d, registry.gl.ready ? &registry.gl : nullptr);
+    return PH_OK;
+  }
+  clear_error();
   Plot* plot = nullptr;
   photon::Layer* layer = nullptr;
   const ph_result r = photon::resolve_layer(handle, &plot, &layer);
@@ -3720,6 +3752,454 @@ extern "C" ph_result PH_CALL ph_layer_destroy(ph_layer handle) {
   handles.erase(std::remove(handles.begin(), handles.end(), handle), handles.end());
   Registry::get().layers.erase(handle);
   plot->remove_layer(layer);
+  return PH_OK;
+}
+
+// ---------------------------------------------------------------------------
+// 3-D
+// ---------------------------------------------------------------------------
+
+namespace {
+
+namespace p3d = photon::plot3d;
+
+ph_result resolve_plot3d(ph_plot3d handle, p3d::Plot3D** out) {
+  const ph_result init = require_init();
+  if (init != PH_OK) return init;
+  p3d::Plot3D* plot = Registry::get().plots3d.get(handle);
+  if (!plot) return fail(PH_E_INVALID_HANDLE, "3-D plot handle is stale or invalid");
+  *out = plot;
+  return PH_OK;
+}
+
+/// The 3-D twin of register_layer: same table, same handle type, so
+/// ph_layer_destroy and ph_layer_set_visible work on either kind.
+ph_result register_layer3d(ph_plot3d plot_handle, p3d::Plot3D* plot,
+                           std::unique_ptr<p3d::Layer3D> layer, ph_layer* out) {
+  p3d::Layer3D* borrowed = plot->add_layer(std::move(layer));
+  auto ref = std::make_unique<LayerRef>();
+  ref->plot3d = plot_handle;
+  ref->layer3d = borrowed;
+  const ph_layer handle = Registry::get().layers.insert(std::move(ref));
+  borrowed->handle = handle;
+  plot->layer_handles.push_back(handle);
+  *out = handle;
+  return PH_OK;
+}
+
+/// Rendering is the one place a 3-D plot must be on the thread that made it,
+/// for exactly the reason the 2-D one must: the GL context belongs to a thread.
+ph_result check_render_thread3d(const p3d::Plot3D* plot) {
+  if (plot->owner() != std::this_thread::get_id()) {
+    return fail(PH_E_WRONG_THREAD,
+                "a 3-D plot must be rendered on the thread that created it");
+  }
+  return PH_OK;
+}
+
+}  // namespace
+
+extern "C" void PH_CALL ph_plot3d_desc_init(ph_plot3d_desc* out) {
+  if (!out) return;
+  *out = ph_plot3d_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_plot3d_desc));
+  out->width = 640;
+  out->height = 420;
+  out->theme = PH_THEME_DARK;
+  out->azimuth = 0.7;
+  out->elevation = 0.5;
+  out->distance = 3.6;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_create(const ph_plot3d_desc* desc, ph_plot3d* out) {
+  clear_error();
+  const ph_result init = require_init();
+  if (init != PH_OK) return init;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  *out = PH_NULL_HANDLE;
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_plot3d_desc.struct_size is larger than this build's");
+  }
+  const ph_plot3d_desc d = normalize(desc, ph_plot3d_desc_init);
+  try {
+    *out = Registry::get().plots3d.insert(std::make_unique<p3d::Plot3D>(d));
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the 3-D plot");
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_destroy(ph_plot3d handle) {
+  clear_error();
+  if (handle == PH_NULL_HANDLE) return PH_OK;
+  const ph_result init = require_init();
+  if (init != PH_OK) return init;
+  Registry& registry = Registry::get();
+  p3d::Plot3D* plot = registry.plots3d.get(handle);
+  if (!plot) return fail(PH_E_INVALID_HANDLE, "3-D plot handle is stale or invalid");
+  // The layer handles go first: they point at a scene that is about to vanish.
+  for (const ph_layer layer : plot->layer_handles) registry.layers.erase(layer);
+  if (registry.gl.ready) plot->release_gl(registry.gl);
+  registry.plots3d.erase(handle);
+  return PH_OK;
+}
+
+extern "C" ph_bool PH_CALL ph_plot3d_valid(ph_plot3d handle) {
+  p3d::Plot3D* plot = nullptr;
+  const bool ok = resolve_plot3d(handle, &plot) == PH_OK;
+  clear_error();
+  return ok ? 1 : 0;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_set_size(ph_plot3d handle, int32_t width, int32_t height) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (width <= 0 || height <= 0) return fail(PH_E_INVALID_ARGUMENT, "size must be positive");
+  plot->set_size(width, height);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_set_theme(ph_plot3d handle, ph_theme theme) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_theme(theme);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_set_title(ph_plot3d handle, const char* title) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_title(title);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_set_axis_labels(ph_plot3d handle, const char* x,
+                                                       const char* y, const char* z) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_axis_labels(x, y, z);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_set_camera(ph_plot3d handle, double azimuth,
+                                                  double elevation, double distance) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_camera(azimuth, elevation, distance);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_get_camera(ph_plot3d handle, double* out_azimuth,
+                                                  double* out_elevation, double* out_distance) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  double azimuth = 0.0;
+  double elevation = 0.0;
+  double distance = 0.0;
+  plot->get_camera(azimuth, elevation, distance);
+  if (out_azimuth) *out_azimuth = azimuth;
+  if (out_elevation) *out_elevation = elevation;
+  if (out_distance) *out_distance = distance;
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_set_light(ph_plot3d handle, float x, float y, float z,
+                                                 float ambient) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  p3d::Light light = plot->light();
+  light.x = x;
+  light.y = y;
+  light.z = z;
+  light.ambient = ambient;
+  plot->set_light(light);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_reset_view(ph_plot3d handle) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->reset_view();
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_surface_desc_init(ph_surface_desc* out) {
+  if (!out) return;
+  *out = ph_surface_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_surface_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_surface(ph_plot3d handle, const ph_surface_desc* desc,
+                                                   ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_surface_desc.struct_size is larger than this build's");
+  }
+  const ph_surface_desc d = normalize(desc, ph_surface_desc_init);
+  if (d.cols < 2 || d.rows < 2) {
+    return fail(PH_E_INVALID_ARGUMENT, "a surface needs at least a 2x2 grid");
+  }
+  if (!d.values) return fail(PH_E_INVALID_ARGUMENT, "values must be non-null");
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::SurfaceLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the surface layer");
+  }
+}
+
+extern "C" void PH_CALL ph_pointcloud_desc_init(ph_pointcloud_desc* out) {
+  if (!out) return;
+  *out = ph_pointcloud_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_pointcloud_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_pointcloud(ph_plot3d handle,
+                                                      const ph_pointcloud_desc* desc,
+                                                      ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_pointcloud_desc.struct_size is larger than this build's");
+  }
+  const ph_pointcloud_desc d = normalize(desc, ph_pointcloud_desc_init);
+  if (d.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (d.count > 0 && (!d.x || !d.y || !d.z)) {
+    return fail(PH_E_INVALID_ARGUMENT, "x, y and z must be non-null when count > 0");
+  }
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::PointCloudLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the point cloud layer");
+  }
+}
+
+extern "C" void PH_CALL ph_line3d_desc_init(ph_line3d_desc* out) {
+  if (!out) return;
+  *out = ph_line3d_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_line3d_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_line(ph_plot3d handle, const ph_line3d_desc* desc,
+                                                ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_line3d_desc.struct_size is larger than this build's");
+  }
+  const ph_line3d_desc d = normalize(desc, ph_line3d_desc_init);
+  if (d.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (d.count > 0 && (!d.x || !d.y || !d.z)) {
+    return fail(PH_E_INVALID_ARGUMENT, "x, y and z must be non-null when count > 0");
+  }
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::Line3DLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the 3-D line layer");
+  }
+}
+
+extern "C" void PH_CALL ph_bar3d_desc_init(ph_bar3d_desc* out) {
+  if (!out) return;
+  *out = ph_bar3d_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_bar3d_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_bars(ph_plot3d handle, const ph_bar3d_desc* desc,
+                                                ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_bar3d_desc.struct_size is larger than this build's");
+  }
+  const ph_bar3d_desc d = normalize(desc, ph_bar3d_desc_init);
+  if (d.cols < 1 || d.rows < 1) return fail(PH_E_INVALID_ARGUMENT, "cols and rows must be positive");
+  if (!d.values) return fail(PH_E_INVALID_ARGUMENT, "values must be non-null");
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::Bar3DLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the 3-D bar layer");
+  }
+}
+
+extern "C" void PH_CALL ph_quiver3d_desc_init(ph_quiver3d_desc* out) {
+  if (!out) return;
+  *out = ph_quiver3d_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_quiver3d_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_add_quiver(ph_plot3d handle, const ph_quiver3d_desc* desc,
+                                                  ph_layer* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_quiver3d_desc.struct_size is larger than this build's");
+  }
+  const ph_quiver3d_desc d = normalize(desc, ph_quiver3d_desc_init);
+  if (d.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (d.count > 0 && (!d.x || !d.y || !d.z || !d.u || !d.v || !d.w)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "all six of x, y, z, u, v and w must be non-null when count > 0");
+  }
+  try {
+    return register_layer3d(handle, plot, std::make_unique<p3d::Line3DLayer>(d), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the 3-D quiver layer");
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_pointer_down(ph_plot3d handle, double px, double py,
+                                                    ph_button button, ph_modifiers mods) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  (void)button;
+  (void)mods;
+  plot->pointer_down(px, py);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_pointer_move(ph_plot3d handle, double px, double py,
+                                                    ph_modifiers mods) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  (void)mods;
+  plot->pointer_move(px, py);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_pointer_up(ph_plot3d handle, double px, double py,
+                                                  ph_button button, ph_modifiers mods) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  (void)px;
+  (void)py;
+  (void)button;
+  (void)mods;
+  plot->pointer_up();
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_wheel(ph_plot3d handle, double px, double py,
+                                             double delta_y, ph_modifiers mods) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  (void)px;
+  (void)py;
+  (void)mods;
+  plot->wheel(delta_y);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_render(ph_plot3d handle, const ph_frame_target* target) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!target) return fail(PH_E_INVALID_ARGUMENT, "target must be non-null");
+  if (!desc_size_ok(target)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_frame_target.struct_size is larger than this build's");
+  }
+  r = check_render_thread3d(plot);
+  if (r != PH_OK) return r;
+  r = ensure_gl_loaded();
+  if (r != PH_OK) return r;
+  const ph_frame_target normalized = normalize(target, ph_frame_target_init);
+  Registry& registry = Registry::get();
+  std::string error;
+  if (!plot->render(registry.gl, registry.host.api, normalized, error)) {
+    return fail(PH_E_GL, error);
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_render_pixels(ph_plot3d handle, int32_t width,
+                                                     int32_t height, float dpr, uint8_t* out_rgba,
+                                                     int32_t stride_bytes) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (width <= 0 || height <= 0) return fail(PH_E_INVALID_ARGUMENT, "size must be positive");
+  if (!out_rgba) return fail(PH_E_INVALID_ARGUMENT, "out_rgba must be non-null");
+  if (stride_bytes < width * 4) {
+    return fail(PH_E_INVALID_ARGUMENT, "stride_bytes must be at least width * 4");
+  }
+  r = check_render_thread3d(plot);
+  if (r != PH_OK) return r;
+  r = ensure_gl_loaded();
+  if (r != PH_OK) return r;
+  Registry& registry = Registry::get();
+  std::string error;
+  if (!plot->render_pixels(registry.gl, registry.host.api, width, height,
+                           dpr > 0.0f ? dpr : 1.0f, out_rgba, stride_bytes, error)) {
+    return fail(PH_E_GL, error);
+  }
+  return PH_OK;
+}
+
+extern "C" ph_bool PH_CALL ph_plot3d_needs_redraw(ph_plot3d handle) {
+  p3d::Plot3D* plot = nullptr;
+  const bool ok = resolve_plot3d(handle, &plot) == PH_OK;
+  clear_error();
+  return ok && plot->needs_redraw() ? 1 : 0;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_poll_event(ph_plot3d handle, ph_event* out) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  plot->poll_event(*out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot3d_clear_events(ph_plot3d handle) {
+  clear_error();
+  p3d::Plot3D* plot = nullptr;
+  const ph_result r = resolve_plot3d(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->clear_events();
   return PH_OK;
 }
 

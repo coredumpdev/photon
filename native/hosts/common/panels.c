@@ -77,6 +77,14 @@
  * than polygons, plus twelve marks around it. */
 #define ROSE_POINTS 361
 #define ROSE_MARKS 12
+/* A 48x48 height field: fine enough that the surface reads as a landscape,
+ * coarse enough that the flat-shaded facets are still visible. */
+#define TERRAIN 48
+/* A helix plus a cloud around it — the two 3-D layers that are not a grid. */
+#define HELIX_POINTS 400
+#define CLOUD_POINTS 1200
+/* A 12x12 lattice of bars, which is as many as read cleanly at panel size. */
+#define BARS3D 12
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -186,6 +194,16 @@ struct ph_panels {
   double rose_r[ROSE_POINTS];
   double mark_theta[ROSE_MARKS];
   double mark_r[ROSE_MARKS];
+
+  double terrain[TERRAIN * TERRAIN];
+  double helix_x[HELIX_POINTS];
+  double helix_y[HELIX_POINTS];
+  double helix_z[HELIX_POINTS];
+  double cloud_x[CLOUD_POINTS];
+  double cloud_y[CLOUD_POINTS];
+  double cloud_z[CLOUD_POINTS];
+  double cloud_value[CLOUD_POINTS];
+  double bars3d[BARS3D * BARS3D];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -628,6 +646,48 @@ ph_panels* ph_panels_create(void) {
     for (int i = 0; i < ROSE_MARKS; i++) {
       p->mark_theta[i] = i * 30.0;
       p->mark_r[i] = 0.55 + 0.35 * sin(i * 0.9);
+    }
+
+    /* Two interfering ripples, the 3-D counterpart of the Field panel. */
+    for (int r = 0; r < TERRAIN; r++) {
+      for (int c = 0; c < TERRAIN; c++) {
+        const double x = (c - TERRAIN * 0.5) * 0.22;
+        const double z = (r - TERRAIN * 0.5) * 0.22;
+        const double d1 = sqrt((x + 2.0) * (x + 2.0) + z * z);
+        const double d2 = sqrt((x - 2.0) * (x - 2.0) + z * z);
+        p->terrain[r * TERRAIN + c] = sin(d1 * 1.6) + sin(d2 * 1.6);
+      }
+    }
+
+    /* A helix, and a Gaussian cloud around it coloured by height. */
+    for (int i = 0; i < HELIX_POINTS; i++) {
+      const double t = i * 0.06;
+      p->helix_x[i] = cos(t) * 2.0;
+      p->helix_y[i] = t * 0.25 - 3.0;
+      p->helix_z[i] = sin(t) * 2.0;
+    }
+    seed = 86428642u;
+    for (int i = 0; i < CLOUD_POINTS; i++) {
+      seed = seed * 1664525u + 1013904223u;
+      const double u = (double)(seed >> 8) / 16777216.0;
+      seed = seed * 1664525u + 1013904223u;
+      const double v = (double)(seed >> 8) / 16777216.0;
+      const double g = sqrt(-2.0 * log(u + 1e-12));
+      const double a = 6.283185307179586 * v;
+      const double t = i * 0.02;
+      p->cloud_x[i] = cos(t) * 2.0 + g * cos(a) * 0.45;
+      p->cloud_y[i] = t * 0.25 - 3.0 + g * sin(a) * 0.45;
+      p->cloud_z[i] = sin(t) * 2.0 + g * cos(a + 1.0) * 0.45;
+      p->cloud_value[i] = p->cloud_y[i];
+    }
+
+    /* A dome of bars, so the heights vary in both directions at once. */
+    for (int r = 0; r < BARS3D; r++) {
+      for (int c = 0; c < BARS3D; c++) {
+        const double x = (c - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+        const double z = (r - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+        p->bars3d[r * BARS3D + c] = 4.0 * exp(-(x * x + z * z) * 1.6) + 0.3;
+      }
     }
   }
 
@@ -1544,6 +1604,105 @@ static void build_polar(ph_panels* p, ph_plot plot) {
   marks.size = 7.0f;
   marks.marker = PH_MARKER_CIRCLE;
   ph_plot_add_polar_scatter(plot, &marks, &layer);
+}
+
+static const char* kTitles3D[PH_PANEL_3D_COUNT] = {"Terrain", "Helix", "Towers"};
+
+const char* ph_panels_title_3d(int index) {
+  return kTitles3D[((index % PH_PANEL_3D_COUNT) + PH_PANEL_3D_COUNT) % PH_PANEL_3D_COUNT];
+}
+
+/* 3-D scene 0 — two interfering ripples as a lit surface. */
+static void build_terrain(ph_panels* p, ph_plot3d plot) {
+  ph_plot3d_set_title(plot, "Terrain");
+  ph_plot3d_set_axis_labels(plot, "x", "height", "z");
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "viridis";
+
+  ph_surface_desc surface;
+  ph_surface_desc_init(&surface);
+  surface.values = p->terrain;
+  surface.cols = TERRAIN;
+  surface.rows = TERRAIN;
+  surface.x.lo = -5.0;
+  surface.x.hi = 5.0;
+  surface.z.lo = -5.0;
+  surface.z.hi = 5.0;
+  surface.colormap = &ramp;
+  surface.name = "height";
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot3d_add_surface(plot, &surface, &layer);
+}
+
+/* 3-D scene 1 — a helix through a cloud of the points it was drawn from. */
+static void build_helix(ph_panels* p, ph_plot3d plot) {
+  ph_plot3d_set_title(plot, "Helix");
+  ph_plot3d_set_axis_labels(plot, "x", "t", "z");
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "plasma";
+
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_pointcloud_desc cloud;
+  ph_pointcloud_desc_init(&cloud);
+  cloud.x = p->cloud_x;
+  cloud.y = p->cloud_y;
+  cloud.z = p->cloud_z;
+  cloud.count = CLOUD_POINTS;
+  cloud.size = 3.0f;
+  cloud.values = p->cloud_value;
+  cloud.colormap = &ramp;
+  cloud.name = "t";
+  ph_plot3d_add_pointcloud(plot, &cloud, &layer);
+
+  ph_line3d_desc line;
+  ph_line3d_desc_init(&line);
+  line.x = p->helix_x;
+  line.y = p->helix_y;
+  line.z = p->helix_z;
+  line.count = HELIX_POINTS;
+  line.color = parse("#e2e8f0");
+  line.name = "path";
+  ph_plot3d_add_line(plot, &line, &layer);
+}
+
+/* 3-D scene 2 — a dome of lit bars, and the arrows of its own gradient. */
+static void build_towers(ph_panels* p, ph_plot3d plot) {
+  ph_plot3d_set_title(plot, "Towers");
+  ph_plot3d_set_axis_labels(plot, "x", "value", "z");
+  ph_plot3d_set_camera(plot, 0.9, 0.6, 3.4);
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "turbo";
+
+  ph_bar3d_desc bars;
+  ph_bar3d_desc_init(&bars);
+  bars.values = p->bars3d;
+  bars.cols = BARS3D;
+  bars.rows = BARS3D;
+  bars.x.lo = -3.0;
+  bars.x.hi = 3.0;
+  bars.z.lo = -3.0;
+  bars.z.hi = 3.0;
+  bars.fill = 0.7;
+  bars.colormap = &ramp;
+  bars.name = "value";
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot3d_add_bars(plot, &bars, &layer);
+}
+
+void ph_panels_build_3d(ph_panels* panels, ph_plot3d plot, int index) {
+  if (!panels) return;
+  const int which = ((index % PH_PANEL_3D_COUNT) + PH_PANEL_3D_COUNT) % PH_PANEL_3D_COUNT;
+  switch (which) {
+    case 0: build_terrain(panels, plot); break;
+    case 1: build_helix(panels, plot); break;
+    default: build_towers(panels, plot); break;
+  }
 }
 
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {

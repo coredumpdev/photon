@@ -822,11 +822,102 @@ PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, name) == 64, "ph_parallel_desc.name 
 PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, render_type) == 72, "ph_parallel_desc.render_type offset");
 PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, no_axes) == 76, "ph_parallel_desc.no_axes offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_plot3d_desc) == 104, "ph_plot3d_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_plot3d_desc) == 8, "ph_plot3d_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, struct_size) == 0, "ph_plot3d_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, width) == 4, "ph_plot3d_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, height) == 8, "ph_plot3d_desc.height offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, theme) == 12, "ph_plot3d_desc.theme offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, background) == 16, "ph_plot3d_desc.background offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, title) == 24, "ph_plot3d_desc.title offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, x_label) == 32, "ph_plot3d_desc.x_label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, y_label) == 40, "ph_plot3d_desc.y_label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, z_label) == 48, "ph_plot3d_desc.z_label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, azimuth) == 56, "ph_plot3d_desc.azimuth offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, elevation) == 64, "ph_plot3d_desc.elevation offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, distance) == 72, "ph_plot3d_desc.distance offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, aspect_mode) == 80, "ph_plot3d_desc.aspect_mode offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, projection) == 84, "ph_plot3d_desc.projection offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, no_axes) == 88, "ph_plot3d_desc.no_axes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, no_grid_planes) == 92, "ph_plot3d_desc.no_grid_planes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_plot3d_desc, no_interaction) == 96, "ph_plot3d_desc.no_interaction offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_surface_desc) == 104, "ph_surface_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_surface_desc) == 8, "ph_surface_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, struct_size) == 0, "ph_surface_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, values) == 8, "ph_surface_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, cols) == 16, "ph_surface_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, rows) == 20, "ph_surface_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, x) == 24, "ph_surface_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, z) == 40, "ph_surface_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, colormap) == 56, "ph_surface_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, domain) == 64, "ph_surface_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, wireframe) == 80, "ph_surface_desc.wireframe offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, name) == 88, "ph_surface_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_surface_desc, render_type) == 96, "ph_surface_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_pointcloud_desc) == 96, "ph_pointcloud_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_pointcloud_desc) == 8, "ph_pointcloud_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, struct_size) == 0, "ph_pointcloud_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, x) == 8, "ph_pointcloud_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, y) == 16, "ph_pointcloud_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, z) == 24, "ph_pointcloud_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, count) == 32, "ph_pointcloud_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, size) == 36, "ph_pointcloud_desc.size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, color) == 40, "ph_pointcloud_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, values) == 48, "ph_pointcloud_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, colormap) == 56, "ph_pointcloud_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, domain) == 64, "ph_pointcloud_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, name) == 80, "ph_pointcloud_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pointcloud_desc, render_type) == 88, "ph_pointcloud_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_line3d_desc) == 56, "ph_line3d_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_line3d_desc) == 8, "ph_line3d_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, struct_size) == 0, "ph_line3d_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, x) == 8, "ph_line3d_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, y) == 16, "ph_line3d_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, z) == 24, "ph_line3d_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, count) == 32, "ph_line3d_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, color) == 36, "ph_line3d_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, name) == 40, "ph_line3d_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_line3d_desc, render_type) == 48, "ph_line3d_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_bar3d_desc) == 104, "ph_bar3d_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_bar3d_desc) == 8, "ph_bar3d_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, struct_size) == 0, "ph_bar3d_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, values) == 8, "ph_bar3d_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, cols) == 16, "ph_bar3d_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, rows) == 20, "ph_bar3d_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, x) == 24, "ph_bar3d_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, z) == 40, "ph_bar3d_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, fill) == 56, "ph_bar3d_desc.fill offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, colormap) == 64, "ph_bar3d_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, domain) == 72, "ph_bar3d_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, name) == 88, "ph_bar3d_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_bar3d_desc, render_type) == 96, "ph_bar3d_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_quiver3d_desc) == 104, "ph_quiver3d_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_quiver3d_desc) == 8, "ph_quiver3d_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, struct_size) == 0, "ph_quiver3d_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, x) == 8, "ph_quiver3d_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, y) == 16, "ph_quiver3d_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, z) == 24, "ph_quiver3d_desc.z offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, u) == 32, "ph_quiver3d_desc.u offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, v) == 40, "ph_quiver3d_desc.v offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, w) == 48, "ph_quiver3d_desc.w offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, count) == 56, "ph_quiver3d_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, scale) == 64, "ph_quiver3d_desc.scale offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, color) == 72, "ph_quiver3d_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, color_by_magnitude) == 76, "ph_quiver3d_desc.color_by_magnitude offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, colormap) == 80, "ph_quiver3d_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, name) == 88, "ph_quiver3d_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_quiver3d_desc, render_type) == 96, "ph_quiver3d_desc.render_type offset");
+
 #endif  /* 64-bit */
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 66);
+  printf("%d struct layouts match the generated bindings\n", 72);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

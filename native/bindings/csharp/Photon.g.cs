@@ -24,6 +24,14 @@ public static partial class Ph
 
     public const ulong PH_NULL_HANDLE = 0UL;
     public const int PH_COLOR_AUTO = 0;
+    public const int PH_BUTTON_LEFT = 0;
+    public const int PH_BUTTON_MIDDLE = 1;
+    public const int PH_BUTTON_RIGHT = 2;
+    public const int PH_MOD_NONE = 0;
+    public const int PH_MOD_SHIFT = 1;
+    public const int PH_MOD_CTRL = 2;
+    public const int PH_MOD_ALT = 4;
+    public const int PH_MOD_SUPER = 8;
     public const int PH_OK = 0;
     public const int PH_E_INVALID_HANDLE = -1;
     public const int PH_E_INVALID_ARGUMENT = -2;
@@ -107,14 +115,10 @@ public static partial class Ph
     public const int PH_EVENT_LAYER_VISIBILITY = 4;
     public const int PH_EVENT_REDRAW_REQUESTED = 5;
     public const int PH_EVENT_POINT_PICKED = 6;
-    public const int PH_BUTTON_LEFT = 0;
-    public const int PH_BUTTON_MIDDLE = 1;
-    public const int PH_BUTTON_RIGHT = 2;
-    public const int PH_MOD_NONE = 0;
-    public const int PH_MOD_SHIFT = 1;
-    public const int PH_MOD_CTRL = 2;
-    public const int PH_MOD_ALT = 4;
-    public const int PH_MOD_SUPER = 8;
+    public const int PH_ASPECT_CUBE = 0;
+    public const int PH_ASPECT_DATA = 1;
+    public const int PH_PROJECTION_PERSPECTIVE = 0;
+    public const int PH_PROJECTION_ORTHOGRAPHIC = 1;
 
     [UnmanagedFunctionPointer(Cc)]
     public delegate IntPtr PhProcAddressFn([MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr user);
@@ -1710,6 +1714,188 @@ public static partial class Ph
         public int no_axes;
     }
 
+    /// <summary>ph_plot3d_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_plot3d_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 4</summary>
+        public int width;
+        /// <summary>offset 8</summary>
+        public int height;
+        /// <summary>offset 12</summary>
+        public int theme;
+        /// <summary>offset 16</summary>
+        public uint background;
+        /// <summary>offset 24</summary>
+        public IntPtr title;
+        /// <summary>offset 32</summary>
+        public IntPtr x_label;
+        /// <summary>offset 40</summary>
+        public IntPtr y_label;
+        /// <summary>offset 48</summary>
+        public IntPtr z_label;
+        /// <summary>offset 56</summary>
+        public double azimuth;
+        /// <summary>offset 64</summary>
+        public double elevation;
+        /// <summary>offset 72</summary>
+        public double distance;
+        /// <summary>offset 80</summary>
+        public int aspect_mode;
+        /// <summary>offset 84</summary>
+        public int projection;
+        /// <summary>offset 88</summary>
+        public int no_axes;
+        /// <summary>offset 92</summary>
+        public int no_grid_planes;
+        /// <summary>offset 96</summary>
+        public int no_interaction;
+    }
+
+    /// <summary>ph_surface_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_surface_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range z;
+        /// <summary>offset 56</summary>
+        public IntPtr colormap;
+        /// <summary>offset 64</summary>
+        public ph_range domain;
+        /// <summary>offset 80</summary>
+        public int wireframe;
+        /// <summary>offset 88</summary>
+        public IntPtr name;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_pointcloud_desc — 96 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_pointcloud_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public IntPtr z;
+        /// <summary>offset 32</summary>
+        public int count;
+        /// <summary>offset 36</summary>
+        public float size;
+        /// <summary>offset 40</summary>
+        public uint color;
+        /// <summary>offset 48</summary>
+        public IntPtr values;
+        /// <summary>offset 56</summary>
+        public IntPtr colormap;
+        /// <summary>offset 64</summary>
+        public ph_range domain;
+        /// <summary>offset 80</summary>
+        public IntPtr name;
+        /// <summary>offset 88</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_line3d_desc — 56 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_line3d_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public IntPtr z;
+        /// <summary>offset 32</summary>
+        public int count;
+        /// <summary>offset 36</summary>
+        public uint color;
+        /// <summary>offset 40</summary>
+        public IntPtr name;
+        /// <summary>offset 48</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_bar3d_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_bar3d_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range z;
+        /// <summary>offset 56</summary>
+        public double fill;
+        /// <summary>offset 64</summary>
+        public IntPtr colormap;
+        /// <summary>offset 72</summary>
+        public ph_range domain;
+        /// <summary>offset 88</summary>
+        public IntPtr name;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_quiver3d_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_quiver3d_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public IntPtr z;
+        /// <summary>offset 32</summary>
+        public IntPtr u;
+        /// <summary>offset 40</summary>
+        public IntPtr v;
+        /// <summary>offset 48</summary>
+        public IntPtr w;
+        /// <summary>offset 56</summary>
+        public int count;
+        /// <summary>offset 64</summary>
+        public double scale;
+        /// <summary>offset 72</summary>
+        public uint color;
+        /// <summary>offset 76</summary>
+        public int color_by_magnitude;
+        /// <summary>offset 80</summary>
+        public IntPtr colormap;
+        /// <summary>offset 88</summary>
+        public IntPtr name;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
     /// <summary>
     ///   Every function in the ABI, by name — so a binding-level test can
     ///   assert it exercised all of them rather than merely intending to.
@@ -1918,6 +2104,37 @@ public static partial class Ph
         "ph_layer_valid",
         "ph_layer_bounds",
         "ph_layer_destroy",
+        "ph_plot3d_desc_init",
+        "ph_plot3d_create",
+        "ph_plot3d_destroy",
+        "ph_plot3d_valid",
+        "ph_plot3d_set_size",
+        "ph_plot3d_set_theme",
+        "ph_plot3d_set_title",
+        "ph_plot3d_set_axis_labels",
+        "ph_plot3d_set_camera",
+        "ph_plot3d_get_camera",
+        "ph_plot3d_set_light",
+        "ph_plot3d_reset_view",
+        "ph_surface_desc_init",
+        "ph_plot3d_add_surface",
+        "ph_pointcloud_desc_init",
+        "ph_plot3d_add_pointcloud",
+        "ph_line3d_desc_init",
+        "ph_plot3d_add_line",
+        "ph_bar3d_desc_init",
+        "ph_plot3d_add_bars",
+        "ph_quiver3d_desc_init",
+        "ph_plot3d_add_quiver",
+        "ph_plot3d_pointer_down",
+        "ph_plot3d_pointer_move",
+        "ph_plot3d_pointer_up",
+        "ph_plot3d_wheel",
+        "ph_plot3d_render",
+        "ph_plot3d_render_pixels",
+        "ph_plot3d_needs_redraw",
+        "ph_plot3d_poll_event",
+        "ph_plot3d_clear_events",
         "ph_plot_set_mode",
         "ph_plot_get_mode",
         "ph_plot_pointer_down",
@@ -2700,6 +2917,120 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_destroy")]
     public static extern int ph_layer_destroy(ulong layer);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_desc_init")]
+    public static extern void ph_plot3d_desc_init(out ph_plot3d_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_create")]
+    public static extern int ph_plot3d_create(IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_create")]
+    public static extern int ph_plot3d_create(in ph_plot3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_destroy")]
+    public static extern int ph_plot3d_destroy(ulong plot);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_valid")]
+    public static extern int ph_plot3d_valid(ulong plot);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_set_size")]
+    public static extern int ph_plot3d_set_size(ulong plot, int width, int height);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_set_theme")]
+    public static extern int ph_plot3d_set_theme(ulong plot, int theme);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_set_title")]
+    public static extern int ph_plot3d_set_title(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_set_axis_labels")]
+    public static extern int ph_plot3d_set_axis_labels(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string x, [MarshalAs(UnmanagedType.LPUTF8Str)] string y, [MarshalAs(UnmanagedType.LPUTF8Str)] string z);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_set_camera")]
+    public static extern int ph_plot3d_set_camera(ulong plot, double azimuth, double elevation, double distance);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_get_camera")]
+    public static extern int ph_plot3d_get_camera(ulong plot, out double out_azimuth, out double out_elevation, out double out_distance);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_set_light")]
+    public static extern int ph_plot3d_set_light(ulong plot, float x, float y, float z, float ambient);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_reset_view")]
+    public static extern int ph_plot3d_reset_view(ulong plot);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_surface_desc_init")]
+    public static extern void ph_surface_desc_init(out ph_surface_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_surface")]
+    public static extern int ph_plot3d_add_surface(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_surface")]
+    public static extern int ph_plot3d_add_surface(ulong plot, in ph_surface_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_pointcloud_desc_init")]
+    public static extern void ph_pointcloud_desc_init(out ph_pointcloud_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_pointcloud")]
+    public static extern int ph_plot3d_add_pointcloud(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_pointcloud")]
+    public static extern int ph_plot3d_add_pointcloud(ulong plot, in ph_pointcloud_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_line3d_desc_init")]
+    public static extern void ph_line3d_desc_init(out ph_line3d_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_line")]
+    public static extern int ph_plot3d_add_line(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_line")]
+    public static extern int ph_plot3d_add_line(ulong plot, in ph_line3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_bar3d_desc_init")]
+    public static extern void ph_bar3d_desc_init(out ph_bar3d_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_bars")]
+    public static extern int ph_plot3d_add_bars(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_bars")]
+    public static extern int ph_plot3d_add_bars(ulong plot, in ph_bar3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_quiver3d_desc_init")]
+    public static extern void ph_quiver3d_desc_init(out ph_quiver3d_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_quiver")]
+    public static extern int ph_plot3d_add_quiver(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_add_quiver")]
+    public static extern int ph_plot3d_add_quiver(ulong plot, in ph_quiver3d_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_pointer_down")]
+    public static extern int ph_plot3d_pointer_down(ulong plot, double px, double py, int button, int mods);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_pointer_move")]
+    public static extern int ph_plot3d_pointer_move(ulong plot, double px, double py, int mods);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_pointer_up")]
+    public static extern int ph_plot3d_pointer_up(ulong plot, double px, double py, int button, int mods);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_wheel")]
+    public static extern int ph_plot3d_wheel(ulong plot, double px, double py, double delta_y, int mods);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_render")]
+    public static extern int ph_plot3d_render(ulong plot, IntPtr target);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_render")]
+    public static extern int ph_plot3d_render(ulong plot, in ph_frame_target target);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_render_pixels")]
+    public static extern int ph_plot3d_render_pixels(ulong plot, int width, int height, float dpr, byte[] out_rgba, int stride_bytes);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_needs_redraw")]
+    public static extern int ph_plot3d_needs_redraw(ulong plot);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_poll_event")]
+    public static extern int ph_plot3d_poll_event(ulong plot, out ph_event @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot3d_clear_events")]
+    public static extern int ph_plot3d_clear_events(ulong plot);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_mode")]
     public static extern int ph_plot_set_mode(ulong plot, int mode);

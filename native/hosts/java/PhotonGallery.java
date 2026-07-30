@@ -82,11 +82,18 @@ public final class PhotonGallery {
     private static final int HIST_SAMPLES = 4000;
     private static final int ROSE_POINTS = 361;
     private static final int ROSE_MARKS = 12;
+    private static final int SCENES = 3;
+    private static final int TERRAIN = 48;
+    private static final int HELIX_POINTS = 400;
+    private static final int CLOUD_POINTS = 1200;
+    private static final int BARS3D = 12;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
 
     private static final long[] plots = new long[PANELS];
+    /** The 3-D scenes, which are ph_plot3d rather than ph_plot. */
+    private static final long[] scenes = new long[SCENES];
     private static long streamLayer = PH_NULL_HANDLE;
     private static long fieldLayer = PH_NULL_HANDLE;
     private static MemorySegment fieldValues;
@@ -1632,6 +1639,170 @@ public final class PhotonGallery {
         }
     }
 
+    /**
+     * The three 3-D scenes.
+     *
+     * A second plot type, so they are built and rendered separately from the
+     * grid above — but through the same ph_layer table, which is why their
+     * layers need no special handling once made.
+     */
+    private static void buildScenes() {
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment desc = ph_plot3d_desc.allocate(scratch);
+            for (int i = 0; i < SCENES; i++) {
+                ph_plot3d_desc_init(desc);
+                desc.set(ValueLayout.JAVA_INT, ph_plot3d_desc.OFFSET_THEME, PH_THEME_DARK);
+                MemorySegment out = scratch.allocate(ValueLayout.JAVA_LONG);
+                if (ph_plot3d_create(desc, out) != PH_OK) {
+                    throw new IllegalStateException(Photon.lastError());
+                }
+                scenes[i] = out.get(ValueLayout.JAVA_LONG, 0);
+            }
+        }
+        buildTerrain(scenes[0]);
+        buildHelix(scenes[1]);
+        buildTowers(scenes[2]);
+    }
+
+    private static MemorySegment ramp(String name) {
+        MemorySegment spec = ph_colormap_spec.allocate(ARENA);
+        ph_colormap_spec_init(spec);
+        spec.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_NAME, ARENA.allocateFrom(name));
+        return spec;
+    }
+
+    private static void setRange(MemorySegment struct, long offset, double lo, double hi) {
+        struct.set(ValueLayout.JAVA_DOUBLE, offset + ph_range.OFFSET_LO, lo);
+        struct.set(ValueLayout.JAVA_DOUBLE, offset + ph_range.OFFSET_HI, hi);
+    }
+
+    /** Scene 0 — two interfering ripples as a lit surface. */
+    private static void buildTerrain(long scene) {
+        MemorySegment values = doubles(TERRAIN * TERRAIN);
+        for (int r = 0; r < TERRAIN; r++) {
+            for (int c = 0; c < TERRAIN; c++) {
+                double x = (c - TERRAIN * 0.5) * 0.22;
+                double z = (r - TERRAIN * 0.5) * 0.22;
+                double d1 = Math.sqrt((x + 2) * (x + 2) + z * z);
+                double d2 = Math.sqrt((x - 2) * (x - 2) + z * z);
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, r * TERRAIN + c,
+                                  Math.sin(d1 * 1.6) + Math.sin(d2 * 1.6));
+            }
+        }
+        ph_plot3d_set_title(scene, ARENA.allocateFrom("Terrain"));
+        ph_plot3d_set_axis_labels(scene, ARENA.allocateFrom("x"), ARENA.allocateFrom("height"),
+                                  ARENA.allocateFrom("z"));
+
+        MemorySegment desc = ph_surface_desc.allocate(ARENA);
+        ph_surface_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_surface_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_surface_desc.OFFSET_COLS, TERRAIN);
+        desc.set(ValueLayout.JAVA_INT, ph_surface_desc.OFFSET_ROWS, TERRAIN);
+        setRange(desc, ph_surface_desc.OFFSET_X, -5, 5);
+        setRange(desc, ph_surface_desc.OFFSET_Z, -5, 5);
+        desc.set(ValueLayout.ADDRESS, ph_surface_desc.OFFSET_COLORMAP, ramp("viridis"));
+        desc.set(ValueLayout.ADDRESS, ph_surface_desc.OFFSET_NAME, ARENA.allocateFrom("height"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot3d_add_surface(scene, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Scene 1 — a helix through a cloud of the points it was drawn from. */
+    private static void buildHelix(long scene) {
+        MemorySegment hx = doubles(HELIX_POINTS);
+        MemorySegment hy = doubles(HELIX_POINTS);
+        MemorySegment hz = doubles(HELIX_POINTS);
+        for (int i = 0; i < HELIX_POINTS; i++) {
+            double t = i * 0.06;
+            hx.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.cos(t) * 2.0);
+            hy.setAtIndex(ValueLayout.JAVA_DOUBLE, i, t * 0.25 - 3.0);
+            hz.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.sin(t) * 2.0);
+        }
+        MemorySegment cx = doubles(CLOUD_POINTS);
+        MemorySegment cy = doubles(CLOUD_POINTS);
+        MemorySegment cz = doubles(CLOUD_POINTS);
+        MemorySegment cv = doubles(CLOUD_POINTS);
+        int seed = 86428642;
+        for (int i = 0; i < CLOUD_POINTS; i++) {
+            seed = seed * 1664525 + 1013904223;
+            double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            seed = seed * 1664525 + 1013904223;
+            double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            double g = Math.sqrt(-2.0 * Math.log(u + 1e-12));
+            double a = 2 * Math.PI * v;
+            double t = i * 0.02;
+            double y = t * 0.25 - 3.0 + g * Math.sin(a) * 0.45;
+            cx.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.cos(t) * 2.0 + g * Math.cos(a) * 0.45);
+            cy.setAtIndex(ValueLayout.JAVA_DOUBLE, i, y);
+            cz.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                          Math.sin(t) * 2.0 + g * Math.cos(a + 1.0) * 0.45);
+            cv.setAtIndex(ValueLayout.JAVA_DOUBLE, i, y);
+        }
+        ph_plot3d_set_title(scene, ARENA.allocateFrom("Helix"));
+        ph_plot3d_set_axis_labels(scene, ARENA.allocateFrom("x"), ARENA.allocateFrom("t"),
+                                  ARENA.allocateFrom("z"));
+
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment cloud = ph_pointcloud_desc.allocate(ARENA);
+        ph_pointcloud_desc_init(cloud);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_X, cx);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_Y, cy);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_Z, cz);
+        cloud.set(ValueLayout.JAVA_INT, ph_pointcloud_desc.OFFSET_COUNT, CLOUD_POINTS);
+        cloud.set(ValueLayout.JAVA_FLOAT, ph_pointcloud_desc.OFFSET_SIZE, 3.0f);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_VALUES, cv);
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_COLORMAP, ramp("plasma"));
+        cloud.set(ValueLayout.ADDRESS, ph_pointcloud_desc.OFFSET_NAME, ARENA.allocateFrom("t"));
+        if (ph_plot3d_add_pointcloud(scene, cloud, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        MemorySegment line = ph_line3d_desc.allocate(ARENA);
+        ph_line3d_desc_init(line);
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_X, hx);
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_Y, hy);
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_Z, hz);
+        line.set(ValueLayout.JAVA_INT, ph_line3d_desc.OFFSET_COUNT, HELIX_POINTS);
+        line.set(ValueLayout.JAVA_INT, ph_line3d_desc.OFFSET_COLOR, color("#e2e8f0"));
+        line.set(ValueLayout.ADDRESS, ph_line3d_desc.OFFSET_NAME, ARENA.allocateFrom("path"));
+        if (ph_plot3d_add_line(scene, line, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Scene 2 — a dome of lit bars. */
+    private static void buildTowers(long scene) {
+        MemorySegment values = doubles(BARS3D * BARS3D);
+        for (int r = 0; r < BARS3D; r++) {
+            for (int c = 0; c < BARS3D; c++) {
+                double x = (c - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+                double z = (r - BARS3D * 0.5 + 0.5) / (BARS3D * 0.5);
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, r * BARS3D + c,
+                                  4.0 * Math.exp(-(x * x + z * z) * 1.6) + 0.3);
+            }
+        }
+        ph_plot3d_set_title(scene, ARENA.allocateFrom("Towers"));
+        ph_plot3d_set_axis_labels(scene, ARENA.allocateFrom("x"), ARENA.allocateFrom("value"),
+                                  ARENA.allocateFrom("z"));
+        ph_plot3d_set_camera(scene, 0.9, 0.6, 3.4);
+
+        MemorySegment desc = ph_bar3d_desc.allocate(ARENA);
+        ph_bar3d_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_bar3d_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_bar3d_desc.OFFSET_COLS, BARS3D);
+        desc.set(ValueLayout.JAVA_INT, ph_bar3d_desc.OFFSET_ROWS, BARS3D);
+        setRange(desc, ph_bar3d_desc.OFFSET_X, -3, 3);
+        setRange(desc, ph_bar3d_desc.OFFSET_Z, -3, 3);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_bar3d_desc.OFFSET_FILL, 0.7);
+        desc.set(ValueLayout.ADDRESS, ph_bar3d_desc.OFFSET_COLORMAP, ramp("turbo"));
+        desc.set(ValueLayout.ADDRESS, ph_bar3d_desc.OFFSET_NAME, ARENA.allocateFrom("value"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot3d_add_bars(scene, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1652,8 +1823,13 @@ public final class PhotonGallery {
     // Window, layout and input
     // -----------------------------------------------------------------------
 
+    /** Cells across every row, counting the 3-D scenes after the 2-D panels. */
+    private static int cells() {
+        return PANELS + SCENES;
+    }
+
     private static int rows() {
-        return (PANELS + COLUMNS - 1) / COLUMNS;
+        return (cells() + COLUMNS - 1) / COLUMNS;
     }
 
     private static int[] windowSize() {
@@ -1802,10 +1978,20 @@ public final class PhotonGallery {
         MemorySegment pixels = frame.allocate((long) stride * cellHeight);
         BufferedImage sheet = new BufferedImage(cellWidth * COLUMNS, cellHeight * rows(),
                                                 BufferedImage.TYPE_INT_ARGB);
-        for (int i = 0; i < PANELS; i++) {
-            ph_plot_set_size(plots[i], cellWidth, cellHeight);
-            int result = ph_plot_render_pixels(plots[i], cellWidth, cellHeight, 1.0f, pixels,
+        for (int i = 0; i < cells(); i++) {
+            int result;
+            if (i < PANELS) {
+                ph_plot_set_size(plots[i], cellWidth, cellHeight);
+                result = ph_plot_render_pixels(plots[i], cellWidth, cellHeight, 1.0f, pixels,
                                                stride);
+            } else {
+                // A scene is a different plot type but the same readback: it
+                // renders into its own offscreen target and hands back RGBA8.
+                long scene = scenes[i - PANELS];
+                ph_plot3d_set_size(scene, cellWidth, cellHeight);
+                result = ph_plot3d_render_pixels(scene, cellWidth, cellHeight, 1.0f, pixels,
+                                                 stride);
+            }
             if (result != PH_OK) throw new IllegalStateException(Photon.lastError());
             int ox = (i % COLUMNS) * cellWidth;
             int oy = (i / COLUMNS) * cellHeight;
@@ -1883,6 +2069,7 @@ public final class PhotonGallery {
         buildHistogram(plots[31]);
         buildSpectrogram(plots[32]);
         buildPolar(plots[33]);
+        buildScenes();
 
         installCallbacks();
 

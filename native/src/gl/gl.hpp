@@ -50,6 +50,7 @@ enum : GLenum {
   GL_POINTS = 0x0000,
   GL_LINES = 0x0001,
   GL_TRIANGLES = 0x0004,
+  GL_LINE_STRIP = 0x0003,
   GL_TRIANGLE_STRIP = 0x0005,
   GL_TRIANGLE_FAN = 0x0006,
   GL_DEPTH_BUFFER_BIT = 0x00000100,
@@ -60,6 +61,9 @@ enum : GLenum {
   GL_ZERO = 0,
   GL_BLEND = 0x0BE2,
   GL_DEPTH_TEST = 0x0B71,
+  GL_LESS = 0x0201,
+  GL_LEQUAL = 0x0203,
+  GL_BACK = 0x0405,
   GL_SCISSOR_TEST = 0x0C11,
   GL_CULL_FACE = 0x0B44,
   GL_MULTISAMPLE = 0x809D,
@@ -151,6 +155,9 @@ enum : GLenum {
   X(Uniform3f,                void,   (GLint location, GLfloat v0, GLfloat v1, GLfloat v2))          \
   X(Uniform4f,                void,   (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)) \
   X(Uniform1fv,               void,   (GLint location, GLsizei count, const GLfloat* value))         \
+  X(UniformMatrix4fv,         void,   (GLint location, GLsizei count, GLboolean transpose,          \
+                                       const GLfloat* value))                                        \
+  X(DepthFunc,                void,   (GLenum func))                                                  \
   /* drawing */                                                                                      \
   X(DrawArrays,               void,   (GLenum mode, GLint first, GLsizei count))                     \
   X(DrawArraysInstanced,      void,   (GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \

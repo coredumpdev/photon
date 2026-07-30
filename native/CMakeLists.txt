@@ -97,6 +97,9 @@ set(PHOTON_SOURCES
   src/gl/gl.cpp
   src/gl/program.cpp
   src/gl/transform.cpp
+  src/plot3d/layers3d.cpp
+  src/plot3d/mat4.cpp
+  src/plot3d/plot3d.cpp
   src/render/overlay.cpp
   src/render/primitives.cpp
   src/render/theme.cpp
