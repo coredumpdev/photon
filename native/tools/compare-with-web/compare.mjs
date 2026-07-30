@@ -226,6 +226,11 @@ const PANELS = [
   ["Flow", 0, 1260], ["Contour", 640, 1260], ["Network", 1280, 1260],
   ["Signals", 1920, 1260], ["Fit", 2560, 1260],
   ["Spectrum", 0, 1680], ["ROC", 640, 1680], ["Embedding", 1280, 1680],
+  // The six composed charts draw no grid at all: their axes carry no meaning
+  // and are turned off in both cores, so the region is the whole comparison.
+  ["Treemap", 1920, 1680], ["Sunburst", 2560, 1680],
+  ["Sankey", 0, 2100], ["Chord", 640, 2100], ["Gauge", 1280, 2100],
+  ["Parallel", 1920, 2100],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

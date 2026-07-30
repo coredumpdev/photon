@@ -89,6 +89,7 @@ set(PHOTON_SOURCES
   src/graph/quadtree.cpp
   src/ml/metrics.cpp
   src/ml/reduce.cpp
+  src/charts/diagrams.cpp
   src/color/colormap.cpp
   src/stats/regression.cpp
   src/stats/signal.cpp

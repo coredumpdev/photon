@@ -1226,6 +1226,280 @@ public static partial class Ph
         public int point_valid;
     }
 
+    /// <summary>ph_chart_item — 24 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_chart_item
+    {
+        /// <summary>offset 0</summary>
+        public IntPtr label;
+        /// <summary>offset 8</summary>
+        public double value;
+        /// <summary>offset 16</summary>
+        public uint color;
+    }
+
+    /// <summary>ph_treemap_desc — 88 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_treemap_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr items;
+        /// <summary>offset 16</summary>
+        public int item_count;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range y;
+        /// <summary>offset 56</summary>
+        public IntPtr palette;
+        /// <summary>offset 64</summary>
+        public float opacity;
+        /// <summary>offset 72</summary>
+        public IntPtr name;
+        /// <summary>offset 80</summary>
+        public int render_type;
+        /// <summary>offset 84</summary>
+        public int no_labels;
+    }
+
+    /// <summary>ph_funnel_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_funnel_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr items;
+        /// <summary>offset 16</summary>
+        public int item_count;
+        /// <summary>offset 24</summary>
+        public double width;
+        /// <summary>offset 32</summary>
+        public double height;
+        /// <summary>offset 40</summary>
+        public double neck;
+        /// <summary>offset 48</summary>
+        public IntPtr palette;
+        /// <summary>offset 56</summary>
+        public float opacity;
+        /// <summary>offset 64</summary>
+        public IntPtr name;
+        /// <summary>offset 72</summary>
+        public int render_type;
+        /// <summary>offset 76</summary>
+        public int no_labels;
+    }
+
+    /// <summary>ph_tree_node — 32 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_tree_node
+    {
+        /// <summary>offset 0</summary>
+        public IntPtr name;
+        /// <summary>offset 8</summary>
+        public int parent;
+        /// <summary>offset 16</summary>
+        public double value;
+        /// <summary>offset 24</summary>
+        public uint color;
+    }
+
+    /// <summary>ph_sunburst_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_sunburst_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr nodes;
+        /// <summary>offset 16</summary>
+        public int node_count;
+        /// <summary>offset 24</summary>
+        public double ring_width;
+        /// <summary>offset 32</summary>
+        public double center;
+        /// <summary>offset 40</summary>
+        public double start_angle;
+        /// <summary>offset 48</summary>
+        public IntPtr palette;
+        /// <summary>offset 56</summary>
+        public float opacity;
+        /// <summary>offset 64</summary>
+        public IntPtr name;
+        /// <summary>offset 72</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_flow — 16 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_flow
+    {
+        /// <summary>offset 0</summary>
+        public int source;
+        /// <summary>offset 4</summary>
+        public int target;
+        /// <summary>offset 8</summary>
+        public double value;
+    }
+
+    /// <summary>ph_flow_node — 16 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_flow_node
+    {
+        /// <summary>offset 0</summary>
+        public IntPtr name;
+        /// <summary>offset 8</summary>
+        public uint color;
+    }
+
+    /// <summary>ph_sankey_desc — 120 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_sankey_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr nodes;
+        /// <summary>offset 16</summary>
+        public int node_count;
+        /// <summary>offset 24</summary>
+        public IntPtr links;
+        /// <summary>offset 32</summary>
+        public int link_count;
+        /// <summary>offset 40</summary>
+        public ph_range x;
+        /// <summary>offset 56</summary>
+        public ph_range y;
+        /// <summary>offset 72</summary>
+        public double node_width;
+        /// <summary>offset 80</summary>
+        public double node_padding;
+        /// <summary>offset 88</summary>
+        public IntPtr palette;
+        /// <summary>offset 96</summary>
+        public float opacity;
+        /// <summary>offset 100</summary>
+        public float ribbon_opacity;
+        /// <summary>offset 104</summary>
+        public IntPtr name;
+        /// <summary>offset 112</summary>
+        public int render_type;
+        /// <summary>offset 116</summary>
+        public int no_labels;
+    }
+
+    /// <summary>ph_chord_desc — 96 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_chord_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr matrix;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 24</summary>
+        public IntPtr labels;
+        /// <summary>offset 32</summary>
+        public int label_count;
+        /// <summary>offset 40</summary>
+        public double radius;
+        /// <summary>offset 48</summary>
+        public double pad_angle;
+        /// <summary>offset 56</summary>
+        public double arc_width;
+        /// <summary>offset 64</summary>
+        public IntPtr palette;
+        /// <summary>offset 72</summary>
+        public float ribbon_opacity;
+        /// <summary>offset 80</summary>
+        public IntPtr name;
+        /// <summary>offset 88</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_gauge_threshold — 16 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_gauge_threshold
+    {
+        /// <summary>offset 0</summary>
+        public double value;
+        /// <summary>offset 8</summary>
+        public uint color;
+    }
+
+    /// <summary>ph_gauge_desc — 120 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_gauge_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public double value;
+        /// <summary>offset 16</summary>
+        public double min;
+        /// <summary>offset 24</summary>
+        public double max;
+        /// <summary>offset 32</summary>
+        public IntPtr thresholds;
+        /// <summary>offset 40</summary>
+        public int threshold_count;
+        /// <summary>offset 44</summary>
+        public uint color;
+        /// <summary>offset 48</summary>
+        public uint track_color;
+        /// <summary>offset 52</summary>
+        public uint needle_color;
+        /// <summary>offset 56</summary>
+        public double start_angle;
+        /// <summary>offset 64</summary>
+        public double end_angle;
+        /// <summary>offset 72</summary>
+        public double radius;
+        /// <summary>offset 80</summary>
+        public double inner_radius;
+        /// <summary>offset 88</summary>
+        public IntPtr label;
+        /// <summary>offset 96</summary>
+        public int no_label;
+        /// <summary>offset 104</summary>
+        public IntPtr name;
+        /// <summary>offset 112</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_parallel_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_parallel_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr dimensions;
+        /// <summary>offset 16</summary>
+        public int dim_count;
+        /// <summary>offset 24</summary>
+        public IntPtr rows;
+        /// <summary>offset 32</summary>
+        public int row_count;
+        /// <summary>offset 40</summary>
+        public IntPtr color_by;
+        /// <summary>offset 48</summary>
+        public IntPtr palette;
+        /// <summary>offset 56</summary>
+        public float width;
+        /// <summary>offset 60</summary>
+        public float opacity;
+        /// <summary>offset 64</summary>
+        public IntPtr name;
+        /// <summary>offset 72</summary>
+        public int render_type;
+        /// <summary>offset 76</summary>
+        public int no_axes;
+    }
+
     /// <summary>
     ///   Every function in the ABI, by name — so a binding-level test can
     ///   assert it exercised all of them rather than merely intending to.
@@ -1354,6 +1628,7 @@ public static partial class Ph
         "ph_plot_set_margin",
         "ph_plot_set_theme",
         "ph_plot_set_title",
+        "ph_plot_set_equal_aspect",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
         "ph_plot_set_tooltip",
@@ -1387,6 +1662,20 @@ public static partial class Ph
         "ph_plot_add_ohlc",
         "ph_plot_add_heatmap",
         "ph_plot_add_image",
+        "ph_treemap_desc_init",
+        "ph_plot_add_treemap",
+        "ph_funnel_desc_init",
+        "ph_plot_add_funnel",
+        "ph_sunburst_desc_init",
+        "ph_plot_add_sunburst",
+        "ph_sankey_desc_init",
+        "ph_plot_add_sankey",
+        "ph_chord_desc_init",
+        "ph_plot_add_chord",
+        "ph_gauge_desc_init",
+        "ph_plot_add_gauge",
+        "ph_parallel_desc_init",
+        "ph_plot_add_parallel",
         "ph_layer_set_xy",
         "ph_layer_set_area",
         "ph_layer_set_bar",
@@ -1803,6 +2092,9 @@ public static partial class Ph
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_title")]
     public static extern int ph_plot_set_title(ulong plot, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
 
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_equal_aspect")]
+    public static extern int ph_plot_set_equal_aspect(ulong plot, int enabled);
+
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_colorbar")]
     public static extern int ph_plot_set_colorbar(ulong plot, int enabled);
 
@@ -1967,6 +2259,69 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_image")]
     public static extern int ph_plot_add_image(ulong plot, in ph_image_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_treemap_desc_init")]
+    public static extern void ph_treemap_desc_init(out ph_treemap_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_treemap")]
+    public static extern int ph_plot_add_treemap(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_treemap")]
+    public static extern int ph_plot_add_treemap(ulong plot, in ph_treemap_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_funnel_desc_init")]
+    public static extern void ph_funnel_desc_init(out ph_funnel_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_funnel")]
+    public static extern int ph_plot_add_funnel(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_funnel")]
+    public static extern int ph_plot_add_funnel(ulong plot, in ph_funnel_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_sunburst_desc_init")]
+    public static extern void ph_sunburst_desc_init(out ph_sunburst_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_sunburst")]
+    public static extern int ph_plot_add_sunburst(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_sunburst")]
+    public static extern int ph_plot_add_sunburst(ulong plot, in ph_sunburst_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_sankey_desc_init")]
+    public static extern void ph_sankey_desc_init(out ph_sankey_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_sankey")]
+    public static extern int ph_plot_add_sankey(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_sankey")]
+    public static extern int ph_plot_add_sankey(ulong plot, in ph_sankey_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_chord_desc_init")]
+    public static extern void ph_chord_desc_init(out ph_chord_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_chord")]
+    public static extern int ph_plot_add_chord(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_chord")]
+    public static extern int ph_plot_add_chord(ulong plot, in ph_chord_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_gauge_desc_init")]
+    public static extern void ph_gauge_desc_init(out ph_gauge_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_gauge")]
+    public static extern int ph_plot_add_gauge(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_gauge")]
+    public static extern int ph_plot_add_gauge(ulong plot, in ph_gauge_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_parallel_desc_init")]
+    public static extern void ph_parallel_desc_init(out ph_parallel_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_parallel")]
+    public static extern int ph_plot_add_parallel(ulong plot, IntPtr desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_parallel")]
+    public static extern int ph_plot_add_parallel(ulong plot, in ph_parallel_desc desc, out ulong out_layers, int capacity, out int out_count);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_xy")]
     public static extern int ph_layer_set_xy(ulong layer, double[] x, double[] y, int count);

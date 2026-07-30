@@ -57,6 +57,16 @@
  * projection is doing real work; three clusters so the picture has an answer. */
 #define EMBED_POINTS 300
 #define EMBED_DIMS 4
+/* The composed charts are all small by nature: a treemap of eight products, a
+ * three-level hierarchy, a five-node flow, four trading partners, and enough
+ * rows for parallel coordinates to show a pattern rather than a haystack. */
+#define TREEMAP_ITEMS 8
+#define TREE_NODES 13
+#define FLOW_NODES 6
+#define FLOW_LINKS 6
+#define CHORD_GROUPS 4
+#define PARALLEL_DIMS 4
+#define PARALLEL_ROWS 40
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -146,6 +156,15 @@ struct ph_panels {
   double embed_x[EMBED_POINTS];
   double embed_y[EMBED_POINTS];
   ph_color embed_color[EMBED_POINTS];
+
+  ph_chart_item treemap[TREEMAP_ITEMS];
+  ph_tree_node tree[TREE_NODES];
+  ph_flow_node flow_nodes[FLOW_NODES];
+  ph_flow flow_links[FLOW_LINKS];
+  double chord[CHORD_GROUPS * CHORD_GROUPS];
+  double parallel[PARALLEL_ROWS * PARALLEL_DIMS];
+  double parallel_class[PARALLEL_ROWS];
+  ph_layer parallel_layers[PARALLEL_ROWS];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -153,7 +172,9 @@ static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
                                               "Yield",   "Latency",   "Field",   "Sprite",
                                               "Candles", "Bars",      "Density", "Flow",
                                               "Contour", "Network",   "Signals", "Fit",
-                                              "Spectrum", "ROC",      "Embedding"};
+                                              "Spectrum", "ROC",      "Embedding", "Treemap",
+                                              "Sunburst", "Sankey",   "Chord",     "Gauge",
+                                              "Parallel"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -490,6 +511,57 @@ ph_panels* ph_panels_create(void) {
     for (int i = 0; i < EMBED_POINTS; i++) {
       p->embed_x[i] = scores[i * 2];
       p->embed_y[i] = scores[i * 2 + 1];
+    }
+  }
+
+  /* The composed charts. All of them are small fixed tables — the point of
+   * these panels is the layout, not the data volume. */
+  {
+    static const char* products[TREEMAP_ITEMS] = {"Search", "Cloud",  "Ads",   "Devices",
+                                                  "Media",  "Support", "Labs", "Other"};
+    static const double share[TREEMAP_ITEMS] = {38, 24, 16, 9, 6, 4, 2, 1};
+    for (int i = 0; i < TREEMAP_ITEMS; i++) {
+      p->treemap[i].label = products[i];
+      p->treemap[i].value = share[i];
+    }
+
+    /* A root, three regions, and their cities. Children follow their parent,
+     * which is what the flattened hierarchy requires. */
+    static const char* tree_names[TREE_NODES] = {
+        "world", "EMEA", "APAC", "AMER", "London", "Berlin", "Paris",
+        "Tokyo", "Seoul", "Sydney", "NYC",  "SF",    "Toronto"};
+    static const int tree_parent[TREE_NODES] = {-1, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3};
+    static const double tree_value[TREE_NODES] = {0, 0, 0, 0, 5, 4, 3, 6, 3, 2, 7, 5, 2};
+    for (int i = 0; i < TREE_NODES; i++) {
+      p->tree[i].name = tree_names[i];
+      p->tree[i].parent = tree_parent[i];
+      p->tree[i].value = tree_value[i];
+    }
+
+    static const char* flow_names[FLOW_NODES] = {"coal", "gas", "grid", "loss", "homes", "works"};
+    static const ph_flow wiring[FLOW_LINKS] = {{0, 2, 30.0}, {1, 2, 45.0}, {2, 3, 18.0},
+                                               {2, 4, 34.0}, {2, 5, 23.0}, {1, 5, 6.0}};
+    for (int i = 0; i < FLOW_NODES; i++) p->flow_nodes[i].name = flow_names[i];
+    for (int i = 0; i < FLOW_LINKS; i++) p->flow_links[i] = wiring[i];
+
+    /* A trade matrix: rows export, columns import. The diagonal is zero, so a
+     * group's arc is what it sends elsewhere. */
+    static const double trade[CHORD_GROUPS * CHORD_GROUPS] = {
+        0, 12, 7, 4, 9, 0, 11, 3, 5, 8, 0, 14, 6, 2, 10, 0};
+    for (int i = 0; i < CHORD_GROUPS * CHORD_GROUPS; i++) p->chord[i] = trade[i];
+
+    /* Two classes with different profiles across four measurements, so the
+     * colouring separates the bundles rather than decorating them. */
+    seed = 19283746u;
+    for (int r = 0; r < PARALLEL_ROWS; r++) {
+      const int cls = r % 2;
+      p->parallel_class[r] = cls;
+      for (int d = 0; d < PARALLEL_DIMS; d++) {
+        seed = seed * 1664525u + 1013904223u;
+        const double noise = ((double)(seed >> 8) / 16777216.0 - 0.5) * 0.6;
+        const double base = cls ? 1.0 + d * 0.4 : 3.0 - d * 0.5;
+        p->parallel[r * PARALLEL_DIMS + d] = base + noise;
+      }
     }
   }
 
@@ -1173,6 +1245,123 @@ static void build_embedding(ph_panels* p, ph_plot plot) {
   ph_plot_add_scatter(plot, &points, &layer);
 }
 
+/* A plot whose axes carry no meaning: the composed charts are pictures in an
+ * arbitrary coordinate system, and a grid behind one is decoration. */
+static void bare_axes(ph_plot plot) {
+  ph_axis_config bare;
+  ph_axis_config_init(&bare);
+  bare.no_ticks = 1;
+  bare.no_grid = 1;
+  ph_plot_set_axis_config(plot, "x", &bare);
+  ph_plot_set_axis_config(plot, "y", &bare);
+}
+
+/* Panel 23 — a squarified treemap of eight products. */
+static void build_treemap(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Treemap");
+  bare_axes(plot);
+
+  ph_treemap_desc desc;
+  ph_treemap_desc_init(&desc);
+  desc.items = p->treemap;
+  desc.item_count = TREEMAP_ITEMS;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_treemap(plot, &desc, &layer);
+}
+
+/* Panel 24 — the same kind of data as a hierarchy, drawn radially. */
+static void build_sunburst(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Sunburst");
+  bare_axes(plot);
+  /* The rings are circles only if one data unit is the same length on both
+   * axes, which is the whole job of the equal-aspect lock. */
+  ph_plot_set_equal_aspect(plot, 1);
+
+  ph_sunburst_desc desc;
+  ph_sunburst_desc_init(&desc);
+  desc.nodes = p->tree;
+  desc.node_count = TREE_NODES;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_sunburst(plot, &desc, &layer);
+}
+
+/* Panel 25 — where the energy goes. */
+static void build_sankey(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Sankey");
+  bare_axes(plot);
+
+  ph_sankey_desc desc;
+  ph_sankey_desc_init(&desc);
+  desc.nodes = p->flow_nodes;
+  desc.node_count = FLOW_NODES;
+  desc.links = p->flow_links;
+  desc.link_count = FLOW_LINKS;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_sankey(plot, &desc, &layer);
+}
+
+/* Panel 26 — a trade matrix as a chord diagram. */
+static void build_chord(ph_panels* p, ph_plot plot) {
+  static const char* regions[CHORD_GROUPS] = {"EU", "US", "CN", "JP"};
+  ph_plot_set_title(plot, "Chord");
+  bare_axes(plot);
+  ph_plot_set_equal_aspect(plot, 1);
+
+  ph_chord_desc desc;
+  ph_chord_desc_init(&desc);
+  desc.matrix = p->chord;
+  desc.count = CHORD_GROUPS;
+  desc.labels = regions;
+  desc.label_count = CHORD_GROUPS;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_chord(plot, &desc, &layer);
+}
+
+/* Panel 27 — a gauge with two threshold bands. */
+static void build_gauge(ph_panels* p, ph_plot plot) {
+  static const ph_gauge_threshold bands[2] = {{50.0, 0xf59e0bffu}, {80.0, 0xef4444ffu}};
+  (void)p;
+  ph_plot_set_title(plot, "Gauge");
+  bare_axes(plot);
+  ph_plot_set_equal_aspect(plot, 1);
+
+  ph_gauge_desc desc;
+  ph_gauge_desc_init(&desc);
+  desc.value = 62.0;
+  desc.thresholds = bands;
+  desc.threshold_count = 2;
+  desc.track_color = 0x33415566u;
+  desc.needle_color = 0xe2e8f0ffu;
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_gauge(plot, &desc, &layer);
+}
+
+/* Panel 28 — parallel coordinates over two classes.
+ *
+ * The one builder that returns several layers, because a row is a line and a
+ * line is a layer: forty rows, forty handles. */
+static void build_parallel(ph_panels* p, ph_plot plot) {
+  static const char* dims[PARALLEL_DIMS] = {"sepal", "petal", "weight", "score"};
+  ph_plot_set_title(plot, "Parallel");
+  ph_axis_config bare;
+  ph_axis_config_init(&bare);
+  bare.no_ticks = 1;
+  bare.no_grid = 1;
+  ph_plot_set_axis_config(plot, "x", &bare);
+  style_axis(plot, "y", "normalised", 0);
+
+  ph_parallel_desc desc;
+  ph_parallel_desc_init(&desc);
+  desc.dimensions = dims;
+  desc.dim_count = PARALLEL_DIMS;
+  desc.rows = p->parallel;
+  desc.row_count = PARALLEL_ROWS;
+  desc.color_by = p->parallel_class;
+  desc.width = 1.5f;
+  int written = 0;
+  ph_plot_add_parallel(plot, &desc, p->parallel_layers, PARALLEL_ROWS, &written);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -1199,7 +1388,13 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 19: build_fit(panels, plot); break;
     case 20: build_spectrum(panels, plot); break;
     case 21: build_roc(panels, plot); break;
-    default: build_embedding(panels, plot); break;
+    case 22: build_embedding(panels, plot); break;
+    case 23: build_treemap(panels, plot); break;
+    case 24: build_sunburst(panels, plot); break;
+    case 25: build_sankey(panels, plot); break;
+    case 26: build_chord(panels, plot); break;
+    case 27: build_gauge(panels, plot); break;
+    default: build_parallel(panels, plot); break;
   }
 }
 

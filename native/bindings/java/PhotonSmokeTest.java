@@ -1795,6 +1795,169 @@ public final class PhotonSmokeTest {
         ran("ph_table_destroy");
     }
 
+    /**
+     * The seven composed charts.
+     *
+     * None of them is a layer type: each returns an ordinary patches layer over
+     * rings a layout computed. What is checked here is that the descriptors
+     * marshal and that the labels land on the plot rather than in the layer —
+     * destroying the layer must leave the annotations, which is the split the
+     * header documents and the one a host will otherwise get wrong.
+     */
+    static void composedCharts(Arena arena, long plot) {
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment items = arena.allocate(ph_chart_item.LAYOUT, 3);
+        String[] names = {"alpha", "beta", "gamma"};
+        double[] weights = {5, 3, 2};
+        for (int i = 0; i < 3; i++) {
+            long base = ph_chart_item.SIZE * i;
+            items.set(ValueLayout.ADDRESS, base + ph_chart_item.OFFSET_LABEL,
+                      ARENA_TEXT(arena, names[i]));
+            items.set(ValueLayout.JAVA_DOUBLE, base + ph_chart_item.OFFSET_VALUE, weights[i]);
+        }
+
+        MemorySegment treemap = ph_treemap_desc.allocate(arena);
+        ph_treemap_desc_init(treemap);
+        checkEq(treemap.get(ValueLayout.JAVA_INT, ph_treemap_desc.OFFSET_STRUCT_SIZE),
+                (int) ph_treemap_desc.SIZE, "ph_treemap_desc_init");
+        treemap.set(ValueLayout.ADDRESS, ph_treemap_desc.OFFSET_ITEMS, items);
+        treemap.set(ValueLayout.JAVA_INT, ph_treemap_desc.OFFSET_ITEM_COUNT, 3);
+        checkEq(ph_plot_add_treemap(plot, treemap, handle), PH_OK, "ph_plot_add_treemap");
+        long treemapLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(treemapLayer, bx, by), PH_OK, "the treemap has bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 1.0,
+              "and they are the unit square it was given");
+        checkEq(ph_layer_destroy(treemapLayer), PH_OK, "the treemap layer is destroyed");
+        ran("ph_treemap_desc_init", "ph_plot_add_treemap");
+
+        MemorySegment funnel = ph_funnel_desc.allocate(arena);
+        ph_funnel_desc_init(funnel);
+        funnel.set(ValueLayout.ADDRESS, ph_funnel_desc.OFFSET_ITEMS, items);
+        funnel.set(ValueLayout.JAVA_INT, ph_funnel_desc.OFFSET_ITEM_COUNT, 3);
+        checkEq(ph_plot_add_funnel(plot, funnel, handle), PH_OK, "ph_plot_add_funnel");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and destroyed");
+        ran("ph_funnel_desc_init", "ph_plot_add_funnel");
+
+        // A root and two leaves. The parent index must point backwards, and the
+        // library refuses it rather than silently mis-summing when it does not.
+        MemorySegment nodes = arena.allocate(ph_tree_node.LAYOUT, 3);
+        for (int i = 0; i < 3; i++) {
+            long base = ph_tree_node.SIZE * i;
+            nodes.set(ValueLayout.ADDRESS, base + ph_tree_node.OFFSET_NAME,
+                      ARENA_TEXT(arena, names[i]));
+            nodes.set(ValueLayout.JAVA_INT, base + ph_tree_node.OFFSET_PARENT, i == 0 ? -1 : 0);
+            nodes.set(ValueLayout.JAVA_DOUBLE, base + ph_tree_node.OFFSET_VALUE, i == 0 ? 0 : 1);
+        }
+        MemorySegment sunburst = ph_sunburst_desc.allocate(arena);
+        ph_sunburst_desc_init(sunburst);
+        sunburst.set(ValueLayout.ADDRESS, ph_sunburst_desc.OFFSET_NODES, nodes);
+        sunburst.set(ValueLayout.JAVA_INT, ph_sunburst_desc.OFFSET_NODE_COUNT, 3);
+        checkEq(ph_plot_add_sunburst(plot, sunburst, handle), PH_OK, "ph_plot_add_sunburst");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and destroyed");
+        nodes.set(ValueLayout.JAVA_INT, ph_tree_node.OFFSET_PARENT, 2);
+        checkEq(ph_plot_add_sunburst(plot, sunburst, handle), PH_E_INVALID_ARGUMENT,
+                "a forward parent reference is refused");
+        nodes.set(ValueLayout.JAVA_INT, ph_tree_node.OFFSET_PARENT, -1);
+        ran("ph_sunburst_desc_init", "ph_plot_add_sunburst");
+
+        MemorySegment flowNodes = arena.allocate(ph_flow_node.LAYOUT, 3);
+        for (int i = 0; i < 3; i++) {
+            flowNodes.set(ValueLayout.ADDRESS,
+                          ph_flow_node.SIZE * i + ph_flow_node.OFFSET_NAME,
+                          ARENA_TEXT(arena, names[i]));
+        }
+        MemorySegment flows = arena.allocate(ph_flow.LAYOUT, 2);
+        int[][] wiring = {{0, 2, 5}, {1, 2, 3}};
+        for (int i = 0; i < 2; i++) {
+            long base = ph_flow.SIZE * i;
+            flows.set(ValueLayout.JAVA_INT, base + ph_flow.OFFSET_SOURCE, wiring[i][0]);
+            flows.set(ValueLayout.JAVA_INT, base + ph_flow.OFFSET_TARGET, wiring[i][1]);
+            flows.set(ValueLayout.JAVA_DOUBLE, base + ph_flow.OFFSET_VALUE, wiring[i][2]);
+        }
+        MemorySegment sankey = ph_sankey_desc.allocate(arena);
+        ph_sankey_desc_init(sankey);
+        sankey.set(ValueLayout.ADDRESS, ph_sankey_desc.OFFSET_NODES, flowNodes);
+        sankey.set(ValueLayout.JAVA_INT, ph_sankey_desc.OFFSET_NODE_COUNT, 3);
+        sankey.set(ValueLayout.ADDRESS, ph_sankey_desc.OFFSET_LINKS, flows);
+        sankey.set(ValueLayout.JAVA_INT, ph_sankey_desc.OFFSET_LINK_COUNT, 2);
+        checkEq(ph_plot_add_sankey(plot, sankey, handle), PH_OK, "ph_plot_add_sankey");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and destroyed");
+        ran("ph_sankey_desc_init", "ph_plot_add_sankey");
+
+        MemorySegment matrix = doubles(arena, 0, 1, 2, 1, 0, 3, 2, 3, 0);
+        MemorySegment labels = arena.allocate(ValueLayout.ADDRESS, 3);
+        for (int i = 0; i < 3; i++) {
+            labels.setAtIndex(ValueLayout.ADDRESS, i, ARENA_TEXT(arena, names[i]));
+        }
+        MemorySegment chord = ph_chord_desc.allocate(arena);
+        ph_chord_desc_init(chord);
+        chord.set(ValueLayout.ADDRESS, ph_chord_desc.OFFSET_MATRIX, matrix);
+        chord.set(ValueLayout.JAVA_INT, ph_chord_desc.OFFSET_COUNT, 3);
+        chord.set(ValueLayout.ADDRESS, ph_chord_desc.OFFSET_LABELS, labels);
+        chord.set(ValueLayout.JAVA_INT, ph_chord_desc.OFFSET_LABEL_COUNT, 3);
+        checkEq(ph_plot_add_chord(plot, chord, handle), PH_OK, "ph_plot_add_chord");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and destroyed");
+        ran("ph_chord_desc_init", "ph_plot_add_chord");
+
+        MemorySegment gauge = ph_gauge_desc.allocate(arena);
+        ph_gauge_desc_init(gauge);
+        gauge.set(ValueLayout.JAVA_DOUBLE, ph_gauge_desc.OFFSET_VALUE, 62.0);
+        MemorySegment thresholds = arena.allocate(ph_gauge_threshold.LAYOUT, 2);
+        thresholds.set(ValueLayout.JAVA_DOUBLE, ph_gauge_threshold.OFFSET_VALUE, 50.0);
+        thresholds.set(ValueLayout.JAVA_INT, ph_gauge_threshold.OFFSET_COLOR, 0xf59e0bff);
+        thresholds.set(ValueLayout.JAVA_DOUBLE,
+                       ph_gauge_threshold.SIZE + ph_gauge_threshold.OFFSET_VALUE, 80.0);
+        thresholds.set(ValueLayout.JAVA_INT,
+                       ph_gauge_threshold.SIZE + ph_gauge_threshold.OFFSET_COLOR, 0xef4444ff);
+        gauge.set(ValueLayout.ADDRESS, ph_gauge_desc.OFFSET_THRESHOLDS, thresholds);
+        gauge.set(ValueLayout.JAVA_INT, ph_gauge_desc.OFFSET_THRESHOLD_COUNT, 2);
+        checkEq(ph_plot_add_gauge(plot, gauge, handle), PH_OK, "ph_plot_add_gauge");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and destroyed");
+        ran("ph_gauge_desc_init", "ph_plot_add_gauge");
+
+        MemorySegment dims = arena.allocate(ValueLayout.ADDRESS, 3);
+        for (int i = 0; i < 3; i++) {
+            dims.setAtIndex(ValueLayout.ADDRESS, i, ARENA_TEXT(arena, names[i]));
+        }
+        MemorySegment rows = doubles(arena, 0, 1, 2, 1, 0, 1, 0.5, 0.5, 0.5);
+        MemorySegment parallel = ph_parallel_desc.allocate(arena);
+        ph_parallel_desc_init(parallel);
+        parallel.set(ValueLayout.ADDRESS, ph_parallel_desc.OFFSET_DIMENSIONS, dims);
+        parallel.set(ValueLayout.JAVA_INT, ph_parallel_desc.OFFSET_DIM_COUNT, 3);
+        parallel.set(ValueLayout.ADDRESS, ph_parallel_desc.OFFSET_ROWS, rows);
+        parallel.set(ValueLayout.JAVA_INT, ph_parallel_desc.OFFSET_ROW_COUNT, 3);
+        MemorySegment rowCount = arena.allocate(ValueLayout.JAVA_INT);
+        checkEq(ph_plot_add_parallel(plot, parallel, MemorySegment.NULL, 0, rowCount), PH_OK,
+                "ph_plot_add_parallel sizing pass");
+        checkEq(rowCount.get(ValueLayout.JAVA_INT, 0), 3, "one layer per row");
+        MemorySegment rowLayers = arena.allocate(ValueLayout.JAVA_LONG, 3);
+        checkEq(ph_plot_add_parallel(plot, parallel, rowLayers, 3, rowCount), PH_OK,
+                "ph_plot_add_parallel");
+        for (int i = 0; i < 3; i++) {
+            long layer = rowLayers.getAtIndex(ValueLayout.JAVA_LONG, i);
+            check(ph_layer_valid(layer) != 0, "row layer " + i + " is live");
+            checkEq(ph_layer_destroy(layer), PH_OK, "and destroyed");
+        }
+        ran("ph_parallel_desc_init", "ph_plot_add_parallel");
+
+        // Every chart above put its names on the plot as annotations, and every
+        // layer is gone. Clearing them is what actually removes them.
+        checkEq(ph_plot_clear_annotations(plot), PH_OK, "the labels outlive their layers");
+
+        // The circular ones are ellipses without this, and it re-fits either
+        // way rather than locking in the previous free-aspect view.
+        checkEq(ph_plot_set_equal_aspect(plot, 1), PH_OK, "ph_plot_set_equal_aspect");
+        checkEq(ph_plot_set_equal_aspect(plot, 0), PH_OK, "and it turns back off");
+        ran("ph_plot_set_equal_aspect");
+    }
+
+    /** A NUL-terminated UTF-8 copy, kept alive by `arena`. */
+    static MemorySegment ARENA_TEXT(Arena arena, String text) {
+        return arena.allocateFrom(text);
+    }
+
     static void checkEq(String actual, String expected, String what) {
         check(expected.equals(actual), what + " (got \"" + actual + "\", want \"" + expected + "\")");
     }
@@ -1841,6 +2004,8 @@ public final class PhotonSmokeTest {
             grids(arena, plot);
             step("patches");
             patches(arena, plot);
+            step("composedCharts");
+            composedCharts(arena, plot);
             step("interaction");
             interaction(arena, plot);
             step("events");

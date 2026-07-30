@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#define PH_PANEL_COUNT 23
+#define PH_PANEL_COUNT 29
 
 /**
  * Per-instance state for one set of panels.

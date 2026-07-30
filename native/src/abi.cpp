@@ -14,6 +14,7 @@
 #include <photon/photon.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -22,6 +23,7 @@
 #include <thread>
 #include <vector>
 
+#include "charts/diagrams.hpp"
 #include "color/colormap.hpp"
 #include "data/csv.hpp"
 #include "data/downsample.hpp"
@@ -1754,6 +1756,15 @@ extern "C" ph_result PH_CALL ph_plot_set_title(ph_plot handle, const char* title
   return PH_OK;
 }
 
+extern "C" ph_result PH_CALL ph_plot_set_equal_aspect(ph_plot handle, ph_bool enabled) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  plot->set_equal_aspect(enabled != 0);
+  return PH_OK;
+}
+
 extern "C" ph_result PH_CALL ph_plot_set_colorbar(ph_plot handle, ph_bool enabled) {
   clear_error();
   Plot* plot = nullptr;
@@ -2504,6 +2515,532 @@ extern "C" ph_result PH_CALL ph_plot_add_patches(ph_plot handle, const ph_patche
   } catch (const std::bad_alloc&) {
     return fail(PH_E_OUT_OF_MEMORY, "out of memory creating patches layer");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Composed charts
+// ---------------------------------------------------------------------------
+
+namespace {
+
+namespace charts = photon::charts;
+
+/// A ring, plus the arrays a ph_patch has to point at while the layer copies it.
+struct PatchStore {
+  std::vector<charts::Ring> rings;
+  std::vector<ph_patch> patches;
+
+  void add(charts::Ring ring, ph_color color) {
+    rings.push_back(std::move(ring));
+    patches.push_back(ph_patch{});
+    patches.back().color = color;
+  }
+
+  /// Point every patch at its ring. Deferred to here because pushing onto
+  /// `rings` reallocates, and a pointer taken before that would dangle.
+  const ph_patch* finish() {
+    for (size_t i = 0; i < rings.size(); ++i) {
+      patches[i].x = rings[i].x.data();
+      patches[i].y = rings[i].y.data();
+      patches[i].count = static_cast<int32_t>(rings[i].x.size());
+    }
+    return patches.data();
+  }
+};
+
+/// An explicit colour, or the palette cycled by index.
+ph_color pick_color(ph_color explicit_color, const char* palette, size_t index) {
+  if (explicit_color != PH_COLOR_AUTO) return explicit_color;
+  return photon::color::palette_color(palette ? palette : "tableau10",
+                                      static_cast<int32_t>(index));
+}
+
+/**
+ * The sunburst and the Sankey do not fall back to tableau10.
+ *
+ * Both keep their own ten-colour list in the web core rather than reaching for
+ * the shared palette, and the two charts look quite different for it — the
+ * shared one is muted where these are saturated, which is what a diagram of
+ * nested wedges wants. Reproduced here rather than corrected, because a port
+ * that quietly improves a default is a port whose output no longer matches.
+ */
+ph_color pick_vivid(ph_color explicit_color, const char* palette, size_t index) {
+  if (explicit_color != PH_COLOR_AUTO) return explicit_color;
+  if (palette) return photon::color::palette_color(palette, static_cast<int32_t>(index));
+  static const ph_color kVivid[10] = {0x3b82f6ffu, 0xf472b6ffu, 0x22d3eeffu, 0xa3e635ffu,
+                                      0xfbbf24ffu, 0xa78bfaffu, 0x34d399ffu, 0xfb7185ffu,
+                                      0x60a5faffu, 0xf59e0bffu};
+  return kVivid[index % 10];
+}
+
+/// The same colour with its alpha scaled, for a ribbon that has to read through.
+ph_color with_alpha(ph_color color, double alpha) {
+  const uint32_t a = static_cast<uint32_t>(
+      std::min(255.0, std::max(0.0, static_cast<double>(color & 0xffu) * alpha + 0.5)));
+  return (color & 0xffffff00u) | a;
+}
+
+/// A centred caption at a point in data space, which is how every chart in this
+/// section names its parts.
+void add_label(Plot* plot, double x, double y, const char* text) {
+  if (!text) return;
+  ph_annotation note{};
+  ph_annotation_init(&note);
+  note.type = PH_ANNOTATION_LABEL;
+  note.x0 = x;
+  note.y0 = y;
+  note.text = text;
+  note.align = PH_ALIGN_CENTER;
+  plot->add_annotation(note);
+}
+
+/// `lo == hi` means "the caller did not choose", which for a drawing box is 0..1.
+void default_extent(ph_range& r, double lo, double hi) {
+  if (r.lo == r.hi) {
+    r.lo = lo;
+    r.hi = hi;
+  }
+}
+
+/// Every builder ends the same way: one patches layer over the rings it built.
+ph_result add_patch_layer(ph_plot handle, Plot* plot, PatchStore& store, float opacity,
+                          const char* name, ph_render_type render_type, ph_layer* out) {
+  ph_patches_desc patches{};
+  ph_patches_desc_init(&patches);
+  patches.patches = store.finish();
+  patches.patch_count = static_cast<int32_t>(store.patches.size());
+  patches.opacity = opacity;
+  patches.name = name;
+  patches.render_type = render_type;
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::PatchesLayer>(patches), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the chart layer");
+  }
+}
+
+}  // namespace
+
+extern "C" void PH_CALL ph_treemap_desc_init(ph_treemap_desc* out) {
+  if (!out) return;
+  *out = ph_treemap_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_treemap_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_treemap(ph_plot handle, const ph_treemap_desc* desc,
+                                                 ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_treemap_desc.struct_size is larger than this build's");
+  }
+  ph_treemap_desc d = normalize(desc, ph_treemap_desc_init);
+  if (d.item_count < 0) return fail(PH_E_INVALID_ARGUMENT, "item_count must be non-negative");
+  if (d.item_count > 0 && !d.items) {
+    return fail(PH_E_INVALID_ARGUMENT, "items must be non-null when item_count > 0");
+  }
+  default_extent(d.x, 0.0, 1.0);
+  default_extent(d.y, 0.0, 1.0);
+
+  std::vector<double> values(static_cast<size_t>(d.item_count));
+  for (int32_t i = 0; i < d.item_count; ++i) values[static_cast<size_t>(i)] = d.items[i].value;
+  const std::vector<charts::TreemapCell> cells =
+      charts::treemap_layout(values.data(), values.size(), d.x.lo, d.y.lo, d.x.hi, d.y.hi);
+
+  PatchStore store;
+  for (size_t i = 0; i < cells.size(); ++i) {
+    const charts::TreemapCell& c = cells[i];
+    charts::Ring ring;
+    ring.x = {c.x0, c.x1, c.x1, c.x0};
+    ring.y = {c.y0, c.y0, c.y1, c.y1};
+    store.add(std::move(ring), pick_color(d.items[c.item].color, d.palette, i));
+  }
+  const ph_result added =
+      add_patch_layer(handle, plot, store, d.opacity, d.name, d.render_type, out);
+  if (added != PH_OK) return added;
+
+  if (!d.no_labels) {
+    // A cell smaller than this in either direction has no room for its own
+    // name, and a label overflowing its cell reads as belonging to the next one.
+    const double min_w = std::abs(d.x.hi - d.x.lo) * 0.04;
+    const double min_h = std::abs(d.y.hi - d.y.lo) * 0.04;
+    for (const charts::TreemapCell& c : cells) {
+      if (std::abs(c.x1 - c.x0) < min_w || std::abs(c.y1 - c.y0) < min_h) continue;
+      add_label(plot, (c.x0 + c.x1) / 2.0, (c.y0 + c.y1) / 2.0, d.items[c.item].label);
+    }
+  }
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_funnel_desc_init(ph_funnel_desc* out) {
+  if (!out) return;
+  *out = ph_funnel_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_funnel_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_funnel(ph_plot handle, const ph_funnel_desc* desc,
+                                                ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_funnel_desc.struct_size is larger than this build's");
+  }
+  const ph_funnel_desc d = normalize(desc, ph_funnel_desc_init);
+  if (d.item_count < 0) return fail(PH_E_INVALID_ARGUMENT, "item_count must be non-negative");
+  if (d.item_count > 0 && !d.items) {
+    return fail(PH_E_INVALID_ARGUMENT, "items must be non-null when item_count > 0");
+  }
+
+  std::vector<double> values(static_cast<size_t>(d.item_count));
+  for (int32_t i = 0; i < d.item_count; ++i) values[static_cast<size_t>(i)] = d.items[i].value;
+  const std::vector<charts::Ring> stages =
+      charts::funnel_layout(values.data(), values.size(), d.width > 0.0 ? d.width : 1.0,
+                            d.height > 0.0 ? d.height : 1.0, d.neck > 0.0 ? d.neck : 0.4);
+
+  PatchStore store;
+  std::vector<double> mid_y;
+  mid_y.reserve(stages.size());
+  for (size_t i = 0; i < stages.size(); ++i) {
+    mid_y.push_back((stages[i].y[0] + stages[i].y[2]) / 2.0);
+    store.add(stages[i], pick_color(d.items[i].color, d.palette, i));
+  }
+  const ph_result added =
+      add_patch_layer(handle, plot, store, d.opacity, d.name, d.render_type, out);
+  if (added != PH_OK) return added;
+
+  if (!d.no_labels) {
+    for (size_t i = 0; i < mid_y.size(); ++i) add_label(plot, 0.0, mid_y[i], d.items[i].label);
+  }
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_sunburst_desc_init(ph_sunburst_desc* out) {
+  if (!out) return;
+  *out = ph_sunburst_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_sunburst_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_sunburst(ph_plot handle, const ph_sunburst_desc* desc,
+                                                  ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_sunburst_desc.struct_size is larger than this build's");
+  }
+  const ph_sunburst_desc d = normalize(desc, ph_sunburst_desc_init);
+  if (d.node_count < 0) return fail(PH_E_INVALID_ARGUMENT, "node_count must be non-negative");
+  if (d.node_count > 0 && !d.nodes) {
+    return fail(PH_E_INVALID_ARGUMENT, "nodes must be non-null when node_count > 0");
+  }
+  for (int32_t i = 0; i < d.node_count; ++i) {
+    // A parent that comes later would break the single-pass roll-up, and would
+    // do it silently, so it is refused rather than reordered.
+    if (d.nodes[i].parent >= i) {
+      return fail(PH_E_INVALID_ARGUMENT, "a node's parent must come before it in the array");
+    }
+  }
+
+  std::vector<charts::SunburstNode> nodes(static_cast<size_t>(d.node_count));
+  for (int32_t i = 0; i < d.node_count; ++i) {
+    nodes[static_cast<size_t>(i)].parent = d.nodes[i].parent;
+    nodes[static_cast<size_t>(i)].value = d.nodes[i].value;
+  }
+  const std::vector<charts::SunburstArc> arcs = charts::sunburst_layout(
+      nodes.data(), nodes.size(), d.ring_width > 0.0 ? d.ring_width : 1.0, d.center,
+      d.start_angle != 0.0 ? d.start_angle : 1.5707963267948966);
+
+  PatchStore store;
+  for (size_t i = 0; i < arcs.size(); ++i) {
+    if (arcs[i].a1 - arcs[i].a0 <= 0.0) continue;
+    store.add(charts::arc_ring(arcs[i].a0, arcs[i].a1, arcs[i].r0, arcs[i].r1),
+              pick_vivid(d.nodes[arcs[i].node].color, d.palette, i));
+  }
+  return add_patch_layer(handle, plot, store, d.opacity, d.name, d.render_type, out);
+}
+
+extern "C" void PH_CALL ph_sankey_desc_init(ph_sankey_desc* out) {
+  if (!out) return;
+  *out = ph_sankey_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_sankey_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_sankey(ph_plot handle, const ph_sankey_desc* desc,
+                                                ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_sankey_desc.struct_size is larger than this build's");
+  }
+  ph_sankey_desc d = normalize(desc, ph_sankey_desc_init);
+  if (d.node_count < 0 || d.link_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "node_count and link_count must be non-negative");
+  }
+  if (d.node_count > 0 && !d.nodes) {
+    return fail(PH_E_INVALID_ARGUMENT, "nodes must be non-null when node_count > 0");
+  }
+  if (d.link_count > 0 && !d.links) {
+    return fail(PH_E_INVALID_ARGUMENT, "links must be non-null when link_count > 0");
+  }
+  default_extent(d.x, 0.0, 1.0);
+  default_extent(d.y, 0.0, 1.0);
+
+  std::vector<charts::SankeyLink> links(static_cast<size_t>(d.link_count));
+  for (int32_t i = 0; i < d.link_count; ++i) {
+    links[static_cast<size_t>(i)].source = d.links[i].source;
+    links[static_cast<size_t>(i)].target = d.links[i].target;
+    links[static_cast<size_t>(i)].value = d.links[i].value;
+  }
+  const charts::SankeyLayout layout = charts::sankey_layout(
+      static_cast<size_t>(d.node_count), links.data(), links.size(), d.x.lo, d.y.lo, d.x.hi,
+      d.y.hi, d.node_width > 0.0 ? d.node_width : 0.02,
+      d.node_padding > 0.0 ? d.node_padding : 0.02);
+
+  const auto node_color = [&](size_t i) { return pick_vivid(d.nodes[i].color, d.palette, i); };
+  const double ribbon_alpha = d.ribbon_opacity > 0.0f ? static_cast<double>(d.ribbon_opacity) : 0.5;
+
+  PatchStore store;
+  // Ribbons first, so the node rectangles sit on top of the flows they carry.
+  for (size_t i = 0; i < layout.ribbons.size(); ++i) {
+    const size_t source = static_cast<size_t>(d.links[layout.ribbon_link[i]].source);
+    store.add(layout.ribbons[i], with_alpha(node_color(source), ribbon_alpha));
+  }
+  for (const charts::NodeRect& n : layout.nodes) {
+    charts::Ring ring;
+    ring.x = {n.x0, n.x1, n.x1, n.x0};
+    ring.y = {n.y0, n.y0, n.y1, n.y1};
+    store.add(std::move(ring), node_color(n.node));
+  }
+  const ph_result added =
+      add_patch_layer(handle, plot, store, d.opacity, d.name, d.render_type, out);
+  if (added != PH_OK) return added;
+
+  if (!d.no_labels) {
+    for (const charts::NodeRect& n : layout.nodes) {
+      add_label(plot, (n.x0 + n.x1) / 2.0, (n.y0 + n.y1) / 2.0, d.nodes[n.node].name);
+    }
+  }
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_chord_desc_init(ph_chord_desc* out) {
+  if (!out) return;
+  *out = ph_chord_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_chord_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_chord(ph_plot handle, const ph_chord_desc* desc,
+                                               ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_chord_desc.struct_size is larger than this build's");
+  }
+  const ph_chord_desc d = normalize(desc, ph_chord_desc_init);
+  if (d.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (d.count > 0 && !d.matrix) {
+    return fail(PH_E_INVALID_ARGUMENT, "matrix must be non-null when count > 0");
+  }
+  const double radius = d.radius > 0.0 ? d.radius : 1.0;
+  const charts::ChordLayout layout = charts::chord_layout(
+      d.matrix, static_cast<size_t>(d.count), radius,
+      d.pad_angle > 0.0 ? d.pad_angle : 0.6283185307179586,
+      d.arc_width > 0.0 ? d.arc_width : 0.06);
+  const double alpha = d.ribbon_opacity > 0.0f ? static_cast<double>(d.ribbon_opacity) : 0.65;
+
+  PatchStore store;
+  // Ribbons under, opaque group arcs over.
+  for (size_t i = 0; i < layout.ribbons.size(); ++i) {
+    store.add(layout.ribbons[i],
+              with_alpha(pick_color(PH_COLOR_AUTO, d.palette, layout.ribbon_from[i]), alpha));
+  }
+  for (size_t i = 0; i < layout.arcs.size(); ++i) {
+    store.add(layout.arcs[i], pick_color(PH_COLOR_AUTO, d.palette, layout.arc_group[i]));
+  }
+  const ph_result added = add_patch_layer(handle, plot, store, 0.0f, d.name, d.render_type, out);
+  if (added != PH_OK) return added;
+
+  if (d.labels && d.label_count > 0) {
+    const double label_r = radius * 1.08;
+    for (size_t i = 0; i < layout.group_mid.size() && i < static_cast<size_t>(d.label_count); ++i) {
+      add_label(plot, label_r * std::cos(layout.group_mid[i]),
+                label_r * std::sin(layout.group_mid[i]), d.labels[i]);
+    }
+  }
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_gauge_desc_init(ph_gauge_desc* out) {
+  if (!out) return;
+  *out = ph_gauge_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_gauge_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_gauge(ph_plot handle, const ph_gauge_desc* desc,
+                                               ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_gauge_desc.struct_size is larger than this build's");
+  }
+  const ph_gauge_desc d = normalize(desc, ph_gauge_desc_init);
+  if (d.threshold_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "threshold_count must be non-negative");
+  }
+  if (d.threshold_count > 0 && !d.thresholds) {
+    return fail(PH_E_INVALID_ARGUMENT, "thresholds must be non-null when threshold_count > 0");
+  }
+
+  const double max = d.max != 0.0 ? d.max : 100.0;
+  const charts::GaugeLayout geo =
+      charts::gauge_layout(d.value, d.min, max, d.start_angle != 0.0 ? d.start_angle : 200.0,
+                           d.end_angle != 0.0 ? d.end_angle : -20.0,
+                           d.radius > 0.0 ? d.radius : 1.0,
+                           d.inner_radius > 0.0 ? d.inner_radius : 0.7);
+
+  // The highest threshold the value reaches wins, which is why this is a scan
+  // rather than a lookup: the bands need not arrive sorted.
+  ph_color value_color = d.color != PH_COLOR_AUTO ? d.color : 0x3b82f6ffu;
+  double best = -std::numeric_limits<double>::infinity();
+  for (int32_t i = 0; i < d.threshold_count; ++i) {
+    if (d.value >= d.thresholds[i].value && d.thresholds[i].value >= best) {
+      best = d.thresholds[i].value;
+      value_color = d.thresholds[i].color;
+    }
+  }
+
+  PatchStore store;
+  store.add(geo.track, d.track_color != PH_COLOR_AUTO ? d.track_color : 0xe5e7ebffu);
+  store.add(geo.value, value_color);
+  store.add(geo.needle, d.needle_color != PH_COLOR_AUTO ? d.needle_color : 0x334155ffu);
+  const ph_result added = add_patch_layer(handle, plot, store, 0.0f, d.name, d.render_type, out);
+  if (added != PH_OK) return added;
+
+  if (!d.no_label) {
+    // Without a caption the number is nowhere: the arc says "about here" and
+    // the needle says "exactly here", and neither says what "here" is.
+    std::string text;
+    if (d.label) {
+      text = d.label;
+    } else {
+      char buffer[32];
+      const std::to_chars_result written =
+          std::to_chars(buffer, buffer + sizeof(buffer), d.value);
+      text.assign(buffer, written.ec == std::errc() ? written.ptr : buffer);
+    }
+    add_label(plot, 0.0, -0.15, text.c_str());
+  }
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_parallel_desc_init(ph_parallel_desc* out) {
+  if (!out) return;
+  *out = ph_parallel_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_parallel_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_parallel(ph_plot handle, const ph_parallel_desc* desc,
+                                                  ph_layer* out_layers, int32_t capacity,
+                                                  int32_t* out_count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_parallel_desc.struct_size is larger than this build's");
+  }
+  const ph_parallel_desc d = normalize(desc, ph_parallel_desc_init);
+  if (d.dim_count < 0 || d.row_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "dim_count and row_count must be non-negative");
+  }
+  if (d.dim_count > 0 && d.row_count > 0 && !d.rows) {
+    return fail(PH_E_INVALID_ARGUMENT, "rows must be non-null when there is data");
+  }
+  *out_count = d.row_count;
+  if (capacity == 0) return PH_OK;
+  if (!out_layers) return fail(PH_E_INVALID_ARGUMENT, "out_layers must be non-null");
+
+  const charts::ParallelLayout layout = charts::parallel_layout(
+      d.rows, static_cast<size_t>(d.row_count), static_cast<size_t>(d.dim_count));
+
+  // The colour ramp's bounds, when rows are banded by a value rather than
+  // cycled by index.
+  double cb_lo = std::numeric_limits<double>::infinity();
+  double cb_hi = -cb_lo;
+  if (d.color_by) {
+    for (int32_t i = 0; i < d.row_count; ++i) {
+      if (!std::isfinite(d.color_by[i])) continue;
+      cb_lo = std::min(cb_lo, d.color_by[i]);
+      cb_hi = std::max(cb_hi, d.color_by[i]);
+    }
+  }
+  const double cb_span = cb_hi - cb_lo;
+  constexpr int32_t kBands = 10;  // the palettes are ten deep
+
+  std::vector<double> axis_x(static_cast<size_t>(d.dim_count));
+  for (int32_t i = 0; i < d.dim_count; ++i) axis_x[static_cast<size_t>(i)] = i;
+  const float alpha = d.opacity > 0.0f ? d.opacity : 0.7f;
+
+  const size_t writable = std::min(static_cast<size_t>(d.row_count), static_cast<size_t>(capacity));
+  for (size_t row = 0; row < writable; ++row) {
+    size_t band = row;
+    if (d.color_by && std::isfinite(cb_lo)) {
+      const double v = d.color_by[row];
+      const double t = (!std::isfinite(v) || cb_span == 0.0) ? 0.0 : (v - cb_lo) / cb_span;
+      band = static_cast<size_t>(
+          std::min(kBands - 1, std::max(0, static_cast<int32_t>(t * kBands))));
+    }
+    ph_line_desc line{};
+    ph_line_desc_init(&line);
+    line.x = axis_x.data();
+    line.y = layout.lines[row].data();
+    line.count = d.dim_count;
+    line.color = with_alpha(pick_color(PH_COLOR_AUTO, d.palette, band), alpha);
+    line.width = d.width > 0.0f ? d.width : 1.0f;
+    line.render_type = d.render_type;
+    if (row == 0) line.name = d.name;
+    ph_layer layer = PH_NULL_HANDLE;
+    try {
+      const ph_result added =
+          register_layer(handle, plot, std::make_unique<photon::LineLayer>(line), &layer);
+      if (added != PH_OK) return added;
+    } catch (const std::bad_alloc&) {
+      return fail(PH_E_OUT_OF_MEMORY, "out of memory creating a parallel-coordinates line");
+    }
+    out_layers[row] = layer;
+  }
+
+  if (!d.no_axes) {
+    for (int32_t i = 0; i < d.dim_count; ++i) {
+      ph_annotation note{};
+      ph_annotation_init(&note);
+      note.type = PH_ANNOTATION_SPAN;
+      note.dim = PH_DIM_X;
+      note.x0 = i;
+      plot->add_annotation(note);
+      if (d.dimensions) add_label(plot, i, 1.0, d.dimensions[i]);
+    }
+  }
+  return PH_OK;
 }
 
 extern "C" ph_result PH_CALL ph_plot_add_scatter(ph_plot handle, const ph_scatter_desc* desc, ph_layer* out) {

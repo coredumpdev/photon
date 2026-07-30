@@ -1912,6 +1912,13 @@ PH_API void PH_CALL ph_ohlc_desc_init(ph_ohlc_desc* out);
 PH_API void PH_CALL ph_heatmap_desc_init(ph_heatmap_desc* out);
 PH_API void PH_CALL ph_image_desc_init(ph_image_desc* out);
 
+/*
+ * The composed charts, the CSV reader and the colormaps each declare their own
+ * `_init` beside the descriptor it fills, rather than in this list. The list is
+ * for the layers, where a host reads them one after another; a chart's default
+ * only makes sense next to the chart.
+ */
+
 /* ------------------------------------------------------------------------ */
 /* Plot lifecycle                                                             */
 /* ------------------------------------------------------------------------ */
@@ -1933,6 +1940,17 @@ PH_API ph_result PH_CALL ph_plot_set_theme(ph_plot plot, ph_theme theme);
 
 /** Set (or clear, with NULL) the plot title drawn in the reserved top strip. */
 PH_API ph_result PH_CALL ph_plot_set_title(ph_plot plot, const char* title);
+
+/**
+ * Lock one data unit to the same number of pixels on both axes, or unlock it.
+ * Also settable once through `ph_plot_desc.equal_aspect`; this is the runtime
+ * half, and it re-fits either way — turning it on should balance the data
+ * extent, not whatever the free-aspect view happened to be.
+ *
+ * Anything whose shape carries meaning needs it: a pie, a sunburst, a chord
+ * diagram and a gauge are all circles, and without this they are ellipses.
+ */
+PH_API ph_result PH_CALL ph_plot_set_equal_aspect(ph_plot plot, ph_bool enabled);
 
 /**
  * Show or hide the colorbar stack. On by default, as in the core.
@@ -2054,6 +2072,263 @@ PH_API ph_result PH_CALL ph_plot_add_candlestick(ph_plot plot, const ph_candlest
 PH_API ph_result PH_CALL ph_plot_add_ohlc(ph_plot plot, const ph_ohlc_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_heatmap(ph_plot plot, const ph_heatmap_desc* desc, ph_layer* out);
 PH_API ph_result PH_CALL ph_plot_add_image(ph_plot plot, const ph_image_desc* desc, ph_layer* out);
+
+/* ------------------------------------------------------------------------ */
+/* Composed charts                                                            */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Seven diagrams that are not layers.
+ *
+ * A treemap, a funnel, a sunburst, a Sankey, a chord, a gauge and parallel
+ * coordinates are all *layouts*: they turn values into polygon rings, which the
+ * patches layer then draws. None of them needed a shader, and none of them adds
+ * a layer type — ph_plot_add_treemap returns an ordinary ph_layer holding
+ * ordinary patches, which is why it can be hidden, destroyed and legended like
+ * anything else.
+ *
+ * Where a chart names its parts, the names are drawn as label annotations on
+ * the plot rather than being part of the layer. Destroying the layer therefore
+ * leaves the labels; ph_plot_clear_annotations removes them. That is the same
+ * split the web core has, for the same reason: a label is a note about a chart,
+ * not a piece of one.
+ */
+
+/** One weighted, labelled item. PH_COLOR_AUTO cycles the palette. */
+typedef struct ph_chart_item {
+  const char* label;
+  double      value;
+  ph_color    color;
+} ph_chart_item;
+
+/**
+ * Squarified treemap: rectangles sized in proportion to value, packed with
+ * aspect ratios near one. Items with a value of zero or less take no space.
+ */
+typedef struct ph_treemap_desc {
+  uint32_t             struct_size;
+  const ph_chart_item* items;
+  int32_t              item_count;
+  /** The rectangle to fill. An empty range on either axis means 0..1. */
+  ph_range             x;
+  ph_range             y;
+  /** Palette cycled by item index. NULL means tableau10. */
+  const char*          palette;
+  float                opacity;
+  const char*          name;
+  ph_render_type       render_type;
+  /** Suppress the per-cell labels, which are on by default. */
+  ph_bool              no_labels;
+} ph_treemap_desc;
+
+PH_API void PH_CALL ph_treemap_desc_init(ph_treemap_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_treemap(ph_plot plot, const ph_treemap_desc* desc,
+                                             ph_layer* out);
+
+/**
+ * Centred trapezoids stacked top to bottom, each stage's top width proportional
+ * to its value and its bottom width to the next stage's.
+ */
+typedef struct ph_funnel_desc {
+  uint32_t             struct_size;
+  const ph_chart_item* items;
+  int32_t              item_count;
+  /** Full width the largest stage spans. 0 means 1. */
+  double               width;
+  /** Total stack height. 0 means 1. */
+  double               height;
+  /** The last stage's bottom width as a fraction of its own. 0 means 0.4. */
+  double               neck;
+  const char*          palette;
+  float                opacity;
+  const char*          name;
+  ph_render_type       render_type;
+  ph_bool              no_labels;
+} ph_funnel_desc;
+
+PH_API void PH_CALL ph_funnel_desc_init(ph_funnel_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_funnel(ph_plot plot, const ph_funnel_desc* desc,
+                                            ph_layer* out);
+
+/**
+ * One node of a hierarchy, flattened: `parent` indexes the same array, or is -1
+ * for a root. A child must come after its parent — which is what lets the value
+ * roll-up be one pass rather than a recursion with a stack depth nobody bounds.
+ */
+typedef struct ph_tree_node {
+  const char* name;
+  int32_t     parent;
+  /** Counts only for a leaf; a node with children takes their sum. */
+  double      value;
+  ph_color    color;
+} ph_tree_node;
+
+/** A radial icicle: one ring per depth, angular span by summed leaf value. */
+typedef struct ph_sunburst_desc {
+  uint32_t            struct_size;
+  const ph_tree_node* nodes;
+  int32_t             node_count;
+  /** Radial thickness of each ring. 0 means 1. */
+  double              ring_width;
+  /** Inner radius of the root ring — the hole in the middle. */
+  double              center;
+  /** Angle of the first edge, radians. 0 means twelve o'clock. */
+  double              start_angle;
+  const char*         palette;
+  float               opacity;
+  const char*         name;
+  ph_render_type      render_type;
+} ph_sunburst_desc;
+
+PH_API void PH_CALL ph_sunburst_desc_init(ph_sunburst_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_sunburst(ph_plot plot, const ph_sunburst_desc* desc,
+                                              ph_layer* out);
+
+/** A flow from one node index to another. */
+typedef struct ph_flow {
+  int32_t source;
+  int32_t target;
+  double  value;
+} ph_flow;
+
+/** A node in a flow diagram. */
+typedef struct ph_flow_node {
+  const char* name;
+  ph_color    color;
+} ph_flow_node;
+
+/**
+ * Sankey: nodes in columns by longest path from a source, stacked by
+ * throughput, joined by bezier ribbons whose thickness is their value. A link
+ * naming a node that does not exist is skipped rather than refused — a flow
+ * table usually arrives from data, and one bad row should not lose the rest.
+ */
+typedef struct ph_sankey_desc {
+  uint32_t             struct_size;
+  const ph_flow_node*  nodes;
+  int32_t              node_count;
+  const ph_flow*       links;
+  int32_t              link_count;
+  /** The drawing box. An empty range on either axis means 0..1. */
+  ph_range             x;
+  ph_range             y;
+  /** Node rectangle width along x. 0 means 0.02. */
+  double               node_width;
+  /** Gap between stacked nodes as a fraction of the y extent. 0 means 0.02. */
+  double               node_padding;
+  const char*          palette;
+  float                opacity;
+  /** Ribbon alpha, so overlapping flows read through each other. 0 means 0.5. */
+  float                ribbon_opacity;
+  const char*          name;
+  ph_render_type       render_type;
+  ph_bool              no_labels;
+} ph_sankey_desc;
+
+PH_API void PH_CALL ph_sankey_desc_init(ph_sankey_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_sankey(ph_plot plot, const ph_sankey_desc* desc,
+                                            ph_layer* out);
+
+/**
+ * Chord: groups around a circle with spans by row sum, joined by ribbons that
+ * curve through the centre. `matrix` is row-major `count * count`.
+ *
+ * Set the plot to an equal aspect, or the circle is an ellipse.
+ */
+typedef struct ph_chord_desc {
+  uint32_t           struct_size;
+  const double*      matrix;
+  int32_t            count;
+  /** Group labels placed just outside each arc. NULL for none. */
+  const char* const* labels;
+  int32_t            label_count;
+  /** Outer radius. 0 means 1. */
+  double             radius;
+  /** Total angular gap split between the groups, radians. 0 means 0.1 * 2pi. */
+  double             pad_angle;
+  /** Arc thickness as a fraction of the radius. 0 means 0.06. */
+  double             arc_width;
+  const char*        palette;
+  /** Ribbon alpha. 0 means 0.65. */
+  float              ribbon_opacity;
+  const char*        name;
+  ph_render_type     render_type;
+} ph_chord_desc;
+
+PH_API void PH_CALL ph_chord_desc_init(ph_chord_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_chord(ph_plot plot, const ph_chord_desc* desc, ph_layer* out);
+
+/** A `{value, colour}` band; the arc takes the colour of the highest one reached. */
+typedef struct ph_gauge_threshold {
+  double   value;
+  ph_color color;
+} ph_gauge_threshold;
+
+/** A radial gauge: a background track, a value arc and a needle, centred at 0,0. */
+typedef struct ph_gauge_desc {
+  uint32_t                  struct_size;
+  double                    value;
+  /** Value at the start of the sweep. */
+  double                    min;
+  /** Value at the end of the sweep. 0 means 100. */
+  double                    max;
+  const ph_gauge_threshold* thresholds;
+  int32_t                   threshold_count;
+  /** Value-arc colour when no threshold applies. */
+  ph_color                  color;
+  ph_color                  track_color;
+  ph_color                  needle_color;
+  /** Sweep start in degrees. 0 means 200. */
+  double                    start_angle;
+  /** Sweep end in degrees. 0 means -20. */
+  double                    end_angle;
+  /** Outer radius. 0 means 1. Inner radius 0 means 0.7. */
+  double                    radius;
+  double                    inner_radius;
+  /** Centre caption. NULL prints the value; `no_label` omits it entirely. */
+  const char*               label;
+  ph_bool                   no_label;
+  const char*               name;
+  ph_render_type            render_type;
+} ph_gauge_desc;
+
+PH_API void PH_CALL ph_gauge_desc_init(ph_gauge_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_gauge(ph_plot plot, const ph_gauge_desc* desc, ph_layer* out);
+
+/**
+ * Parallel coordinates: one polyline per row across `dim_count` vertical axes,
+ * each dimension normalised to 0..1 by its own observed range.
+ *
+ * Counted, and the only builder that is: a row is a line and a line is a layer,
+ * so this returns one handle per row. Call with `capacity = 0` to learn how
+ * many — which is simply `row_count`, but asking keeps the shape the same as
+ * every other counted call.
+ */
+typedef struct ph_parallel_desc {
+  uint32_t           struct_size;
+  const char* const* dimensions;
+  int32_t            dim_count;
+  /** Row-major `row_count * dim_count`. */
+  const double*      rows;
+  int32_t            row_count;
+  /** Optional per-row value banded through the palette. NULL cycles by index. */
+  const double*      color_by;
+  const char*        palette;
+  /** Polyline width in logical px. 0 means 1. */
+  float              width;
+  /** Line alpha, so a crowded plot still reads. 0 means 0.7. */
+  float              opacity;
+  /** Names the first row's layer, so one entry appears in the legend. */
+  const char*        name;
+  ph_render_type     render_type;
+  /** Suppress the axis guides and their names. */
+  ph_bool            no_axes;
+} ph_parallel_desc;
+
+PH_API void PH_CALL ph_parallel_desc_init(ph_parallel_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_parallel(ph_plot plot, const ph_parallel_desc* desc,
+                                              ph_layer* out_layers, int32_t capacity,
+                                              int32_t* out_count);
 
 /*
  * Every 2-D layer the web core has is here. The plot3d and polar families

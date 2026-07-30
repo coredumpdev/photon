@@ -154,6 +154,15 @@ void Plot::set_title(const char* title) {
   request_render();
 }
 
+void Plot::set_equal_aspect(bool on) {
+  if (equal_aspect_ == on) return;
+  equal_aspect_ = on;
+  // Re-fit either way: switching it on should balance the data extent rather
+  // than lock in whatever the previous free-aspect view happened to be.
+  autoscale();
+  request_render();
+}
+
 ph_annotation_id Plot::add_annotation(const ph_annotation& in) {
   render::Annotation out;
   out.type = in.type;

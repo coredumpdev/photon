@@ -1,5 +1,5 @@
 /**
- * The twenty-three demo charts, built with @photonviz/core.
+ * The twenty-nine demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -7,7 +7,10 @@
  * if one changes, both must.
  */
 
-import { Plot, bollinger, linearTrend, loess, pca, rocCurve, welch } from "@photonviz/core";
+import {
+  Plot, addChord, addGauge, addParallelCoordinates, addSankey, addSunburst, addTreemap,
+  bollinger, linearTrend, loess, pca, rocCurve, welch,
+} from "@photonviz/core";
 
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
@@ -35,6 +38,8 @@ const PSD_RATE = 256;
 const ROC_SAMPLES = 240;
 const EMBED_POINTS = 300;
 const EMBED_DIMS = 4;
+const PARALLEL_DIMS = 4;
+const PARALLEL_ROWS = 40;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -662,7 +667,119 @@ function embedding(container) {
   return plot;
 }
 
+/** Axes with no meaning to show: a composed chart's coordinates are arbitrary. */
+const bare = { showTicks: false, showGrid: false };
+
+function treemap(container) {
+  const products = ["Search", "Cloud", "Ads", "Devices", "Media", "Support", "Labs", "Other"];
+  const share = [38, 24, 16, 9, 6, 4, 2, 1];
+  const plot = new Plot(container, {
+    ...common,
+    title: "Treemap",
+    axes: { x: bare, y: bare },
+  });
+  addTreemap(plot, { items: products.map((label, i) => ({ label, value: share[i] })) });
+  return plot;
+}
+
+/** The regions-and-cities hierarchy the sunburst draws. */
+function hierarchy() {
+  return {
+    name: "world",
+    children: [
+      { name: "EMEA", children: [{ name: "London", value: 5 }, { name: "Berlin", value: 4 }, { name: "Paris", value: 3 }] },
+      { name: "APAC", children: [{ name: "Tokyo", value: 6 }, { name: "Seoul", value: 3 }, { name: "Sydney", value: 2 }] },
+      { name: "AMER", children: [{ name: "NYC", value: 7 }, { name: "SF", value: 5 }, { name: "Toronto", value: 2 }] },
+    ],
+  };
+}
+
+function sunburst(container) {
+  const plot = new Plot(container, {
+    ...common,
+    title: "Sunburst",
+    axes: { x: bare, y: bare },
+    // The rings are circles only if one data unit is the same length on both
+    // axes, which is the whole job of the equal-aspect lock.
+    equalAspect: true,
+  });
+  addSunburst(plot, { root: hierarchy() });
+  return plot;
+}
+
+function sankey(container) {
+  const names = ["coal", "gas", "grid", "loss", "homes", "works"];
+  const wiring = [[0, 2, 30], [1, 2, 45], [2, 3, 18], [2, 4, 34], [2, 5, 23], [1, 5, 6]];
+  const plot = new Plot(container, {
+    ...common,
+    title: "Sankey",
+    axes: { x: bare, y: bare },
+  });
+  addSankey(plot, {
+    nodes: names.map((name) => ({ name })),
+    links: wiring.map(([source, target, value]) => ({ source, target, value })),
+  });
+  return plot;
+}
+
+function chord(container) {
+  const trade = [[0, 12, 7, 4], [9, 0, 11, 3], [5, 8, 0, 14], [6, 2, 10, 0]];
+  const plot = new Plot(container, {
+    ...common,
+    title: "Chord",
+    axes: { x: bare, y: bare },
+    equalAspect: true,
+  });
+  addChord(plot, { matrix: trade, labels: ["EU", "US", "CN", "JP"] });
+  return plot;
+}
+
+function gauge(container) {
+  const plot = new Plot(container, {
+    ...common,
+    title: "Gauge",
+    axes: { x: bare, y: bare },
+    equalAspect: true,
+  });
+  addGauge(plot, {
+    value: 62,
+    thresholds: [{ value: 50, color: "#f59e0b" }, { value: 80, color: "#ef4444" }],
+    trackColor: "rgba(51,65,85,0.4)",
+    needleColor: "#e2e8f0",
+  });
+  return plot;
+}
+
+function parallel(container) {
+  const dims = ["sepal", "petal", "weight", "score"];
+  const rows = [];
+  const classes = [];
+  let seed = 19283746;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let r = 0; r < PARALLEL_ROWS; r++) {
+    const cls = r % 2;
+    classes.push(cls);
+    const row = [];
+    for (let d = 0; d < PARALLEL_DIMS; d++) {
+      const noise = (nextUnit() - 0.5) * 0.6;
+      row.push((cls ? 1 + d * 0.4 : 3 - d * 0.5) + noise);
+    }
+    rows.push(row);
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Parallel",
+    axes: { x: bare, y: { title: "normalised" } },
+  });
+  addParallelCoordinates(plot, { dimensions: dims, rows, colorBy: classes, width: 1.5 });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
                        candles, bars, density, flow, contour, network, signals,
-                       fit, spectrum, roc, embedding];
+                       fit, spectrum, roc, embedding, treemap, sunburst, sankey,
+                       chord, gauge, parallel];

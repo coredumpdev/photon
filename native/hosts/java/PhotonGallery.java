@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 23;
+    private static final int PANELS = 29;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -71,6 +71,13 @@ public final class PhotonGallery {
     private static final int ROC_SAMPLES = 240;
     private static final int EMBED_POINTS = 300;
     private static final int EMBED_DIMS = 4;
+    private static final int TREEMAP_ITEMS = 8;
+    private static final int TREE_NODES = 13;
+    private static final int FLOW_NODES = 6;
+    private static final int FLOW_LINKS = 6;
+    private static final int CHORD_GROUPS = 4;
+    private static final int PARALLEL_DIMS = 4;
+    private static final int PARALLEL_ROWS = 40;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -1207,6 +1214,215 @@ public final class PhotonGallery {
         }
     }
 
+    /** Axes with no meaning to show: a composed chart's coordinates are arbitrary. */
+    private static void bareAxes(long plot) {
+        try (Arena scratch = Arena.ofConfined()) {
+            for (String axis : new String[] {"x", "y"}) {
+                MemorySegment bare = ph_axis_config.allocate(scratch);
+                ph_axis_config_init(bare);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_TICKS, 1);
+                bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_GRID, 1);
+                ph_plot_set_axis_config(plot, scratch.allocateFrom(axis), bare);
+            }
+        }
+    }
+
+    /** Panel 23 — a squarified treemap of eight products. */
+    private static void buildTreemap(long plot) {
+        String[] products = {"Search", "Cloud", "Ads", "Devices", "Media", "Support", "Labs", "Other"};
+        double[] share = {38, 24, 16, 9, 6, 4, 2, 1};
+        MemorySegment items = ARENA.allocate(ph_chart_item.LAYOUT, TREEMAP_ITEMS);
+        for (int i = 0; i < TREEMAP_ITEMS; i++) {
+            long base = ph_chart_item.SIZE * i;
+            items.set(ValueLayout.ADDRESS, base + ph_chart_item.OFFSET_LABEL,
+                      ARENA.allocateFrom(products[i]));
+            items.set(ValueLayout.JAVA_DOUBLE, base + ph_chart_item.OFFSET_VALUE, share[i]);
+        }
+        setTitle(plot, "Treemap");
+        bareAxes(plot);
+
+        MemorySegment desc = ph_treemap_desc.allocate(ARENA);
+        ph_treemap_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_treemap_desc.OFFSET_ITEMS, items);
+        desc.set(ValueLayout.JAVA_INT, ph_treemap_desc.OFFSET_ITEM_COUNT, TREEMAP_ITEMS);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_treemap(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** The regions-and-cities hierarchy the sunburst draws, flattened. */
+    private static MemorySegment treeNodes() {
+        String[] names = {"world", "EMEA", "APAC", "AMER", "London", "Berlin", "Paris",
+                          "Tokyo", "Seoul", "Sydney", "NYC", "SF", "Toronto"};
+        int[] parent = {-1, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3};
+        double[] value = {0, 0, 0, 0, 5, 4, 3, 6, 3, 2, 7, 5, 2};
+        MemorySegment nodes = ARENA.allocate(ph_tree_node.LAYOUT, TREE_NODES);
+        for (int i = 0; i < TREE_NODES; i++) {
+            long base = ph_tree_node.SIZE * i;
+            nodes.set(ValueLayout.ADDRESS, base + ph_tree_node.OFFSET_NAME,
+                      ARENA.allocateFrom(names[i]));
+            nodes.set(ValueLayout.JAVA_INT, base + ph_tree_node.OFFSET_PARENT, parent[i]);
+            nodes.set(ValueLayout.JAVA_DOUBLE, base + ph_tree_node.OFFSET_VALUE, value[i]);
+        }
+        return nodes;
+    }
+
+    /** Panel 24 — the same kind of data as a hierarchy, drawn radially. */
+    private static void buildSunburst(long plot) {
+        setTitle(plot, "Sunburst");
+        bareAxes(plot);
+        // The rings are circles only if one data unit is the same length on
+        // both axes, which is the whole job of the equal-aspect lock.
+        ph_plot_set_equal_aspect(plot, 1);
+
+        MemorySegment desc = ph_sunburst_desc.allocate(ARENA);
+        ph_sunburst_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_sunburst_desc.OFFSET_NODES, treeNodes());
+        desc.set(ValueLayout.JAVA_INT, ph_sunburst_desc.OFFSET_NODE_COUNT, TREE_NODES);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_sunburst(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 25 — where the energy goes. */
+    private static void buildSankey(long plot) {
+        String[] names = {"coal", "gas", "grid", "loss", "homes", "works"};
+        int[][] wiring = {{0, 2, 30}, {1, 2, 45}, {2, 3, 18}, {2, 4, 34}, {2, 5, 23}, {1, 5, 6}};
+        MemorySegment nodes = ARENA.allocate(ph_flow_node.LAYOUT, FLOW_NODES);
+        for (int i = 0; i < FLOW_NODES; i++) {
+            nodes.set(ValueLayout.ADDRESS, ph_flow_node.SIZE * i + ph_flow_node.OFFSET_NAME,
+                      ARENA.allocateFrom(names[i]));
+        }
+        MemorySegment links = ARENA.allocate(ph_flow.LAYOUT, FLOW_LINKS);
+        for (int i = 0; i < FLOW_LINKS; i++) {
+            long base = ph_flow.SIZE * i;
+            links.set(ValueLayout.JAVA_INT, base + ph_flow.OFFSET_SOURCE, wiring[i][0]);
+            links.set(ValueLayout.JAVA_INT, base + ph_flow.OFFSET_TARGET, wiring[i][1]);
+            links.set(ValueLayout.JAVA_DOUBLE, base + ph_flow.OFFSET_VALUE, wiring[i][2]);
+        }
+        setTitle(plot, "Sankey");
+        bareAxes(plot);
+
+        MemorySegment desc = ph_sankey_desc.allocate(ARENA);
+        ph_sankey_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_sankey_desc.OFFSET_NODES, nodes);
+        desc.set(ValueLayout.JAVA_INT, ph_sankey_desc.OFFSET_NODE_COUNT, FLOW_NODES);
+        desc.set(ValueLayout.ADDRESS, ph_sankey_desc.OFFSET_LINKS, links);
+        desc.set(ValueLayout.JAVA_INT, ph_sankey_desc.OFFSET_LINK_COUNT, FLOW_LINKS);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_sankey(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 26 — a trade matrix as a chord diagram. */
+    private static void buildChord(long plot) {
+        String[] regions = {"EU", "US", "CN", "JP"};
+        double[] trade = {0, 12, 7, 4, 9, 0, 11, 3, 5, 8, 0, 14, 6, 2, 10, 0};
+        MemorySegment matrix = doubles(CHORD_GROUPS * CHORD_GROUPS);
+        for (int i = 0; i < trade.length; i++) {
+            matrix.setAtIndex(ValueLayout.JAVA_DOUBLE, i, trade[i]);
+        }
+        MemorySegment labels = ARENA.allocate(ValueLayout.ADDRESS, CHORD_GROUPS);
+        for (int i = 0; i < CHORD_GROUPS; i++) {
+            labels.setAtIndex(ValueLayout.ADDRESS, i, ARENA.allocateFrom(regions[i]));
+        }
+        setTitle(plot, "Chord");
+        bareAxes(plot);
+        ph_plot_set_equal_aspect(plot, 1);
+
+        MemorySegment desc = ph_chord_desc.allocate(ARENA);
+        ph_chord_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_chord_desc.OFFSET_MATRIX, matrix);
+        desc.set(ValueLayout.JAVA_INT, ph_chord_desc.OFFSET_COUNT, CHORD_GROUPS);
+        desc.set(ValueLayout.ADDRESS, ph_chord_desc.OFFSET_LABELS, labels);
+        desc.set(ValueLayout.JAVA_INT, ph_chord_desc.OFFSET_LABEL_COUNT, CHORD_GROUPS);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_chord(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 27 — a gauge with two threshold bands. */
+    private static void buildGauge(long plot) {
+        MemorySegment bands = ARENA.allocate(ph_gauge_threshold.LAYOUT, 2);
+        bands.set(ValueLayout.JAVA_DOUBLE, ph_gauge_threshold.OFFSET_VALUE, 50.0);
+        bands.set(ValueLayout.JAVA_INT, ph_gauge_threshold.OFFSET_COLOR, color("#f59e0b"));
+        bands.set(ValueLayout.JAVA_DOUBLE,
+                  ph_gauge_threshold.SIZE + ph_gauge_threshold.OFFSET_VALUE, 80.0);
+        bands.set(ValueLayout.JAVA_INT,
+                  ph_gauge_threshold.SIZE + ph_gauge_threshold.OFFSET_COLOR, color("#ef4444"));
+
+        setTitle(plot, "Gauge");
+        bareAxes(plot);
+        ph_plot_set_equal_aspect(plot, 1);
+
+        MemorySegment desc = ph_gauge_desc.allocate(ARENA);
+        ph_gauge_desc_init(desc);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_gauge_desc.OFFSET_VALUE, 62.0);
+        desc.set(ValueLayout.ADDRESS, ph_gauge_desc.OFFSET_THRESHOLDS, bands);
+        desc.set(ValueLayout.JAVA_INT, ph_gauge_desc.OFFSET_THRESHOLD_COUNT, 2);
+        desc.set(ValueLayout.JAVA_INT, ph_gauge_desc.OFFSET_TRACK_COLOR, color("#33415566"));
+        desc.set(ValueLayout.JAVA_INT, ph_gauge_desc.OFFSET_NEEDLE_COLOR, color("#e2e8f0"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_gauge(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /**
+     * Panel 28 — parallel coordinates over two classes.
+     *
+     * The one builder that returns several layers, because a row is a line and
+     * a line is a layer: forty rows, forty handles.
+     */
+    private static void buildParallel(long plot) {
+        String[] dims = {"sepal", "petal", "weight", "score"};
+        MemorySegment rows = doubles(PARALLEL_ROWS * PARALLEL_DIMS);
+        MemorySegment classes = doubles(PARALLEL_ROWS);
+        int seed = 19283746;
+        for (int r = 0; r < PARALLEL_ROWS; r++) {
+            int cls = r % 2;
+            classes.setAtIndex(ValueLayout.JAVA_DOUBLE, r, cls);
+            for (int d = 0; d < PARALLEL_DIMS; d++) {
+                seed = seed * 1664525 + 1013904223;
+                double noise = (((seed >>> 8) & 0xFFFFFF) / 16777216.0 - 0.5) * 0.6;
+                double base = cls == 1 ? 1.0 + d * 0.4 : 3.0 - d * 0.5;
+                rows.setAtIndex(ValueLayout.JAVA_DOUBLE, r * PARALLEL_DIMS + d, base + noise);
+            }
+        }
+        MemorySegment names = ARENA.allocate(ValueLayout.ADDRESS, PARALLEL_DIMS);
+        for (int i = 0; i < PARALLEL_DIMS; i++) {
+            names.setAtIndex(ValueLayout.ADDRESS, i, ARENA.allocateFrom(dims[i]));
+        }
+
+        setTitle(plot, "Parallel");
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment bare = ph_axis_config.allocate(scratch);
+            ph_axis_config_init(bare);
+            bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_TICKS, 1);
+            bare.set(ValueLayout.JAVA_INT, ph_axis_config.OFFSET_NO_GRID, 1);
+            ph_plot_set_axis_config(plot, scratch.allocateFrom("x"), bare);
+        }
+        styleAxis(plot, "y", "normalised", 0);
+
+        MemorySegment desc = ph_parallel_desc.allocate(ARENA);
+        ph_parallel_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_parallel_desc.OFFSET_DIMENSIONS, names);
+        desc.set(ValueLayout.JAVA_INT, ph_parallel_desc.OFFSET_DIM_COUNT, PARALLEL_DIMS);
+        desc.set(ValueLayout.ADDRESS, ph_parallel_desc.OFFSET_ROWS, rows);
+        desc.set(ValueLayout.JAVA_INT, ph_parallel_desc.OFFSET_ROW_COUNT, PARALLEL_ROWS);
+        desc.set(ValueLayout.ADDRESS, ph_parallel_desc.OFFSET_COLOR_BY, classes);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_parallel_desc.OFFSET_WIDTH, 1.5f);
+        MemorySegment layers = ARENA.allocate(ValueLayout.JAVA_LONG, PARALLEL_ROWS);
+        MemorySegment written = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_plot_add_parallel(plot, desc, layers, PARALLEL_ROWS, written) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1447,6 +1663,12 @@ public final class PhotonGallery {
         buildSpectrum(plots[20]);
         buildRoc(plots[21]);
         buildEmbedding(plots[22]);
+        buildTreemap(plots[23]);
+        buildSunburst(plots[24]);
+        buildSankey(plots[25]);
+        buildChord(plots[26]);
+        buildGauge(plots[27]);
+        buildParallel(plots[28]);
 
         installCallbacks();
 

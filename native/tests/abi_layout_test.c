@@ -580,11 +580,148 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_y) == 88, "ph_event.point_y offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, point_index) == 96, "ph_event.point_index offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_chart_item) == 24, "ph_chart_item size");
+PH_ASSERT_LAYOUT(_Alignof(ph_chart_item) == 8, "ph_chart_item alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_chart_item, label) == 0, "ph_chart_item.label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chart_item, value) == 8, "ph_chart_item.value offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chart_item, color) == 16, "ph_chart_item.color offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_treemap_desc) == 88, "ph_treemap_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_treemap_desc) == 8, "ph_treemap_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, struct_size) == 0, "ph_treemap_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, items) == 8, "ph_treemap_desc.items offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, item_count) == 16, "ph_treemap_desc.item_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, x) == 24, "ph_treemap_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, y) == 40, "ph_treemap_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, palette) == 56, "ph_treemap_desc.palette offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, opacity) == 64, "ph_treemap_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, name) == 72, "ph_treemap_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, render_type) == 80, "ph_treemap_desc.render_type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_treemap_desc, no_labels) == 84, "ph_treemap_desc.no_labels offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_funnel_desc) == 80, "ph_funnel_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_funnel_desc) == 8, "ph_funnel_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, struct_size) == 0, "ph_funnel_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, items) == 8, "ph_funnel_desc.items offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, item_count) == 16, "ph_funnel_desc.item_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, width) == 24, "ph_funnel_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, height) == 32, "ph_funnel_desc.height offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, neck) == 40, "ph_funnel_desc.neck offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, palette) == 48, "ph_funnel_desc.palette offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, opacity) == 56, "ph_funnel_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, name) == 64, "ph_funnel_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, render_type) == 72, "ph_funnel_desc.render_type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_funnel_desc, no_labels) == 76, "ph_funnel_desc.no_labels offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_tree_node) == 32, "ph_tree_node size");
+PH_ASSERT_LAYOUT(_Alignof(ph_tree_node) == 8, "ph_tree_node alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_tree_node, name) == 0, "ph_tree_node.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_tree_node, parent) == 8, "ph_tree_node.parent offset");
+PH_ASSERT_LAYOUT(offsetof(ph_tree_node, value) == 16, "ph_tree_node.value offset");
+PH_ASSERT_LAYOUT(offsetof(ph_tree_node, color) == 24, "ph_tree_node.color offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_sunburst_desc) == 80, "ph_sunburst_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_sunburst_desc) == 8, "ph_sunburst_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, struct_size) == 0, "ph_sunburst_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, nodes) == 8, "ph_sunburst_desc.nodes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, node_count) == 16, "ph_sunburst_desc.node_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, ring_width) == 24, "ph_sunburst_desc.ring_width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, center) == 32, "ph_sunburst_desc.center offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, start_angle) == 40, "ph_sunburst_desc.start_angle offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, palette) == 48, "ph_sunburst_desc.palette offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, opacity) == 56, "ph_sunburst_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, name) == 64, "ph_sunburst_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sunburst_desc, render_type) == 72, "ph_sunburst_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_flow) == 16, "ph_flow size");
+PH_ASSERT_LAYOUT(_Alignof(ph_flow) == 8, "ph_flow alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_flow, source) == 0, "ph_flow.source offset");
+PH_ASSERT_LAYOUT(offsetof(ph_flow, target) == 4, "ph_flow.target offset");
+PH_ASSERT_LAYOUT(offsetof(ph_flow, value) == 8, "ph_flow.value offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_flow_node) == 16, "ph_flow_node size");
+PH_ASSERT_LAYOUT(_Alignof(ph_flow_node) == 8, "ph_flow_node alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_flow_node, name) == 0, "ph_flow_node.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_flow_node, color) == 8, "ph_flow_node.color offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_sankey_desc) == 120, "ph_sankey_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_sankey_desc) == 8, "ph_sankey_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, struct_size) == 0, "ph_sankey_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, nodes) == 8, "ph_sankey_desc.nodes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, node_count) == 16, "ph_sankey_desc.node_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, links) == 24, "ph_sankey_desc.links offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, link_count) == 32, "ph_sankey_desc.link_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, x) == 40, "ph_sankey_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, y) == 56, "ph_sankey_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, node_width) == 72, "ph_sankey_desc.node_width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, node_padding) == 80, "ph_sankey_desc.node_padding offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, palette) == 88, "ph_sankey_desc.palette offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, opacity) == 96, "ph_sankey_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, ribbon_opacity) == 100, "ph_sankey_desc.ribbon_opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, name) == 104, "ph_sankey_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, render_type) == 112, "ph_sankey_desc.render_type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_sankey_desc, no_labels) == 116, "ph_sankey_desc.no_labels offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_chord_desc) == 96, "ph_chord_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_chord_desc) == 8, "ph_chord_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, struct_size) == 0, "ph_chord_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, matrix) == 8, "ph_chord_desc.matrix offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, count) == 16, "ph_chord_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, labels) == 24, "ph_chord_desc.labels offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, label_count) == 32, "ph_chord_desc.label_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, radius) == 40, "ph_chord_desc.radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, pad_angle) == 48, "ph_chord_desc.pad_angle offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, arc_width) == 56, "ph_chord_desc.arc_width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, palette) == 64, "ph_chord_desc.palette offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, ribbon_opacity) == 72, "ph_chord_desc.ribbon_opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, name) == 80, "ph_chord_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_chord_desc, render_type) == 88, "ph_chord_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_gauge_threshold) == 16, "ph_gauge_threshold size");
+PH_ASSERT_LAYOUT(_Alignof(ph_gauge_threshold) == 8, "ph_gauge_threshold alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_threshold, value) == 0, "ph_gauge_threshold.value offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_threshold, color) == 8, "ph_gauge_threshold.color offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_gauge_desc) == 120, "ph_gauge_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_gauge_desc) == 8, "ph_gauge_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, struct_size) == 0, "ph_gauge_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, value) == 8, "ph_gauge_desc.value offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, min) == 16, "ph_gauge_desc.min offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, max) == 24, "ph_gauge_desc.max offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, thresholds) == 32, "ph_gauge_desc.thresholds offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, threshold_count) == 40, "ph_gauge_desc.threshold_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, color) == 44, "ph_gauge_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, track_color) == 48, "ph_gauge_desc.track_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, needle_color) == 52, "ph_gauge_desc.needle_color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, start_angle) == 56, "ph_gauge_desc.start_angle offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, end_angle) == 64, "ph_gauge_desc.end_angle offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, radius) == 72, "ph_gauge_desc.radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, inner_radius) == 80, "ph_gauge_desc.inner_radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, label) == 88, "ph_gauge_desc.label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, no_label) == 96, "ph_gauge_desc.no_label offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, name) == 104, "ph_gauge_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, render_type) == 112, "ph_gauge_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_parallel_desc) == 80, "ph_parallel_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_parallel_desc) == 8, "ph_parallel_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, struct_size) == 0, "ph_parallel_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, dimensions) == 8, "ph_parallel_desc.dimensions offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, dim_count) == 16, "ph_parallel_desc.dim_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, rows) == 24, "ph_parallel_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, row_count) == 32, "ph_parallel_desc.row_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, color_by) == 40, "ph_parallel_desc.color_by offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, palette) == 48, "ph_parallel_desc.palette offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, width) == 56, "ph_parallel_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, opacity) == 60, "ph_parallel_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, name) == 64, "ph_parallel_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, render_type) == 72, "ph_parallel_desc.render_type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, no_axes) == 76, "ph_parallel_desc.no_axes offset");
+
 #endif  /* 64-bit */
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 45);
+  printf("%d struct layouts match the generated bindings\n", 57);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

@@ -110,6 +110,11 @@ class Plot {
   void set_pick_mode(ph_pick_mode mode) { pick_ = mode; }
   /// Add an annotation and return its id. Copies everything it points at.
   ph_annotation_id add_annotation(const ph_annotation& annotation);
+
+  /// Turn the equal-aspect lock on or off, re-fitting either way — switching it
+  /// on should balance the data extent rather than whatever the free-aspect
+  /// view happened to be.
+  void set_equal_aspect(bool on);
   bool remove_annotation(ph_annotation_id id);
   void clear_annotations();
 
