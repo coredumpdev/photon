@@ -236,6 +236,10 @@ const PANELS = [
   // there is no grid line to see in either image, and the two GL
   // implementations resolve the quad's edge column differently.
   ["Spectrogram", 1280, 2520, { grid: false }],
+  // Bands and Mesh cover their whole region, the same as Field: nothing draws a
+  // grid line either core could be compared on.
+  ["Bands", 2560, 2520, { grid: false }], ["Mesh", 0, 2940, { grid: false }],
+  ["Streamlines", 640, 2940], ["Barbs", 1280, 2940],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

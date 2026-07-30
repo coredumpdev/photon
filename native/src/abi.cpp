@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "charts/diagrams.hpp"
+#include "charts/fields.hpp"
 #include "color/colormap.hpp"
 #include "data/csv.hpp"
 #include "data/downsample.hpp"
@@ -3016,6 +3017,312 @@ extern "C" ph_result PH_CALL ph_plot_add_gauge(ph_plot handle, const ph_gauge_de
       text.assign(buffer, written.ec == std::errc() ? written.ptr : buffer);
     }
     add_label(plot, 0.0, -0.15, text.c_str());
+  }
+  return PH_OK;
+}
+
+namespace {
+
+/// The colormap a descriptor asks for, resolved to a live table.
+const photon::color::Lut& lut_of(const ph_colormap_spec* desc) {
+  photon::color::Spec spec;
+  if (desc) {
+    if (desc->name) spec.name = desc->name;
+    if (desc->stops && desc->stop_count > 0) {
+      spec.stops.reserve(static_cast<size_t>(desc->stop_count));
+      for (int32_t i = 0; i < desc->stop_count; ++i) {
+        const photon::Rgba c = photon::unpack_color_exact(desc->stops[i]);
+        spec.stops.push_back(photon::color::Rgb{c.r, c.g, c.b});
+      }
+    }
+    spec.reverse = desc->reverse != 0;
+    spec.discrete_steps = desc->discrete_steps;
+  }
+  return photon::color::lut(spec);
+}
+
+/// A ramp sample as a packed colour, for a builder that colours its own patches.
+ph_color ramp_color(const photon::color::Lut& lut, ph_range domain, double value) {
+  const double span = domain.hi - domain.lo;
+  const photon::color::Rgb c =
+      photon::color::sample(lut, span == 0.0 ? 0.0 : (value - domain.lo) / span);
+  const auto byte = [](float v) {
+    const float clamped = v <= 0.0f ? 0.0f : (v >= 1.0f ? 1.0f : v);
+    return static_cast<uint32_t>(clamped * 255.0f + 0.5f);
+  };
+  return (byte(c.r) << 24) | (byte(c.g) << 16) | (byte(c.b) << 8) | 0xFFu;
+}
+
+}  // namespace
+
+extern "C" void PH_CALL ph_contourf_desc_init(ph_contourf_desc* out) {
+  if (!out) return;
+  *out = ph_contourf_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_contourf_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_contourf(ph_plot handle, const ph_contourf_desc* desc,
+                                                  ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_contourf_desc.struct_size is larger than this build's");
+  }
+  const ph_contourf_desc d = normalize(desc, ph_contourf_desc_init);
+  if (d.cols < 2 || d.rows < 2) {
+    return fail(PH_E_INVALID_ARGUMENT, "a filled contour needs at least a 2x2 grid");
+  }
+  if (!d.values) return fail(PH_E_INVALID_ARGUMENT, "values must be non-null");
+  if (d.level_count < 0) return fail(PH_E_INVALID_ARGUMENT, "level_count must be non-negative");
+  if (d.level_count > 0 && !d.level_values) {
+    return fail(PH_E_INVALID_ARGUMENT, "level_values must be non-null when level_count > 0");
+  }
+
+  const size_t cols = static_cast<size_t>(d.cols);
+  const size_t rows = static_cast<size_t>(d.rows);
+  std::vector<double> explicit_levels;
+  if (d.level_values && d.level_count > 0) {
+    explicit_levels.assign(d.level_values, d.level_values + d.level_count);
+  }
+  const int level_count = d.levels > 0 ? d.levels : 8;
+  const std::vector<charts::Isoband> bands =
+      charts::isobands(d.values, cols, rows, d.x.lo, d.y.lo, d.x.hi, d.y.hi, level_count,
+                       explicit_levels);
+
+  // The colorbar reads the level span, not the data's — a band is drawn at its
+  // midpoint, and a domain measured from the midpoints would be too narrow.
+  ph_range domain = d.domain;
+  if (domain.lo == domain.hi) {
+    std::vector<double> bounds = explicit_levels;
+    if (bounds.empty()) bounds = charts::auto_levels(d.values, cols * rows, level_count);
+    std::sort(bounds.begin(), bounds.end());
+    domain = bounds.size() >= 2 ? ph_range{bounds.front(), bounds.back()} : ph_range{0.0, 1.0};
+  }
+  const photon::color::Lut& lut = lut_of(d.colormap);
+
+  PatchStore store;
+  std::vector<double> midpoints;
+  midpoints.reserve(bands.size());
+  for (const charts::Isoband& band : bands) {
+    charts::Ring ring;
+    ring.x = band.ring.x;
+    ring.y = band.ring.y;
+    midpoints.push_back((band.lo + band.hi) / 2.0);
+    store.add(std::move(ring), ramp_color(lut, domain, midpoints.back()));
+  }
+
+  ph_patches_desc patches{};
+  ph_patches_desc_init(&patches);
+  patches.patches = store.finish();
+  patches.patch_count = static_cast<int32_t>(store.patches.size());
+  patches.opacity = d.opacity;
+  patches.name = d.name;
+  patches.y_axis = d.y_axis;
+  patches.render_type = d.render_type;
+  // The values go through as well as the colours: that is what earns the layer
+  // its colorbar, and it is the same ramp either way.
+  patches.values = midpoints.data();
+  patches.colormap = d.colormap;
+  patches.domain = domain;
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::PatchesLayer>(patches), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the filled contour layer");
+  }
+}
+
+extern "C" void PH_CALL ph_pcolormesh_desc_init(ph_pcolormesh_desc* out) {
+  if (!out) return;
+  *out = ph_pcolormesh_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_pcolormesh_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_pcolormesh(ph_plot handle,
+                                                    const ph_pcolormesh_desc* desc,
+                                                    ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_pcolormesh_desc.struct_size is larger than this build's");
+  }
+  const ph_pcolormesh_desc d = normalize(desc, ph_pcolormesh_desc_init);
+  if (d.cols < 1 || d.rows < 1) return fail(PH_E_INVALID_ARGUMENT, "cols and rows must be positive");
+  if (!d.values || !d.x_edges || !d.y_edges) {
+    return fail(PH_E_INVALID_ARGUMENT, "values, x_edges and y_edges must be non-null");
+  }
+
+  const size_t cols = static_cast<size_t>(d.cols);
+  const size_t rows = static_cast<size_t>(d.rows);
+  const std::vector<charts::MeshCell> cells =
+      charts::pcolormesh(d.values, d.x_edges, d.y_edges, cols, rows, d.curvilinear != 0);
+
+  std::vector<double> values;
+  values.reserve(cells.size());
+  PatchStore store;
+  for (const charts::MeshCell& cell : cells) {
+    charts::Ring ring;
+    ring.x = cell.ring.x;
+    ring.y = cell.ring.y;
+    values.push_back(cell.value);
+    store.add(std::move(ring), PH_COLOR_AUTO);
+  }
+
+  ph_patches_desc patches{};
+  ph_patches_desc_init(&patches);
+  patches.patches = store.finish();
+  patches.patch_count = static_cast<int32_t>(store.patches.size());
+  patches.opacity = d.opacity;
+  patches.name = d.name;
+  patches.y_axis = d.y_axis;
+  patches.render_type = d.render_type;
+  patches.values = values.data();
+  patches.colormap = d.colormap;
+  patches.domain = d.domain;
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::PatchesLayer>(patches), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the colour mesh layer");
+  }
+}
+
+extern "C" void PH_CALL ph_streamplot_desc_init(ph_streamplot_desc* out) {
+  if (!out) return;
+  *out = ph_streamplot_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_streamplot_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_streamplot(ph_plot handle,
+                                                    const ph_streamplot_desc* desc,
+                                                    ph_layer* out_layers, int32_t capacity,
+                                                    int32_t* out_count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_streamplot_desc.struct_size is larger than this build's");
+  }
+  const ph_streamplot_desc d = normalize(desc, ph_streamplot_desc_init);
+  if (d.cols < 2 || d.rows < 2) {
+    return fail(PH_E_INVALID_ARGUMENT, "a streamplot needs at least a 2x2 field");
+  }
+  if (!d.u || !d.v) return fail(PH_E_INVALID_ARGUMENT, "u and v must be non-null");
+
+  const std::vector<charts::Streamline> traced = charts::streamlines(
+      d.u, d.v, static_cast<size_t>(d.cols), static_cast<size_t>(d.rows), d.x.lo, d.y.lo, d.x.hi,
+      d.y.hi, d.density, d.step, d.max_steps);
+  *out_count = static_cast<int32_t>(traced.size());
+  if (capacity == 0) return PH_OK;
+  if (!out_layers) return fail(PH_E_INVALID_ARGUMENT, "out_layers must be non-null");
+
+  ph_range speed{0.0, 1.0};
+  if (!traced.empty()) {
+    speed.lo = traced.front().speed;
+    speed.hi = traced.front().speed;
+    for (const charts::Streamline& line : traced) {
+      speed.lo = std::min(speed.lo, line.speed);
+      speed.hi = std::max(speed.hi, line.speed);
+    }
+    if (speed.lo == speed.hi) speed.hi = speed.lo + 1.0;
+  }
+  const photon::color::Lut& lut = lut_of(d.colormap);
+
+  const size_t writable = std::min(traced.size(), static_cast<size_t>(capacity));
+  for (size_t i = 0; i < writable; ++i) {
+    ph_line_desc line{};
+    ph_line_desc_init(&line);
+    line.x = traced[i].x.data();
+    line.y = traced[i].y.data();
+    line.count = static_cast<int32_t>(traced[i].x.size());
+    line.color = d.color_by_speed ? ramp_color(lut, speed, traced[i].speed) : d.color;
+    line.width = d.width > 0.0f ? d.width : 1.25f;
+    line.y_axis = d.y_axis;
+    line.render_type = d.render_type;
+    // A streamline doubles back on itself, and decimation assumes a monotonic
+    // x — it would delete exactly the loops the chart exists to show.
+    line.no_decimate = 1;
+    if (i == 0) line.name = d.name;
+    try {
+      const ph_result added =
+          register_layer(handle, plot, std::make_unique<photon::LineLayer>(line), &out_layers[i]);
+      if (added != PH_OK) return added;
+    } catch (const std::bad_alloc&) {
+      return fail(PH_E_OUT_OF_MEMORY, "out of memory creating a streamline");
+    }
+  }
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_barbs_desc_init(ph_barbs_desc* out) {
+  if (!out) return;
+  *out = ph_barbs_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_barbs_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_barbs(ph_plot handle, const ph_barbs_desc* desc,
+                                               ph_layer* out_layers, int32_t capacity,
+                                               int32_t* out_count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_barbs_desc.struct_size is larger than this build's");
+  }
+  const ph_barbs_desc d = normalize(desc, ph_barbs_desc_init);
+  if (d.count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (d.count > 0 && (!d.x || !d.y || !d.u || !d.v)) {
+    return fail(PH_E_INVALID_ARGUMENT, "x, y, u and v must be non-null when count > 0");
+  }
+
+  const charts::Barbs glyphs = charts::barbs(d.x, d.y, d.u, d.v, static_cast<size_t>(d.count),
+                                             d.increment, d.length, d.width);
+  const ph_color color = d.color != PH_COLOR_AUTO ? d.color : 0xe2e8f0ffu;
+  *out_count = glyphs.pennants.empty() ? 1 : 2;
+  if (capacity == 0) return PH_OK;
+  if (!out_layers) return fail(PH_E_INVALID_ARGUMENT, "out_layers must be non-null");
+
+  const auto emit_layer = [&](const std::vector<charts::FieldRing>& rings, const char* name,
+                              ph_layer* slot) {
+    PatchStore store;
+    for (const charts::FieldRing& ring : rings) {
+      charts::Ring copy;
+      copy.x = ring.x;
+      copy.y = ring.y;
+      store.add(std::move(copy), color);
+    }
+    ph_patches_desc patches{};
+    ph_patches_desc_init(&patches);
+    patches.patches = store.finish();
+    patches.patch_count = static_cast<int32_t>(store.patches.size());
+    patches.color = color;
+    patches.name = name;
+    patches.y_axis = d.y_axis;
+    patches.render_type = d.render_type;
+    return register_layer(handle, plot, std::make_unique<photon::PatchesLayer>(patches), slot);
+  };
+
+  try {
+    const ph_result staff = emit_layer(glyphs.strokes, d.name, &out_layers[0]);
+    if (staff != PH_OK) return staff;
+    if (!glyphs.pennants.empty() && capacity > 1) {
+      const ph_result pennants = emit_layer(glyphs.pennants, nullptr, &out_layers[1]);
+      if (pennants != PH_OK) return pennants;
+    }
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the barb layers");
   }
   return PH_OK;
 }

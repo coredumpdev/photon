@@ -89,6 +89,12 @@
  * isosurface — enough for the level sets to be curves rather than staircases. */
 #define ISOGRID 40
 #define VOXELS 32
+/* The field charts share the Flow panel's rotational field where they can, so
+ * the four read as four views of the same data rather than four datasets. */
+#define BAND_GRID 56
+#define MESH_COLS 14
+#define MESH_ROWS 10
+#define BARB_GRID 7
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -211,6 +217,17 @@ struct ph_panels {
   double iso_grid[ISOGRID * ISOGRID];
   double voxels[VOXELS * VOXELS * VOXELS];
   ph_box3d city[BARS3D * BARS3D];
+
+  double band_values[BAND_GRID * BAND_GRID];
+  double mesh_values[MESH_COLS * MESH_ROWS];
+  double mesh_x[MESH_COLS + 1];
+  double mesh_y[MESH_ROWS + 1];
+  double barb_x[BARB_GRID * BARB_GRID];
+  double barb_y[BARB_GRID * BARB_GRID];
+  double barb_u[BARB_GRID * BARB_GRID];
+  double barb_v[BARB_GRID * BARB_GRID];
+  ph_layer stream_line_layers[64];
+  ph_layer barb_layers[2];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -221,7 +238,8 @@ static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
                                               "Spectrum", "ROC",      "Embedding", "Treemap",
                                               "Sunburst", "Sankey",   "Chord",     "Gauge",
                                               "Parallel", "Grouped",  "Stacked",   "Histogram",
-                                              "Spectrogram", "Polar"};
+                                              "Spectrogram", "Polar",  "Bands", "Mesh",
+                                              "Streamlines", "Barbs"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -729,6 +747,39 @@ ph_panels* ph_panels_create(void) {
             p->voxels[x + y * VOXELS + z * VOXELS * VOXELS] = density;
           }
         }
+      }
+    }
+
+    /* A smooth saddle-and-peaks field, at a resolution the bands can follow. */
+    for (int r = 0; r < BAND_GRID; r++) {
+      for (int c = 0; c < BAND_GRID; c++) {
+        const double x = (c - BAND_GRID * 0.5) * 0.14;
+        const double y = (r - BAND_GRID * 0.5) * 0.14;
+        p->band_values[r * BAND_GRID + c] =
+            sin(x) * cos(y) * 2.0 + exp(-(x * x + y * y) * 0.3);
+      }
+    }
+
+    /* Log-spaced columns and uneven rows — a grid a heatmap cannot express. */
+    for (int c = 0; c <= MESH_COLS; c++) p->mesh_x[c] = pow(10.0, c * (3.0 / MESH_COLS));
+    for (int r = 0; r <= MESH_ROWS; r++) p->mesh_y[r] = r * r * 0.4;
+    for (int r = 0; r < MESH_ROWS; r++) {
+      for (int c = 0; c < MESH_COLS; c++) {
+        p->mesh_values[r * MESH_COLS + c] = sin(c * 0.5) + cos(r * 0.7) + r * 0.1;
+      }
+    }
+
+    /* Wind samples whose speed climbs across the lattice, so the glyph runs
+     * through calm, half barbs, full barbs and pennants. */
+    for (int r = 0; r < BARB_GRID; r++) {
+      for (int c = 0; c < BARB_GRID; c++) {
+        const int i = r * BARB_GRID + c;
+        const double angle = (c + r * 0.7) * 0.5;
+        const double speed = (r * BARB_GRID + c) * 1.6;
+        p->barb_x[i] = c;
+        p->barb_y[i] = r;
+        p->barb_u[i] = cos(angle) * speed;
+        p->barb_v[i] = sin(angle) * speed;
       }
     }
 
@@ -1663,6 +1714,118 @@ static void build_polar(ph_panels* p, ph_plot plot) {
   ph_plot_add_polar_scatter(plot, &marks, &layer);
 }
 
+/* Panel 34 — filled contour bands over a smooth field. */
+static void build_bands(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Bands");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "magma";
+
+  ph_contourf_desc bands;
+  ph_contourf_desc_init(&bands);
+  bands.values = p->band_values;
+  bands.cols = BAND_GRID;
+  bands.rows = BAND_GRID;
+  bands.x.lo = -4.0;
+  bands.x.hi = 4.0;
+  bands.y.lo = -4.0;
+  bands.y.hi = 4.0;
+  bands.levels = 12;
+  bands.colormap = &ramp;
+  bands.name = "value";
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_contourf(plot, &bands, &layer);
+}
+
+/* Panel 35 — a colour mesh on a log-spaced, unevenly binned grid.
+ *
+ * The case a heatmap cannot express: its cells are all the same size. */
+static void build_mesh(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Mesh");
+  style_axis(plot, "x", "frequency", 0);
+  style_axis(plot, "y", "depth", 0);
+
+  ph_axis_desc axis;
+  ph_axis_desc_init(&axis);
+  axis.type = PH_SCALE_LOG;
+  ph_plot_set_scale(plot, "x", &axis);
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "cividis";
+
+  ph_pcolormesh_desc mesh;
+  ph_pcolormesh_desc_init(&mesh);
+  mesh.values = p->mesh_values;
+  mesh.cols = MESH_COLS;
+  mesh.rows = MESH_ROWS;
+  mesh.x_edges = p->mesh_x;
+  mesh.y_edges = p->mesh_y;
+  mesh.colormap = &ramp;
+  mesh.name = "level";
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_pcolormesh(plot, &mesh, &layer);
+}
+
+/* Panel 36 — the Flow panel's field as streamlines rather than arrows.
+ *
+ * Same data, and the two side by side are the argument for each: arrows say
+ * what the field is at a point, streamlines say where it goes. */
+static void build_streamlines(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Streamlines");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+  /* The field's own box, not the traced lines' extent: a line stops wherever
+   * four hundred RK4 steps happen to leave it, and letting that set the axes
+   * would make the domain a property of the integrator rather than the data. */
+  ph_plot_set_domain(plot, "x", (ph_range){-3.0, 3.0});
+  ph_plot_set_domain(plot, "y", (ph_range){-3.0, 3.0});
+
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "turbo";
+
+  ph_streamplot_desc stream;
+  ph_streamplot_desc_init(&stream);
+  stream.u = p->flow_u;
+  stream.v = p->flow_v;
+  stream.cols = FLOW;
+  stream.rows = FLOW;
+  stream.x.lo = -3.0;
+  stream.x.hi = 3.0;
+  stream.y.lo = -3.0;
+  stream.y.hi = 3.0;
+  stream.density = 0.55;
+  stream.color_by_speed = 1;
+  stream.colormap = &ramp;
+  stream.width = 1.5f;
+  stream.name = "speed";
+  int written = 0;
+  ph_plot_add_streamplot(plot, &stream, p->stream_line_layers, 64, &written);
+}
+
+/* Panel 37 — wind barbs, where speed is read off the ticks. */
+static void build_barbs(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Barbs");
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_barbs_desc barbs;
+  ph_barbs_desc_init(&barbs);
+  barbs.x = p->barb_x;
+  barbs.y = p->barb_y;
+  barbs.u = p->barb_u;
+  barbs.v = p->barb_v;
+  barbs.count = BARB_GRID * BARB_GRID;
+  barbs.color = parse("#e2e8f0");
+  barbs.name = "wind";
+  int written = 0;
+  ph_plot_add_barbs(plot, &barbs, p->barb_layers, 2, &written);
+}
+
 static const char* kTitles3D[PH_PANEL_3D_COUNT] = {"Terrain", "Helix",  "Towers",
                                                    "Isolines", "Blobs", "City"};
 
@@ -1874,7 +2037,11 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 30: build_stacked(panels, plot); break;
     case 31: build_histogram(panels, plot); break;
     case 32: build_spectrogram(panels, plot); break;
-    default: build_polar(panels, plot); break;
+    case 33: build_polar(panels, plot); break;
+    case 34: build_bands(panels, plot); break;
+    case 35: build_mesh(panels, plot); break;
+    case 36: build_streamlines(panels, plot); break;
+    default: build_barbs(panels, plot); break;
   }
 }
 

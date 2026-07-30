@@ -1,5 +1,5 @@
 /**
- * The forty demo charts — thirty-four 2-D panels and six 3-D scenes, built with @photonviz/core.
+ * The forty-four demo charts — thirty-eight 2-D panels and six 3-D scenes, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -11,6 +11,7 @@ import {
   Plot, addChord, addGauge, addParallelCoordinates, addSankey, addSunburst, addTreemap,
   bollinger, linearTrend, loess, pca, rocCurve, welch,
   PolarPlot, Plot3D,
+  addBarbs, addContourFilled, addPcolormesh, addStreamplot,
 } from "@photonviz/core";
 
 const SAMPLES = 512;
@@ -51,6 +52,10 @@ const CLOUD_POINTS = 1200;
 const BARS3D = 12;
 const ISOGRID = 40;
 const VOXELS = 32;
+const BAND_GRID = 56;
+const MESH_COLS = 14;
+const MESH_ROWS = 10;
+const BARB_GRID = 7;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -872,6 +877,106 @@ function spectrogramPanel(container) {
   return plot;
 }
 
+function bands(container) {
+  const values = new Float64Array(BAND_GRID * BAND_GRID);
+  for (let r = 0; r < BAND_GRID; r++) {
+    for (let c = 0; c < BAND_GRID; c++) {
+      const x = (c - BAND_GRID * 0.5) * 0.14;
+      const y = (r - BAND_GRID * 0.5) * 0.14;
+      values[r * BAND_GRID + c] = Math.sin(x) * Math.cos(y) * 2 + Math.exp(-(x * x + y * y) * 0.3);
+    }
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Bands",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+  });
+  addContourFilled(plot, {
+    values, cols: BAND_GRID, rows: BAND_GRID,
+    extent: { x: [-4, 4], y: [-4, 4] },
+    levels: 12, colormap: "magma", name: "value",
+  });
+  return plot;
+}
+
+function mesh(container) {
+  const values = new Float64Array(MESH_COLS * MESH_ROWS);
+  const xEdges = new Float64Array(MESH_COLS + 1);
+  const yEdges = new Float64Array(MESH_ROWS + 1);
+  for (let c = 0; c <= MESH_COLS; c++) xEdges[c] = Math.pow(10, c * (3 / MESH_COLS));
+  for (let r = 0; r <= MESH_ROWS; r++) yEdges[r] = r * r * 0.4;
+  for (let r = 0; r < MESH_ROWS; r++) {
+    for (let c = 0; c < MESH_COLS; c++) {
+      values[r * MESH_COLS + c] = Math.sin(c * 0.5) + Math.cos(r * 0.7) + r * 0.1;
+    }
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Mesh",
+    // The case a heatmap cannot express: cells of different widths.
+    scales: { x: { type: "log" } },
+    axes: { x: { title: "frequency" }, y: { title: "depth" } },
+  });
+  addPcolormesh(plot, { values, xEdges, yEdges, colormap: "cividis", name: "level" });
+  return plot;
+}
+
+function streamplot(container) {
+  const us = new Float64Array(FLOW * FLOW);
+  const vs = new Float64Array(FLOW * FLOW);
+  for (let row = 0; row < FLOW; row++) {
+    for (let col = 0; col < FLOW; col++) {
+      const x = -3 + col * (6 / (FLOW - 1));
+      const y = -3 + row * (6 / (FLOW - 1));
+      const r2 = x * x + y * y + 0.6;
+      const i = row * FLOW + col;
+      us[i] = ((-y - x * 0.35) / r2) * 4;
+      vs[i] = ((x - y * 0.35) / r2) * 4;
+    }
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Streamlines",
+    // The field's own box, not the traced lines' extent: a line stops wherever
+    // four hundred RK4 steps happen to leave it, and letting that set the axes
+    // would make the domain a property of the integrator rather than the data.
+    scales: { x: { domain: [-3, 3] }, y: { domain: [-3, 3] } },
+    axes: { x: { title: "x" }, y: { title: "y" } },
+  });
+  addStreamplot(plot, {
+    u: us, v: vs, cols: FLOW, rows: FLOW,
+    extent: { x: [-3, 3], y: [-3, 3] },
+    density: 0.55, colormap: "turbo", width: 1.5, arrows: false, name: "speed",
+  });
+  return plot;
+}
+
+function barbs(container) {
+  const n = BARB_GRID * BARB_GRID;
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  const us = new Float64Array(n);
+  const vs = new Float64Array(n);
+  for (let r = 0; r < BARB_GRID; r++) {
+    for (let c = 0; c < BARB_GRID; c++) {
+      const i = r * BARB_GRID + c;
+      const angle = (c + r * 0.7) * 0.5;
+      const speed = i * 1.6;
+      xs[i] = c;
+      ys[i] = r;
+      us[i] = Math.cos(angle) * speed;
+      vs[i] = Math.sin(angle) * speed;
+    }
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Barbs",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+  });
+  addBarbs(plot, { x: xs, y: ys, u: us, v: vs, color: "#e2e8f0", name: "wind" });
+  return plot;
+}
+
 /**
  * The polar panel, and the one place the two cores are laid out differently on
  * purpose.
@@ -1105,5 +1210,5 @@ export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        candles, bars, density, flow, contour, network, signals,
                        fit, spectrum, roc, embedding, treemap, sunburst, sankey,
                        chord, gauge, parallel, grouped, stacked, histogramPanel,
-                       spectrogramPanel, polar, terrain, helix, towers, isolines,
-                       blobs, city];
+                       spectrogramPanel, polar, bands, mesh, streamplot, barbs,
+                       terrain, helix, towers, isolines, blobs, city];

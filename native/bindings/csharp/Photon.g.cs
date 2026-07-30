@@ -1684,6 +1684,146 @@ public static partial class Ph
         public int render_type;
     }
 
+    /// <summary>ph_contourf_desc — 136 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_contourf_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public ph_range x;
+        /// <summary>offset 40</summary>
+        public ph_range y;
+        /// <summary>offset 56</summary>
+        public int levels;
+        /// <summary>offset 64</summary>
+        public IntPtr level_values;
+        /// <summary>offset 72</summary>
+        public int level_count;
+        /// <summary>offset 80</summary>
+        public IntPtr colormap;
+        /// <summary>offset 88</summary>
+        public ph_range domain;
+        /// <summary>offset 104</summary>
+        public float opacity;
+        /// <summary>offset 112</summary>
+        public IntPtr name;
+        /// <summary>offset 120</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 128</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_pcolormesh_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_pcolormesh_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int cols;
+        /// <summary>offset 20</summary>
+        public int rows;
+        /// <summary>offset 24</summary>
+        public IntPtr x_edges;
+        /// <summary>offset 32</summary>
+        public IntPtr y_edges;
+        /// <summary>offset 40</summary>
+        public int curvilinear;
+        /// <summary>offset 48</summary>
+        public IntPtr colormap;
+        /// <summary>offset 56</summary>
+        public ph_range domain;
+        /// <summary>offset 72</summary>
+        public float opacity;
+        /// <summary>offset 80</summary>
+        public IntPtr name;
+        /// <summary>offset 88</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_streamplot_desc — 136 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_streamplot_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr u;
+        /// <summary>offset 16</summary>
+        public IntPtr v;
+        /// <summary>offset 24</summary>
+        public int cols;
+        /// <summary>offset 28</summary>
+        public int rows;
+        /// <summary>offset 32</summary>
+        public ph_range x;
+        /// <summary>offset 48</summary>
+        public ph_range y;
+        /// <summary>offset 64</summary>
+        public double density;
+        /// <summary>offset 72</summary>
+        public double step;
+        /// <summary>offset 80</summary>
+        public int max_steps;
+        /// <summary>offset 84</summary>
+        public uint color;
+        /// <summary>offset 88</summary>
+        public int color_by_speed;
+        /// <summary>offset 96</summary>
+        public IntPtr colormap;
+        /// <summary>offset 104</summary>
+        public float width;
+        /// <summary>offset 112</summary>
+        public IntPtr name;
+        /// <summary>offset 120</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 128</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_barbs_desc — 104 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_barbs_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public IntPtr y;
+        /// <summary>offset 24</summary>
+        public IntPtr u;
+        /// <summary>offset 32</summary>
+        public IntPtr v;
+        /// <summary>offset 40</summary>
+        public int count;
+        /// <summary>offset 48</summary>
+        public double increment;
+        /// <summary>offset 56</summary>
+        public double length;
+        /// <summary>offset 64</summary>
+        public double width;
+        /// <summary>offset 72</summary>
+        public uint color;
+        /// <summary>offset 80</summary>
+        public IntPtr name;
+        /// <summary>offset 88</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 96</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_parallel_desc — 80 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_parallel_desc
@@ -2190,6 +2330,14 @@ public static partial class Ph
         "ph_plot_add_chord",
         "ph_gauge_desc_init",
         "ph_plot_add_gauge",
+        "ph_contourf_desc_init",
+        "ph_plot_add_contourf",
+        "ph_pcolormesh_desc_init",
+        "ph_plot_add_pcolormesh",
+        "ph_streamplot_desc_init",
+        "ph_plot_add_streamplot",
+        "ph_barbs_desc_init",
+        "ph_plot_add_barbs",
         "ph_parallel_desc_init",
         "ph_plot_add_parallel",
         "ph_layer_set_xy",
@@ -2947,6 +3095,42 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_gauge")]
     public static extern int ph_plot_add_gauge(ulong plot, in ph_gauge_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_contourf_desc_init")]
+    public static extern void ph_contourf_desc_init(out ph_contourf_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_contourf")]
+    public static extern int ph_plot_add_contourf(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_contourf")]
+    public static extern int ph_plot_add_contourf(ulong plot, in ph_contourf_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_pcolormesh_desc_init")]
+    public static extern void ph_pcolormesh_desc_init(out ph_pcolormesh_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_pcolormesh")]
+    public static extern int ph_plot_add_pcolormesh(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_pcolormesh")]
+    public static extern int ph_plot_add_pcolormesh(ulong plot, in ph_pcolormesh_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_streamplot_desc_init")]
+    public static extern void ph_streamplot_desc_init(out ph_streamplot_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_streamplot")]
+    public static extern int ph_plot_add_streamplot(ulong plot, IntPtr desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_streamplot")]
+    public static extern int ph_plot_add_streamplot(ulong plot, in ph_streamplot_desc desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_barbs_desc_init")]
+    public static extern void ph_barbs_desc_init(out ph_barbs_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_barbs")]
+    public static extern int ph_plot_add_barbs(ulong plot, IntPtr desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_barbs")]
+    public static extern int ph_plot_add_barbs(ulong plot, in ph_barbs_desc desc, out ulong out_layers, int capacity, out int out_count);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_parallel_desc_init")]
     public static extern void ph_parallel_desc_init(out ph_parallel_desc @out);

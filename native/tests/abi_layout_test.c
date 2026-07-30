@@ -807,6 +807,76 @@ PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, no_label) == 96, "ph_gauge_desc.no_labe
 PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, name) == 104, "ph_gauge_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_gauge_desc, render_type) == 112, "ph_gauge_desc.render_type offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_contourf_desc) == 136, "ph_contourf_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_contourf_desc) == 8, "ph_contourf_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, struct_size) == 0, "ph_contourf_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, values) == 8, "ph_contourf_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, cols) == 16, "ph_contourf_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, rows) == 20, "ph_contourf_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, x) == 24, "ph_contourf_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, y) == 40, "ph_contourf_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, levels) == 56, "ph_contourf_desc.levels offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, level_values) == 64, "ph_contourf_desc.level_values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, level_count) == 72, "ph_contourf_desc.level_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, colormap) == 80, "ph_contourf_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, domain) == 88, "ph_contourf_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, opacity) == 104, "ph_contourf_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, name) == 112, "ph_contourf_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, y_axis) == 120, "ph_contourf_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_contourf_desc, render_type) == 128, "ph_contourf_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_pcolormesh_desc) == 104, "ph_pcolormesh_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_pcolormesh_desc) == 8, "ph_pcolormesh_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, struct_size) == 0, "ph_pcolormesh_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, values) == 8, "ph_pcolormesh_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, cols) == 16, "ph_pcolormesh_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, rows) == 20, "ph_pcolormesh_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, x_edges) == 24, "ph_pcolormesh_desc.x_edges offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, y_edges) == 32, "ph_pcolormesh_desc.y_edges offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, curvilinear) == 40, "ph_pcolormesh_desc.curvilinear offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, colormap) == 48, "ph_pcolormesh_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, domain) == 56, "ph_pcolormesh_desc.domain offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, opacity) == 72, "ph_pcolormesh_desc.opacity offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, name) == 80, "ph_pcolormesh_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, y_axis) == 88, "ph_pcolormesh_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_pcolormesh_desc, render_type) == 96, "ph_pcolormesh_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_streamplot_desc) == 136, "ph_streamplot_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_streamplot_desc) == 8, "ph_streamplot_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, struct_size) == 0, "ph_streamplot_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, u) == 8, "ph_streamplot_desc.u offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, v) == 16, "ph_streamplot_desc.v offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, cols) == 24, "ph_streamplot_desc.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, rows) == 28, "ph_streamplot_desc.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, x) == 32, "ph_streamplot_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, y) == 48, "ph_streamplot_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, density) == 64, "ph_streamplot_desc.density offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, step) == 72, "ph_streamplot_desc.step offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, max_steps) == 80, "ph_streamplot_desc.max_steps offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, color) == 84, "ph_streamplot_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, color_by_speed) == 88, "ph_streamplot_desc.color_by_speed offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, colormap) == 96, "ph_streamplot_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, width) == 104, "ph_streamplot_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, name) == 112, "ph_streamplot_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, y_axis) == 120, "ph_streamplot_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_streamplot_desc, render_type) == 128, "ph_streamplot_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_barbs_desc) == 104, "ph_barbs_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_barbs_desc) == 8, "ph_barbs_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, struct_size) == 0, "ph_barbs_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, x) == 8, "ph_barbs_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, y) == 16, "ph_barbs_desc.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, u) == 24, "ph_barbs_desc.u offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, v) == 32, "ph_barbs_desc.v offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, count) == 40, "ph_barbs_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, increment) == 48, "ph_barbs_desc.increment offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, length) == 56, "ph_barbs_desc.length offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, width) == 64, "ph_barbs_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, color) == 72, "ph_barbs_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, name) == 80, "ph_barbs_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, y_axis) == 88, "ph_barbs_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_barbs_desc, render_type) == 96, "ph_barbs_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_parallel_desc) == 80, "ph_parallel_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_parallel_desc) == 8, "ph_parallel_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, struct_size) == 0, "ph_parallel_desc.struct_size offset");
@@ -968,7 +1038,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_isosurface_desc, render_type) == 104, "ph_isosurfac
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 76);
+  printf("%d struct layouts match the generated bindings\n", 80);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

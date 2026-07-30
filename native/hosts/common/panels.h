@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#define PH_PANEL_COUNT 34
+#define PH_PANEL_COUNT 38
 
 /**
  * The 3-D demo scenes, which are a second plot type rather than another panel.

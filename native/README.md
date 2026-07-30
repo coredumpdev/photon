@@ -8,7 +8,7 @@ interaction model are complete and tested; the OpenGL 3.3 backend draws line and
 scatter series with a full chart around them — grid, axes, tick labels, axis
 titles and a plot title, all rendered from an embedded SDF font.
 `ph_plot_render_pixels` covers hosts with no GL interop. Four hosts drive the
-same engine: GLFW, Qt Quick, Qt Widgets and Java, all showing the same thirty-four charts
+same engine: GLFW, Qt Quick, Qt Widgets and Java, all showing the same thirty-eight charts
 from `hosts/common/panels.c`. C# and Java bindings are generated from the header;
 the Java one is built and run by `ctest`, and drives a fourth gallery whose
 output is pixel-identical to the C one. Next are the remaining layer types.
@@ -34,7 +34,7 @@ presets).
 
 ### The galleries
 
-The same thirty-four charts, under four hosts — plus six 3-D scenes, which
+The same thirty-eight charts, under four hosts — plus six 3-D scenes, which
 only the Java gallery shows so far: the other three hold an array of `ph_plot`
 and a scene is a `ph_plot3d`. The CMake host options are off by
 default — GLFW because it is fetched over the network, Qt because it is a large

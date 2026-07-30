@@ -2477,6 +2477,203 @@ public final class Photon {
         }
     }
 
+    /** ph_contourf_desc — 136 bytes, alignment 8. */
+    public static final class ph_contourf_desc {
+        private ph_contourf_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y"),
+            ValueLayout.JAVA_INT.withName("levels"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("level_values"),
+            ValueLayout.JAVA_INT.withName("level_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.JAVA_FLOAT.withName("opacity"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_contourf_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X = 24L;
+        public static final long OFFSET_Y = 40L;
+        public static final long OFFSET_LEVELS = 56L;
+        public static final long OFFSET_LEVEL_VALUES = 64L;
+        public static final long OFFSET_LEVEL_COUNT = 72L;
+        public static final long OFFSET_COLORMAP = 80L;
+        public static final long OFFSET_DOMAIN = 88L;
+        public static final long OFFSET_OPACITY = 104L;
+        public static final long OFFSET_NAME = 112L;
+        public static final long OFFSET_Y_AXIS = 120L;
+        public static final long OFFSET_RENDER_TYPE = 128L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_pcolormesh_desc — 104 bytes, alignment 8. */
+    public static final class ph_pcolormesh_desc {
+        private ph_pcolormesh_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ValueLayout.ADDRESS.withName("x_edges"),
+            ValueLayout.ADDRESS.withName("y_edges"),
+            ValueLayout.JAVA_INT.withName("curvilinear"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain"),
+            ValueLayout.JAVA_FLOAT.withName("opacity"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_pcolormesh_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COLS = 16L;
+        public static final long OFFSET_ROWS = 20L;
+        public static final long OFFSET_X_EDGES = 24L;
+        public static final long OFFSET_Y_EDGES = 32L;
+        public static final long OFFSET_CURVILINEAR = 40L;
+        public static final long OFFSET_COLORMAP = 48L;
+        public static final long OFFSET_DOMAIN = 56L;
+        public static final long OFFSET_OPACITY = 72L;
+        public static final long OFFSET_NAME = 80L;
+        public static final long OFFSET_Y_AXIS = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_streamplot_desc — 136 bytes, alignment 8. */
+    public static final class ph_streamplot_desc {
+        private ph_streamplot_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("u"),
+            ValueLayout.ADDRESS.withName("v"),
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y"),
+            ValueLayout.JAVA_DOUBLE.withName("density"),
+            ValueLayout.JAVA_DOUBLE.withName("step"),
+            ValueLayout.JAVA_INT.withName("max_steps"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_INT.withName("color_by_speed"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ValueLayout.JAVA_FLOAT.withName("width"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_streamplot_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_U = 8L;
+        public static final long OFFSET_V = 16L;
+        public static final long OFFSET_COLS = 24L;
+        public static final long OFFSET_ROWS = 28L;
+        public static final long OFFSET_X = 32L;
+        public static final long OFFSET_Y = 48L;
+        public static final long OFFSET_DENSITY = 64L;
+        public static final long OFFSET_STEP = 72L;
+        public static final long OFFSET_MAX_STEPS = 80L;
+        public static final long OFFSET_COLOR = 84L;
+        public static final long OFFSET_COLOR_BY_SPEED = 88L;
+        public static final long OFFSET_COLORMAP = 96L;
+        public static final long OFFSET_WIDTH = 104L;
+        public static final long OFFSET_NAME = 112L;
+        public static final long OFFSET_Y_AXIS = 120L;
+        public static final long OFFSET_RENDER_TYPE = 128L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_barbs_desc — 104 bytes, alignment 8. */
+    public static final class ph_barbs_desc {
+        private ph_barbs_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.ADDRESS.withName("u"),
+            ValueLayout.ADDRESS.withName("v"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("increment"),
+            ValueLayout.JAVA_DOUBLE.withName("length"),
+            ValueLayout.JAVA_DOUBLE.withName("width"),
+            ValueLayout.JAVA_INT.withName("color"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_barbs_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 16L;
+        public static final long OFFSET_U = 24L;
+        public static final long OFFSET_V = 32L;
+        public static final long OFFSET_COUNT = 40L;
+        public static final long OFFSET_INCREMENT = 48L;
+        public static final long OFFSET_LENGTH = 56L;
+        public static final long OFFSET_WIDTH = 64L;
+        public static final long OFFSET_COLOR = 72L;
+        public static final long OFFSET_NAME = 80L;
+        public static final long OFFSET_Y_AXIS = 88L;
+        public static final long OFFSET_RENDER_TYPE = 96L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_parallel_desc — 80 bytes, alignment 8. */
     public static final class ph_parallel_desc {
         private ph_parallel_desc() {}
@@ -3126,6 +3323,14 @@ public final class Photon {
         "ph_plot_add_chord",
         "ph_gauge_desc_init",
         "ph_plot_add_gauge",
+        "ph_contourf_desc_init",
+        "ph_plot_add_contourf",
+        "ph_pcolormesh_desc_init",
+        "ph_plot_add_pcolormesh",
+        "ph_streamplot_desc_init",
+        "ph_plot_add_streamplot",
+        "ph_barbs_desc_init",
+        "ph_plot_add_barbs",
         "ph_parallel_desc_init",
         "ph_plot_add_parallel",
         "ph_layer_set_xy",
@@ -3384,6 +3589,14 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_CHORD = handle("ph_plot_add_chord", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_GAUGE_DESC_INIT = handle("ph_gauge_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_GAUGE = handle("ph_plot_add_gauge", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_CONTOURF_DESC_INIT = handle("ph_contourf_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_CONTOURF = handle("ph_plot_add_contourf", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PCOLORMESH_DESC_INIT = handle("ph_pcolormesh_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_PCOLORMESH = handle("ph_plot_add_pcolormesh", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STREAMPLOT_DESC_INIT = handle("ph_streamplot_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_STREAMPLOT = handle("ph_plot_add_streamplot", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_BARBS_DESC_INIT = handle("ph_barbs_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_BARBS = handle("ph_plot_add_barbs", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PARALLEL_DESC_INIT = handle("ph_parallel_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_PARALLEL = handle("ph_plot_add_parallel", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
     private static final MethodHandle PH_LAYER_SET_XY = handle("ph_layer_set_xy", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
@@ -4947,6 +5160,70 @@ public final class Photon {
             return (int) PH_PLOT_ADD_GAUGE.invokeExact(plot, desc, out);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_add_gauge failed", photonFailure);
+        }
+    }
+
+    public static void ph_contourf_desc_init(MemorySegment out) {
+        try {
+            PH_CONTOURF_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_contourf_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_contourf(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_CONTOURF.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_contourf failed", photonFailure);
+        }
+    }
+
+    public static void ph_pcolormesh_desc_init(MemorySegment out) {
+        try {
+            PH_PCOLORMESH_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_pcolormesh_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_pcolormesh(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_PCOLORMESH.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_pcolormesh failed", photonFailure);
+        }
+    }
+
+    public static void ph_streamplot_desc_init(MemorySegment out) {
+        try {
+            PH_STREAMPLOT_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_streamplot_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_streamplot(long plot, MemorySegment desc, MemorySegment out_layers, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_PLOT_ADD_STREAMPLOT.invokeExact(plot, desc, out_layers, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_streamplot failed", photonFailure);
+        }
+    }
+
+    public static void ph_barbs_desc_init(MemorySegment out) {
+        try {
+            PH_BARBS_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_barbs_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_barbs(long plot, MemorySegment desc, MemorySegment out_layers, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_PLOT_ADD_BARBS.invokeExact(plot, desc, out_layers, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_barbs failed", photonFailure);
         }
     }
 

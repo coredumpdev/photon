@@ -1942,6 +1942,109 @@ public final class PhotonSmokeTest {
         }
         ran("ph_parallel_desc_init", "ph_plot_add_parallel");
 
+        // The four field charts, which are the ones with a real algorithm under
+        // them rather than a composition a caller could write.
+        MemorySegment scalar = room(arena, 36);
+        MemorySegment flowU = room(arena, 36);
+        MemorySegment flowV = room(arena, 36);
+        for (int r = 0; r < 6; r++) {
+            for (int c = 0; c < 6; c++) {
+                scalar.setAtIndex(ValueLayout.JAVA_DOUBLE, r * 6 + c,
+                                  Math.sin(c * 0.6) + Math.cos(r * 0.6));
+                flowU.setAtIndex(ValueLayout.JAVA_DOUBLE, r * 6 + c, r - 2.5);
+                flowV.setAtIndex(ValueLayout.JAVA_DOUBLE, r * 6 + c, 2.5 - c);
+            }
+        }
+        MemorySegment extent = ph_range.allocate(arena);
+        extent.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO, 0.0);
+        extent.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI, 5.0);
+
+        MemorySegment contourf = ph_contourf_desc.allocate(arena);
+        ph_contourf_desc_init(contourf);
+        contourf.set(ValueLayout.ADDRESS, ph_contourf_desc.OFFSET_VALUES, scalar);
+        contourf.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_COLS, 6);
+        contourf.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_ROWS, 6);
+        MemorySegment.copy(extent, 0, contourf, ph_contourf_desc.OFFSET_X, ph_range.SIZE);
+        MemorySegment.copy(extent, 0, contourf, ph_contourf_desc.OFFSET_Y, ph_range.SIZE);
+        contourf.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_LEVELS, 5);
+        checkEq(ph_plot_add_contourf(plot, contourf, handle), PH_OK, "ph_plot_add_contourf");
+        checkEq(ph_layer_bounds(handle.get(ValueLayout.JAVA_LONG, 0), bx, by), PH_OK,
+                "the bands have bounds");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and are destroyed");
+        contourf.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_COLS, 1);
+        checkEq(ph_plot_add_contourf(plot, contourf, handle), PH_E_INVALID_ARGUMENT,
+                "a 1-wide grid has no cells to band");
+        ran("ph_contourf_desc_init", "ph_plot_add_contourf");
+
+        MemorySegment cellValues = doubles(arena, 1, 2, 3, 4);
+        MemorySegment xEdges = doubles(arena, 0, 1, 4);
+        MemorySegment yEdges = doubles(arena, 0, 2, 3);
+        MemorySegment mesh = ph_pcolormesh_desc.allocate(arena);
+        ph_pcolormesh_desc_init(mesh);
+        mesh.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_VALUES, cellValues);
+        mesh.set(ValueLayout.JAVA_INT, ph_pcolormesh_desc.OFFSET_COLS, 2);
+        mesh.set(ValueLayout.JAVA_INT, ph_pcolormesh_desc.OFFSET_ROWS, 2);
+        mesh.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_X_EDGES, xEdges);
+        mesh.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_Y_EDGES, yEdges);
+        checkEq(ph_plot_add_pcolormesh(plot, mesh, handle), PH_OK, "ph_plot_add_pcolormesh");
+        checkEq(ph_layer_bounds(handle.get(ValueLayout.JAVA_LONG, 0), bx, by), PH_OK,
+                "the mesh has bounds");
+        check(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 4.0,
+              "and they reach the last uneven edge");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and it is destroyed");
+        ran("ph_pcolormesh_desc_init", "ph_plot_add_pcolormesh");
+
+        MemorySegment stream = ph_streamplot_desc.allocate(arena);
+        ph_streamplot_desc_init(stream);
+        stream.set(ValueLayout.ADDRESS, ph_streamplot_desc.OFFSET_U, flowU);
+        stream.set(ValueLayout.ADDRESS, ph_streamplot_desc.OFFSET_V, flowV);
+        stream.set(ValueLayout.JAVA_INT, ph_streamplot_desc.OFFSET_COLS, 6);
+        stream.set(ValueLayout.JAVA_INT, ph_streamplot_desc.OFFSET_ROWS, 6);
+        MemorySegment.copy(extent, 0, stream, ph_streamplot_desc.OFFSET_X, ph_range.SIZE);
+        MemorySegment.copy(extent, 0, stream, ph_streamplot_desc.OFFSET_Y, ph_range.SIZE);
+        stream.set(ValueLayout.JAVA_DOUBLE, ph_streamplot_desc.OFFSET_DENSITY, 0.4);
+        stream.set(ValueLayout.JAVA_INT, ph_streamplot_desc.OFFSET_COLOR_BY_SPEED, 1);
+        MemorySegment streamCount = arena.allocate(ValueLayout.JAVA_INT);
+        checkEq(ph_plot_add_streamplot(plot, stream, MemorySegment.NULL, 0, streamCount), PH_OK,
+                "ph_plot_add_streamplot sizing pass");
+        int lines = streamCount.get(ValueLayout.JAVA_INT, 0);
+        check(lines > 0, "a rotational field traces at least one line");
+        MemorySegment streamLayers = arena.allocate(ValueLayout.JAVA_LONG, lines);
+        checkEq(ph_plot_add_streamplot(plot, stream, streamLayers, lines, streamCount), PH_OK,
+                "ph_plot_add_streamplot");
+        for (int i = 0; i < lines; i++) {
+            ph_layer_destroy(streamLayers.getAtIndex(ValueLayout.JAVA_LONG, i));
+        }
+        ran("ph_streamplot_desc_init", "ph_plot_add_streamplot");
+
+        // One calm sample, one fast enough for a pennant: both layers appear.
+        MemorySegment bxs = doubles(arena, 0, 1);
+        MemorySegment bys = doubles(arena, 0, 0);
+        MemorySegment bus = doubles(arena, 0, 60);
+        MemorySegment bvs = doubles(arena, 0, 0);
+        MemorySegment barbs = ph_barbs_desc.allocate(arena);
+        ph_barbs_desc_init(barbs);
+        barbs.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_X, bxs);
+        barbs.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_Y, bys);
+        barbs.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_U, bus);
+        barbs.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_V, bvs);
+        barbs.set(ValueLayout.JAVA_INT, ph_barbs_desc.OFFSET_COUNT, 2);
+        MemorySegment barbCount = arena.allocate(ValueLayout.JAVA_INT);
+        MemorySegment barbLayers = arena.allocate(ValueLayout.JAVA_LONG, 2);
+        checkEq(ph_plot_add_barbs(plot, barbs, barbLayers, 2, barbCount), PH_OK,
+                "ph_plot_add_barbs");
+        checkEq(barbCount.get(ValueLayout.JAVA_INT, 0), 2,
+                "60 knots is a pennant, so both layers are there");
+        for (int i = 0; i < 2; i++) {
+            ph_layer_destroy(barbLayers.getAtIndex(ValueLayout.JAVA_LONG, i));
+        }
+        // A calm-only field needs no pennant layer at all.
+        bus.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, 0.0);
+        checkEq(ph_plot_add_barbs(plot, barbs, barbLayers, 2, barbCount), PH_OK, "a calm field");
+        checkEq(barbCount.get(ValueLayout.JAVA_INT, 0), 1, "is staffs only");
+        ph_layer_destroy(barbLayers.getAtIndex(ValueLayout.JAVA_LONG, 0));
+        ran("ph_barbs_desc_init", "ph_plot_add_barbs");
+
         // Every chart above put its names on the plot as annotations, and every
         // layer is gone. Clearing them is what actually removes them.
         checkEq(ph_plot_clear_annotations(plot), PH_OK, "the labels outlive their layers");

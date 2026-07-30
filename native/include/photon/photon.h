@@ -2521,6 +2521,145 @@ PH_API void PH_CALL ph_gauge_desc_init(ph_gauge_desc* out);
 PH_API ph_result PH_CALL ph_plot_add_gauge(ph_plot plot, const ph_gauge_desc* desc, ph_layer* out);
 
 /**
+ * Filled contour bands (matplotlib's `contourf`), coloured by band midpoint
+ * through the colormap so the layer's colorbar reads as a value scale.
+ *
+ * Every straddling cell is split into four triangles around its centre before
+ * clipping, which removes the saddle ambiguity plain marching squares has: a
+ * triangle's linear interpolant cannot produce two disjoint regions.
+ */
+typedef struct ph_contourf_desc {
+  uint32_t                struct_size;
+  /** Row-major, `cols * rows`; row 0 sits at the bottom of `y`. */
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  ph_range                x;
+  ph_range                y;
+  /** Evenly spaced band count. 0 means 8, and `level_values` beats it. */
+  int32_t                 levels;
+  const double*           level_values;
+  int32_t                 level_count;
+  const ph_colormap_spec* colormap;
+  /** Value range the ramp covers. Empty uses the level span. */
+  ph_range                domain;
+  float                   opacity;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_contourf_desc;
+
+PH_API void PH_CALL ph_contourf_desc_init(ph_contourf_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_contourf(ph_plot plot, const ph_contourf_desc* desc,
+                                              ph_layer* out);
+
+/**
+ * A colour mesh over unevenly spaced cells (matplotlib's `pcolormesh`).
+ *
+ * A heatmap is the faster choice when the grid is uniform — it is one textured
+ * quad. This is for what a heatmap cannot express: bins of different widths, or
+ * a curvilinear grid where every corner is placed independently.
+ */
+typedef struct ph_pcolormesh_desc {
+  uint32_t                struct_size;
+  /** Cell values, row-major, `cols * rows`. */
+  const double*           values;
+  int32_t                 cols;
+  int32_t                 rows;
+  /**
+   * Cell boundaries: `cols + 1` and `rows + 1` values for a rectilinear mesh,
+   * or the flattened `(rows + 1) * (cols + 1)` corner grids when `curvilinear`
+   * is set — a corner grid carries no shape of its own, which is why the two
+   * counts are given either way.
+   */
+  const double*           x_edges;
+  const double*           y_edges;
+  ph_bool                 curvilinear;
+  const ph_colormap_spec* colormap;
+  ph_range                domain;
+  float                   opacity;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_pcolormesh_desc;
+
+PH_API void PH_CALL ph_pcolormesh_desc_init(ph_pcolormesh_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_pcolormesh(ph_plot plot, const ph_pcolormesh_desc* desc,
+                                                ph_layer* out);
+
+/**
+ * Streamlines of a 2-D vector field (matplotlib's `streamplot`), integrated
+ * with RK4. Seeds walk a lattice and a line stops when it re-enters a cell
+ * another line already claimed, which is what spaces them evenly instead of
+ * letting them bunch along attractors.
+ *
+ * Counted, because how many lines a field yields is not knowable up front —
+ * and one layer per line is what lets each be coloured by its own mean speed.
+ */
+typedef struct ph_streamplot_desc {
+  uint32_t                struct_size;
+  /** Row-major components, `cols * rows`; row 0 at the bottom. */
+  const double*           u;
+  const double*           v;
+  int32_t                 cols;
+  int32_t                 rows;
+  ph_range                x;
+  ph_range                y;
+  /** Seeds per axis as a multiple of the base 25x25 lattice. 0 means 1. */
+  double                  density;
+  /** Integration step as a fraction of a cell. 0 means 0.35. */
+  double                  step;
+  /** Give up on a line after this many steps each way. 0 means 400. */
+  int32_t                 max_steps;
+  ph_color                color;
+  /** Colour each line by its own mean speed instead of the flat colour. */
+  ph_bool                 color_by_speed;
+  const ph_colormap_spec* colormap;
+  float                   width;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_streamplot_desc;
+
+PH_API void PH_CALL ph_streamplot_desc_init(ph_streamplot_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_streamplot(ph_plot plot, const ph_streamplot_desc* desc,
+                                                ph_layer* out_layers, int32_t capacity,
+                                                int32_t* out_count);
+
+/**
+ * Wind barbs (matplotlib's `barbs`) — the glyph where speed is read off the
+ * ticks rather than the arrow length: a half tick per `increment`, a full tick
+ * per two, a filled pennant per ten. The staff points *into* the wind.
+ *
+ * Returns two layers, staffs then pennants, because a pennant is a filled
+ * triangle and a tick is a thin quad; the second is absent when nothing in the
+ * field is fast enough for one.
+ */
+typedef struct ph_barbs_desc {
+  uint32_t       struct_size;
+  const double*  x;
+  const double*  y;
+  const double*  u;
+  const double*  v;
+  int32_t        count;
+  /** Speed one half tick stands for. 0 means 5, the meteorological default. */
+  double         increment;
+  /** Staff length in data units. 0 measures a twelfth of the x span. */
+  double         length;
+  /** Stroke width in data units. 0 means 6% of the staff. */
+  double         width;
+  ph_color       color;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_barbs_desc;
+
+PH_API void PH_CALL ph_barbs_desc_init(ph_barbs_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_barbs(ph_plot plot, const ph_barbs_desc* desc,
+                                           ph_layer* out_layers, int32_t capacity,
+                                           int32_t* out_count);
+
+/**
  * Parallel coordinates: one polyline per row across `dim_count` vertical axes,
  * each dimension normalised to 0..1 by its own observed range.
  *

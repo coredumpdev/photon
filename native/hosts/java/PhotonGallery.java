@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 34;
+    private static final int PANELS = 38;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -89,6 +89,10 @@ public final class PhotonGallery {
     private static final int BARS3D = 12;
     private static final int ISOGRID = 40;
     private static final int VOXELS = 32;
+    private static final int BAND_GRID = 56;
+    private static final int MESH_COLS = 14;
+    private static final int MESH_ROWS = 10;
+    private static final int BARB_GRID = 7;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -1239,6 +1243,15 @@ public final class PhotonGallery {
     }
 
     /** Axes with no meaning to show: a composed chart's coordinates are arbitrary. */
+    private static void setPlotDomain(long plot, String axis, double lo, double hi) {
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment range = ph_range.allocate(scratch);
+            range.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_LO, lo);
+            range.set(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI, hi);
+            ph_plot_set_domain(plot, scratch.allocateFrom(axis), range);
+        }
+    }
+
     private static void bareAxes(long plot) {
         try (Arena scratch = Arena.ofConfined()) {
             for (String axis : new String[] {"x", "y"}) {
@@ -1648,6 +1661,163 @@ public final class PhotonGallery {
      * grid above — but through the same ph_layer table, which is why their
      * layers need no special handling once made.
      */
+    /** Panel 34 — filled contour bands over a smooth field. */
+    private static void buildBands(long plot) {
+        MemorySegment values = doubles(BAND_GRID * BAND_GRID);
+        for (int r = 0; r < BAND_GRID; r++) {
+            for (int c = 0; c < BAND_GRID; c++) {
+                double x = (c - BAND_GRID * 0.5) * 0.14;
+                double y = (r - BAND_GRID * 0.5) * 0.14;
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, r * BAND_GRID + c,
+                                  Math.sin(x) * Math.cos(y) * 2 + Math.exp(-(x * x + y * y) * 0.3));
+            }
+        }
+        setTitle(plot, "Bands");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment desc = ph_contourf_desc.allocate(ARENA);
+        ph_contourf_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_contourf_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_COLS, BAND_GRID);
+        desc.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_ROWS, BAND_GRID);
+        setRange(desc, ph_contourf_desc.OFFSET_X, -4, 4);
+        setRange(desc, ph_contourf_desc.OFFSET_Y, -4, 4);
+        desc.set(ValueLayout.JAVA_INT, ph_contourf_desc.OFFSET_LEVELS, 12);
+        desc.set(ValueLayout.ADDRESS, ph_contourf_desc.OFFSET_COLORMAP, ramp("magma"));
+        desc.set(ValueLayout.ADDRESS, ph_contourf_desc.OFFSET_NAME, ARENA.allocateFrom("value"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_contourf(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 35 — a colour mesh on a log-spaced, unevenly binned grid. */
+    private static void buildMesh(long plot) {
+        MemorySegment values = doubles(MESH_COLS * MESH_ROWS);
+        MemorySegment xEdges = doubles(MESH_COLS + 1);
+        MemorySegment yEdges = doubles(MESH_ROWS + 1);
+        for (int c = 0; c <= MESH_COLS; c++) {
+            xEdges.setAtIndex(ValueLayout.JAVA_DOUBLE, c, Math.pow(10, c * (3.0 / MESH_COLS)));
+        }
+        for (int r = 0; r <= MESH_ROWS; r++) {
+            yEdges.setAtIndex(ValueLayout.JAVA_DOUBLE, r, r * r * 0.4);
+        }
+        for (int r = 0; r < MESH_ROWS; r++) {
+            for (int c = 0; c < MESH_COLS; c++) {
+                values.setAtIndex(ValueLayout.JAVA_DOUBLE, r * MESH_COLS + c,
+                                  Math.sin(c * 0.5) + Math.cos(r * 0.7) + r * 0.1);
+            }
+        }
+        setTitle(plot, "Mesh");
+        styleAxis(plot, "x", "frequency", 0);
+        styleAxis(plot, "y", "depth", 0);
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment axis = ph_axis_desc.allocate(scratch);
+            ph_axis_desc_init(axis);
+            axis.set(ValueLayout.JAVA_INT, ph_axis_desc.OFFSET_TYPE, PH_SCALE_LOG);
+            ph_plot_set_scale(plot, scratch.allocateFrom("x"), axis);
+        }
+
+        MemorySegment desc = ph_pcolormesh_desc.allocate(ARENA);
+        ph_pcolormesh_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_pcolormesh_desc.OFFSET_COLS, MESH_COLS);
+        desc.set(ValueLayout.JAVA_INT, ph_pcolormesh_desc.OFFSET_ROWS, MESH_ROWS);
+        desc.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_X_EDGES, xEdges);
+        desc.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_Y_EDGES, yEdges);
+        desc.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_COLORMAP, ramp("cividis"));
+        desc.set(ValueLayout.ADDRESS, ph_pcolormesh_desc.OFFSET_NAME, ARENA.allocateFrom("level"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_pcolormesh(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 36 — the Flow panel's field as streamlines rather than arrows. */
+    private static void buildStreamlines(long plot) {
+        MemorySegment us = doubles(FLOW * FLOW);
+        MemorySegment vs = doubles(FLOW * FLOW);
+        for (int row = 0; row < FLOW; row++) {
+            for (int col = 0; col < FLOW; col++) {
+                double x = -3 + col * (6.0 / (FLOW - 1));
+                double y = -3 + row * (6.0 / (FLOW - 1));
+                double r2 = x * x + y * y + 0.6;
+                int i = row * FLOW + col;
+                us.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (-y - x * 0.35) / r2 * 4);
+                vs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (x - y * 0.35) / r2 * 4);
+            }
+        }
+        setTitle(plot, "Streamlines");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+        // The field's own box, not the traced lines' extent: a line stops
+        // wherever four hundred RK4 steps happen to leave it.
+        setPlotDomain(plot, "x", -3, 3);
+        setPlotDomain(plot, "y", -3, 3);
+
+        MemorySegment desc = ph_streamplot_desc.allocate(ARENA);
+        ph_streamplot_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_streamplot_desc.OFFSET_U, us);
+        desc.set(ValueLayout.ADDRESS, ph_streamplot_desc.OFFSET_V, vs);
+        desc.set(ValueLayout.JAVA_INT, ph_streamplot_desc.OFFSET_COLS, FLOW);
+        desc.set(ValueLayout.JAVA_INT, ph_streamplot_desc.OFFSET_ROWS, FLOW);
+        setRange(desc, ph_streamplot_desc.OFFSET_X, -3, 3);
+        setRange(desc, ph_streamplot_desc.OFFSET_Y, -3, 3);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_streamplot_desc.OFFSET_DENSITY, 0.55);
+        desc.set(ValueLayout.JAVA_INT, ph_streamplot_desc.OFFSET_COLOR_BY_SPEED, 1);
+        desc.set(ValueLayout.ADDRESS, ph_streamplot_desc.OFFSET_COLORMAP, ramp("turbo"));
+        desc.set(ValueLayout.JAVA_FLOAT, ph_streamplot_desc.OFFSET_WIDTH, 1.5f);
+        desc.set(ValueLayout.ADDRESS, ph_streamplot_desc.OFFSET_NAME, ARENA.allocateFrom("speed"));
+        MemorySegment count = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_plot_add_streamplot(plot, desc, MemorySegment.NULL, 0, count) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+        int lines = count.get(ValueLayout.JAVA_INT, 0);
+        MemorySegment layers = ARENA.allocate(ValueLayout.JAVA_LONG, Math.max(1, lines));
+        if (ph_plot_add_streamplot(plot, desc, layers, lines, count) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 37 — wind barbs, where speed is read off the ticks. */
+    private static void buildBarbs(long plot) {
+        int n = BARB_GRID * BARB_GRID;
+        MemorySegment xs = doubles(n);
+        MemorySegment ys = doubles(n);
+        MemorySegment us = doubles(n);
+        MemorySegment vs = doubles(n);
+        for (int r = 0; r < BARB_GRID; r++) {
+            for (int c = 0; c < BARB_GRID; c++) {
+                int i = r * BARB_GRID + c;
+                double angle = (c + r * 0.7) * 0.5;
+                double speed = i * 1.6;
+                xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, c);
+                ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, r);
+                us.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.cos(angle) * speed);
+                vs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.sin(angle) * speed);
+            }
+        }
+        setTitle(plot, "Barbs");
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment desc = ph_barbs_desc.allocate(ARENA);
+        ph_barbs_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_U, us);
+        desc.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_V, vs);
+        desc.set(ValueLayout.JAVA_INT, ph_barbs_desc.OFFSET_COUNT, n);
+        desc.set(ValueLayout.JAVA_INT, ph_barbs_desc.OFFSET_COLOR, color("#e2e8f0"));
+        desc.set(ValueLayout.ADDRESS, ph_barbs_desc.OFFSET_NAME, ARENA.allocateFrom("wind"));
+        MemorySegment layers = ARENA.allocate(ValueLayout.JAVA_LONG, 2);
+        MemorySegment count = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_plot_add_barbs(plot, desc, layers, 2, count) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void buildScenes() {
         try (Arena scratch = Arena.ofConfined()) {
             MemorySegment desc = ph_plot3d_desc.allocate(scratch);
@@ -2197,6 +2367,10 @@ public final class PhotonGallery {
         buildHistogram(plots[31]);
         buildSpectrogram(plots[32]);
         buildPolar(plots[33]);
+        buildBands(plots[34]);
+        buildMesh(plots[35]);
+        buildStreamlines(plots[36]);
+        buildBarbs(plots[37]);
         buildScenes();
 
         installCallbacks();
