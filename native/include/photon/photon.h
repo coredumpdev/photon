@@ -655,6 +655,188 @@ typedef struct ph_drawdown {
 PH_API ph_result PH_CALL ph_fin_drawdown(const double* equity, int32_t count, double* out_values,
                                          double* out_peak, ph_drawdown* out_info);
 
+/* -- Statistics ----------------------------------------------------------- */
+
+/** A regular grid's shape and the data-space rectangle it covers. */
+typedef struct ph_grid_info {
+  int32_t  cols;
+  int32_t  rows;
+  ph_range x;
+  ph_range y;
+} ph_grid_info;
+
+/**
+ * Bin `values` into equal-width buckets.
+ *
+ * `bins` of 0 means Sturges' rule, which is what the web core's omitted option
+ * resolves to; `lo == hi` means "measure the range from the data". Counted,
+ * because the bin count is only known after the rule runs: `out_edges` takes
+ * `out_bins + 1` doubles, `out_counts` and `out_centers` take `out_bins`. Any
+ * of the three may be NULL.
+ */
+PH_API ph_result PH_CALL ph_stat_histogram(const double* values, int32_t count, int32_t bins,
+                                           double lo, double hi, double* out_edges,
+                                           double* out_counts, double* out_centers,
+                                           int32_t capacity, int32_t* out_bins);
+
+/** The same over explicit edges. `out_counts`/`out_centers` take `edge_count - 1`. */
+PH_API ph_result PH_CALL ph_stat_histogram_edges(const double* values, int32_t count,
+                                                 const double* edges, int32_t edge_count,
+                                                 double* out_counts, double* out_centers);
+
+/**
+ * Bin an (x, y) cloud onto a regular grid — matplotlib's `hist2d`, and the
+ * shape `ph_plot_add_heatmap` takes. `cols`/`rows` of 0 means sqrt(n) either
+ * way; a zero span on an axis is measured from the data. `capacity` is in
+ * cells; `out_info` reports the grid actually chosen.
+ */
+PH_API ph_result PH_CALL ph_stat_hist2d(const double* x, const double* y, int32_t count,
+                                        int32_t cols, int32_t rows, ph_range x_range,
+                                        ph_range y_range, double* out_values, int32_t capacity,
+                                        ph_grid_info* out_info);
+
+/** Linear-interpolated quantile of an already-sorted array (NumPy's type 7). */
+PH_API ph_result PH_CALL ph_stat_quantile(const double* sorted, int32_t count, double q,
+                                          double* out);
+
+/** The five-number summary a Tukey box draws, and what falls outside it. */
+typedef struct ph_box_stats {
+  double  min;
+  double  q1;
+  double  median;
+  double  q3;
+  double  max;
+  /** The extreme values still inside the 1.5-IQR fences — not the fences. */
+  double  whisker_lo;
+  double  whisker_hi;
+  /** How many outliers there were, whatever `capacity` allowed room for. */
+  int32_t outlier_count;
+  /** Zero when the input held no finite value, in which case nothing else is set. */
+  ph_bool valid;
+} ph_box_stats;
+
+/** Quartiles, whiskers and outliers. `out_outliers` may be NULL. */
+PH_API ph_result PH_CALL ph_stat_box(const double* values, int32_t count, ph_box_stats* out,
+                                     double* out_outliers, int32_t capacity);
+
+/** Gaussian KDE over [lo, hi] at `points` samples, Silverman's rule for h. */
+PH_API ph_result PH_CALL ph_stat_kde(const double* values, int32_t count, double lo, double hi,
+                                     int32_t points, double* out_x, double* out_y);
+
+/** In-place radix-2 FFT. `count` must be a power of two. */
+PH_API ph_result PH_CALL ph_stat_fft(double* re, double* im, int32_t count);
+
+/**
+ * Short-time Fourier transform as a time x frequency grid of decibels, ready
+ * for a heatmap. `hop` of 0 means half the frame.
+ */
+PH_API ph_result PH_CALL ph_stat_spectrogram(const double* signal, int32_t count, int32_t fft_size,
+                                             int32_t hop, double sample_rate, double* out_values,
+                                             int32_t capacity, ph_grid_info* out_info);
+
+/** An ordinary-least-squares fit of y = slope*x + intercept. */
+typedef struct ph_linear_fit {
+  double  slope;
+  double  intercept;
+  /** Coefficient of determination, 0..1. */
+  double  r2;
+  /** Standard error of the residuals. */
+  double  stderror;
+  /** Points used; non-finite pairs are skipped rather than poisoning the fit. */
+  int32_t n;
+} ph_linear_fit;
+
+PH_API ph_result PH_CALL ph_stat_linear_regression(const double* x, const double* y, int32_t count,
+                                                   ph_linear_fit* out);
+
+/**
+ * A linear fit sampled across the data range, with an optional +/- `band` *
+ * stderr envelope. `points` of 0 means 2, which is all a straight line needs.
+ * Each output takes `points` doubles; `out_lower`/`out_upper` stay untouched
+ * when `band` is 0.
+ */
+PH_API ph_result PH_CALL ph_stat_linear_trend(const double* x, const double* y, int32_t count,
+                                              int32_t points, double band, double* out_x,
+                                              double* out_y, double* out_lower, double* out_upper);
+
+/**
+ * LOESS: locally-weighted linear regression with a tricube kernel. `bandwidth`
+ * is the fraction of points in each neighbourhood (0 means 0.3); larger is
+ * smoother. Counted, because the grid is capped by the number of finite points.
+ */
+PH_API ph_result PH_CALL ph_stat_loess(const double* x, const double* y, int32_t count,
+                                       double bandwidth, int32_t points, double* out_x,
+                                       double* out_y, int32_t capacity, int32_t* out_count);
+
+/**
+ * The empirical CDF as a step function. Counted: non-finite values are dropped,
+ * so the result is at most `count` long.
+ */
+PH_API ph_result PH_CALL ph_stat_ecdf(const double* values, int32_t count, double* out_x,
+                                      double* out_y, int32_t capacity, int32_t* out_count);
+
+/** Standardize to zero mean and unit variance. Non-finite entries pass through. */
+PH_API ph_result PH_CALL ph_stat_zscore(const double* values, int32_t count, double* out);
+
+/** Pearson correlation of two series; 0 when either is constant. */
+PH_API ph_result PH_CALL ph_stat_correlation(const double* a, const double* b, int32_t count,
+                                             double* out);
+
+/**
+ * Row-major `k*k` correlation matrix over `k` equal-length columns — the shape
+ * a heatmap with a diverging colormap takes. `columns` is an array of `k`
+ * pointers, each `count` long.
+ */
+PH_API ph_result PH_CALL ph_stat_corr_matrix(const double* const* columns, int32_t k,
+                                             int32_t count, double* out);
+
+/** The taper applied to a frame before an FFT, to suppress spectral leakage. */
+typedef int32_t ph_window;
+enum {
+  /** No window at all — right only when the frame holds whole periods. */
+  PH_WINDOW_RECTANGULAR = 0,
+  /** The sane default. */
+  PH_WINDOW_HANN        = 1,
+  /** A touch more leakage for a lower first sidelobe. */
+  PH_WINDOW_HAMMING     = 2,
+  /** Suppresses sidelobes hardest, at the cost of resolution. */
+  PH_WINDOW_BLACKMAN    = 3,
+  /** Triangular, and cheap. */
+  PH_WINDOW_BARTLETT    = 4
+};
+
+/** Sample a window function over `count` points. */
+PH_API ph_result PH_CALL ph_stat_window(ph_window window, int32_t count, double* out);
+
+/**
+ * Welch's method: the averaged periodogram of overlapping windowed segments.
+ * Counted — the segment length is rounded down to a power of two and the bin
+ * count follows from it, so ask first.
+ */
+PH_API ph_result PH_CALL ph_stat_welch(const double* signal, int32_t count, int32_t segment,
+                                       double overlap, ph_window window, double sample_rate,
+                                       double* out_frequencies, double* out_power,
+                                       int32_t capacity, int32_t* out_bins);
+
+/**
+ * Savitzky-Golay smoothing — a least-squares polynomial over a sliding window,
+ * which preserves peak height and width where a moving average flattens them.
+ * `window` is rounded up to odd; `out` takes `count` doubles.
+ */
+PH_API ph_result PH_CALL ph_stat_savitzky_golay(const double* values, int32_t count,
+                                                int32_t window, int32_t order, double* out);
+
+/**
+ * Cross-correlation over +/- `max_lag`, or as far as the data allows when
+ * `max_lag` is negative. Normalised, the peak lag reads directly as "b lags a
+ * by k". Pass the same array twice for an autocorrelation. Counted: the result
+ * is `2 * lag + 1` long.
+ */
+PH_API ph_result PH_CALL ph_stat_cross_correlate(const double* a, const double* b, int32_t count,
+                                                 int32_t max_lag, ph_bool normalize,
+                                                 int32_t* out_lags, double* out_values,
+                                                 int32_t capacity, int32_t* out_count);
+
 /* ------------------------------------------------------------------------ */
 /* Descriptors                                                                */
 /* ------------------------------------------------------------------------ */

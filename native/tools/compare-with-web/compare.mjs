@@ -224,7 +224,8 @@ const PANELS = [
   ["Sprite", 640, 840], ["Candles", 1280, 840], ["Bars", 1920, 840],
   ["Density", 2560, 840],
   ["Flow", 0, 1260], ["Contour", 640, 1260], ["Network", 1280, 1260],
-  ["Signals", 1920, 1260],
+  ["Signals", 1920, 1260], ["Fit", 2560, 1260],
+  ["Spectrum", 0, 1680],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

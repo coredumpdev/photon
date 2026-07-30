@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 19;
+    private static final int PANELS = 21;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -62,6 +62,12 @@ public final class PhotonGallery {
     private static final int NODES = 48;
     private static final int GRAPH_EDGES = 72;
     private static final int BOLLINGER_PERIOD = 10;
+    private static final int FIT_POINTS = 160;
+    private static final int FIT_GRID = 60;
+    private static final int PSD_SAMPLES = 2048;
+    private static final int PSD_SEGMENT = 256;
+    private static final int PSD_BINS = PSD_SEGMENT / 2;
+    private static final double PSD_RATE = 256.0;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -1005,6 +1011,102 @@ public final class PhotonGallery {
         addLine(plot, s.index(), dn, SESSIONS, "#38bdf8", 1.25f, dash, 2, 0, "-2 sigma");
     }
 
+    /**
+     * Panel 19 — a noisy parabola under two fits.
+     *
+     * The straight line is what ordinary least squares has to say about a
+     * symmetric parabola, which is nothing. LOESS, fitting locally, recovers
+     * the curve; drawing both is the point.
+     */
+    private static void buildFit(long plot) {
+        MemorySegment xs = doubles(FIT_POINTS);
+        MemorySegment ys = doubles(FIT_POINTS);
+        int seed = 24681357;
+        for (int i = 0; i < FIT_POINTS; i++) {
+            double x = -3.0 + i * (6.0 / (FIT_POINTS - 1));
+            seed = seed * 1664525 + 1013904223;
+            double noise = (((seed >>> 8) & 0xFFFFFF) / 16777216.0 - 0.5) * 2.4;
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, x);
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 0.6 * x * x - 0.4 * x + 1.0 + noise);
+        }
+
+        MemorySegment gridX = doubles(FIT_GRID);
+        MemorySegment gridY = doubles(FIT_GRID);
+        MemorySegment count = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_stat_loess(xs, ys, FIT_POINTS, 0.3, FIT_GRID, gridX, gridY, FIT_GRID, count)
+                != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+        MemorySegment trendX = doubles(2);
+        MemorySegment trendY = doubles(2);
+        if (ph_stat_linear_trend(xs, ys, FIT_POINTS, 2, 0.0, trendX, trendY, MemorySegment.NULL,
+                                 MemorySegment.NULL) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        setTitle(plot, "Fit");
+        ph_plot_set_pick_mode(plot, PH_PICK_XY);
+        styleAxis(plot, "x", "x", 0);
+        styleAxis(plot, "y", "y", 0);
+
+        MemorySegment desc = ph_scatter_desc.allocate(ARENA);
+        ph_scatter_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_COUNT, FIT_POINTS);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_scatter_desc.OFFSET_SIZE, 4.0f);
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_COLOR, color("#64748b"));
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_MARKER, PH_MARKER_CIRCLE);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_scatter(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        MemorySegment dash = ARENA.allocate(ValueLayout.JAVA_FLOAT, 2);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 6.0f);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 1, 4.0f);
+        addLine(plot, trendX, trendY, 2, "#f87171", 1.5f, dash, 2, 0, "least squares");
+        addLine(plot, gridX, gridY, FIT_GRID, "#22d3ee", 2.5f, null, 0, 0, "loess");
+    }
+
+    /**
+     * Panel 20 — a power spectral density on a log axis.
+     *
+     * Two tones buried in broadband noise. Welch averages eight overlapping
+     * segments, which pushes the noise floor down and leaves the tones standing.
+     */
+    private static void buildSpectrum(long plot) {
+        MemorySegment signal = doubles(PSD_SAMPLES);
+        int seed = 31415926;
+        for (int i = 0; i < PSD_SAMPLES; i++) {
+            double t = i / PSD_RATE;
+            seed = seed * 1664525 + 1013904223;
+            double noise = (((seed >>> 8) & 0xFFFFFF) / 16777216.0 - 0.5) * 0.8;
+            signal.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                Math.sin(2 * Math.PI * 24.0 * t) + 0.5 * Math.sin(2 * Math.PI * 61.0 * t) + noise);
+        }
+        MemorySegment freq = doubles(PSD_BINS);
+        MemorySegment power = doubles(PSD_BINS);
+        MemorySegment bins = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_stat_welch(signal, PSD_SAMPLES, PSD_SEGMENT, 0.5, PH_WINDOW_HANN, PSD_RATE, freq,
+                          power, PSD_BINS, bins) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        setTitle(plot, "Spectrum");
+        styleAxis(plot, "x", "frequency (Hz)", 0);
+        styleAxis(plot, "y", "power", 0);
+        // Power spans four decades, so a linear axis would show one spike and a
+        // flat line where the noise floor is.
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment axis = ph_axis_desc.allocate(scratch);
+            ph_axis_desc_init(axis);
+            axis.set(ValueLayout.JAVA_INT, ph_axis_desc.OFFSET_TYPE, PH_SCALE_LOG);
+            ph_plot_set_scale(plot, scratch.allocateFrom("y"), axis);
+        }
+        addLine(plot, freq, power, bins.get(ValueLayout.JAVA_INT, 0), "#a3e635", 1.5f, null, 0, 0);
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1241,6 +1343,8 @@ public final class PhotonGallery {
         buildContour(plots[16]);
         buildNetwork(plots[17]);
         buildSignals(plots[18], bars);
+        buildFit(plots[19]);
+        buildSpectrum(plots[20]);
 
         installCallbacks();
 

@@ -86,6 +86,8 @@ set(PHOTON_SOURCES
   src/graph/force.cpp
   src/graph/quadtree.cpp
   src/color/colormap.cpp
+  src/stats/regression.cpp
+  src/stats/signal.cpp
   src/stats/stats.cpp
   src/gl/gl.cpp
   src/gl/program.cpp

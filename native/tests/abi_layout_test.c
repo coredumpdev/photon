@@ -99,6 +99,33 @@ PH_ASSERT_LAYOUT(offsetof(ph_drawdown, max_drawdown) == 0, "ph_drawdown.max_draw
 PH_ASSERT_LAYOUT(offsetof(ph_drawdown, trough_index) == 8, "ph_drawdown.trough_index offset");
 PH_ASSERT_LAYOUT(offsetof(ph_drawdown, peak_index) == 12, "ph_drawdown.peak_index offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_grid_info) == 40, "ph_grid_info size");
+PH_ASSERT_LAYOUT(_Alignof(ph_grid_info) == 8, "ph_grid_info alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_grid_info, cols) == 0, "ph_grid_info.cols offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grid_info, rows) == 4, "ph_grid_info.rows offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grid_info, x) == 8, "ph_grid_info.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grid_info, y) == 24, "ph_grid_info.y offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_box_stats) == 64, "ph_box_stats size");
+PH_ASSERT_LAYOUT(_Alignof(ph_box_stats) == 8, "ph_box_stats alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, min) == 0, "ph_box_stats.min offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, q1) == 8, "ph_box_stats.q1 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, median) == 16, "ph_box_stats.median offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, q3) == 24, "ph_box_stats.q3 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, max) == 32, "ph_box_stats.max offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, whisker_lo) == 40, "ph_box_stats.whisker_lo offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, whisker_hi) == 48, "ph_box_stats.whisker_hi offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, outlier_count) == 56, "ph_box_stats.outlier_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_box_stats, valid) == 60, "ph_box_stats.valid offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_linear_fit) == 40, "ph_linear_fit size");
+PH_ASSERT_LAYOUT(_Alignof(ph_linear_fit) == 8, "ph_linear_fit alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, slope) == 0, "ph_linear_fit.slope offset");
+PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, intercept) == 8, "ph_linear_fit.intercept offset");
+PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, r2) == 16, "ph_linear_fit.r2 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, stderror) == 24, "ph_linear_fit.stderror offset");
+PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, n) == 32, "ph_linear_fit.n offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_margin) == 16, "ph_margin size");
 PH_ASSERT_LAYOUT(_Alignof(ph_margin) == 4, "ph_margin alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_margin, top) == 0, "ph_margin.top offset");
@@ -522,7 +549,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid o
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 37);
+  printf("%d struct layouts match the generated bindings\n", 40);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

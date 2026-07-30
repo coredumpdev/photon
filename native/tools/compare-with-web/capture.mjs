@@ -44,8 +44,9 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM ?? "/usr/bin/chromium",
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
+// Tall enough for any grid; the real height comes from the page below.
 const page = await browser.newPage({
-  viewport: { width: 3200, height: 1680 },
+  viewport: { width: 3200, height: 3200 },
   deviceScaleFactor: 1,
 });
 page.on("console", (message) => {
@@ -55,7 +56,13 @@ page.on("pageerror", (error) => console.error("page:", error.message));
 
 await page.goto(page_url);
 await page.waitForSelector("body[data-ready='1']", { state: "attached", timeout: 20000 });
-await page.screenshot({ path: out, clip: { x: 0, y: 0, width: 3200, height: 1680 } });
+// Measured rather than hard-coded: adding a panel changes the row count, and a
+// stale constant here would silently crop the last row out of the comparison.
+const size = await page.evaluate(() => {
+  const grid = document.getElementById("grid");
+  return { width: grid.scrollWidth, height: grid.scrollHeight };
+});
+await page.screenshot({ path: out, clip: { x: 0, y: 0, ...size } });
 await browser.close();
 server.close();
 console.log("wrote " + out);

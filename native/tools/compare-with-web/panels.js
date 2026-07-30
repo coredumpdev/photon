@@ -1,5 +1,5 @@
 /**
- * The nineteen demo charts, built with @photonviz/core.
+ * The twenty-one demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -7,7 +7,7 @@
  * if one changes, both must.
  */
 
-import { Plot, bollinger } from "@photonviz/core";
+import { Plot, bollinger, linearTrend, loess, welch } from "@photonviz/core";
 
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
@@ -27,6 +27,11 @@ const ISO_LEVELS = 9;
 const NODES = 48;
 const GRAPH_EDGES = 72;
 const BOLLINGER_PERIOD = 10;
+const FIT_POINTS = 160;
+const FIT_GRID = 60;
+const PSD_SAMPLES = 2048;
+const PSD_SEGMENT = 256;
+const PSD_RATE = 256;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -532,6 +537,64 @@ function signals(container) {
   return plot;
 }
 
+function fit(container) {
+  const xs = new Float64Array(FIT_POINTS);
+  const ys = new Float64Array(FIT_POINTS);
+  let seed = 24681357;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < FIT_POINTS; i++) {
+    const x = -3 + i * (6 / (FIT_POINTS - 1));
+    const noise = (nextUnit() - 0.5) * 2.4;
+    xs[i] = x;
+    ys[i] = 0.6 * x * x - 0.4 * x + 1 + noise;
+  }
+  const smooth = loess(xs, ys, { bandwidth: 0.3, points: FIT_GRID });
+  const straight = linearTrend(xs, ys, { points: 2 });
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Fit",
+    axes: { x: { title: "x" }, y: { title: "y" } },
+  });
+  plot.addScatter({ x: xs, y: ys, size: 4, color: "#64748b", marker: "circle" });
+  // The OLS line through a symmetric parabola is flat; LOESS is not. Drawing
+  // both is the point of the panel.
+  plot.addLine({ x: straight.x, y: straight.y, color: "#f87171", width: 1.5, dash: [6, 4],
+                 name: "least squares" });
+  plot.addLine({ x: smooth.x, y: smooth.y, color: "#22d3ee", width: 2.5, name: "loess" });
+  return plot;
+}
+
+function spectrum(container) {
+  const signal = new Float64Array(PSD_SAMPLES);
+  let seed = 31415926;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < PSD_SAMPLES; i++) {
+    const t = i / PSD_RATE;
+    const noise = (nextUnit() - 0.5) * 0.8;
+    signal[i] = Math.sin(2 * Math.PI * 24 * t) + 0.5 * Math.sin(2 * Math.PI * 61 * t) + noise;
+  }
+  const psd = welch(signal, { segment: PSD_SEGMENT, overlap: 0.5, window: "hann", sampleRate: PSD_RATE });
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Spectrum",
+    // Power spans four decades, so a linear axis would show one spike and a
+    // flat line where the noise floor is.
+    scales: { y: { type: "log" } },
+    axes: { x: { title: "frequency (Hz)" }, y: { title: "power" } },
+  });
+  plot.addLine({ x: psd.frequencies, y: psd.power, color: "#a3e635", width: 1.5 });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
-                       candles, bars, density, flow, contour, network, signals];
+                       candles, bars, density, flow, contour, network, signals,
+                       fit, spectrum];

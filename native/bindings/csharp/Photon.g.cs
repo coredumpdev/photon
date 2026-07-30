@@ -90,6 +90,11 @@ public static partial class Ph
     public const int PH_LOG_WARN = 1;
     public const int PH_LOG_INFO = 2;
     public const int PH_LOG_DEBUG = 3;
+    public const int PH_WINDOW_RECTANGULAR = 0;
+    public const int PH_WINDOW_HANN = 1;
+    public const int PH_WINDOW_HAMMING = 2;
+    public const int PH_WINDOW_BLACKMAN = 3;
+    public const int PH_WINDOW_BARTLETT = 4;
     public const int PH_TOGGLE_DEFAULT = 0;
     public const int PH_TOGGLE_ON = 1;
     public const int PH_TOGGLE_OFF = -1;
@@ -257,6 +262,60 @@ public static partial class Ph
         public int trough_index;
         /// <summary>offset 12</summary>
         public int peak_index;
+    }
+
+    /// <summary>ph_grid_info — 40 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_grid_info
+    {
+        /// <summary>offset 0</summary>
+        public int cols;
+        /// <summary>offset 4</summary>
+        public int rows;
+        /// <summary>offset 8</summary>
+        public ph_range x;
+        /// <summary>offset 24</summary>
+        public ph_range y;
+    }
+
+    /// <summary>ph_box_stats — 64 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_box_stats
+    {
+        /// <summary>offset 0</summary>
+        public double min;
+        /// <summary>offset 8</summary>
+        public double q1;
+        /// <summary>offset 16</summary>
+        public double median;
+        /// <summary>offset 24</summary>
+        public double q3;
+        /// <summary>offset 32</summary>
+        public double max;
+        /// <summary>offset 40</summary>
+        public double whisker_lo;
+        /// <summary>offset 48</summary>
+        public double whisker_hi;
+        /// <summary>offset 56</summary>
+        public int outlier_count;
+        /// <summary>offset 60</summary>
+        public int valid;
+    }
+
+    /// <summary>ph_linear_fit — 40 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_linear_fit
+    {
+        /// <summary>offset 0</summary>
+        public double slope;
+        /// <summary>offset 8</summary>
+        public double intercept;
+        /// <summary>offset 16</summary>
+        public double r2;
+        /// <summary>offset 24</summary>
+        public double stderror;
+        /// <summary>offset 32</summary>
+        public int n;
     }
 
     /// <summary>ph_margin — 16 bytes, alignment 4.</summary>
@@ -1146,6 +1205,25 @@ public static partial class Ph
         "ph_fin_depth",
         "ph_fin_resample_ohlc",
         "ph_fin_drawdown",
+        "ph_stat_histogram",
+        "ph_stat_histogram_edges",
+        "ph_stat_hist2d",
+        "ph_stat_quantile",
+        "ph_stat_box",
+        "ph_stat_kde",
+        "ph_stat_fft",
+        "ph_stat_spectrogram",
+        "ph_stat_linear_regression",
+        "ph_stat_linear_trend",
+        "ph_stat_loess",
+        "ph_stat_ecdf",
+        "ph_stat_zscore",
+        "ph_stat_correlation",
+        "ph_stat_corr_matrix",
+        "ph_stat_window",
+        "ph_stat_welch",
+        "ph_stat_savitzky_golay",
+        "ph_stat_cross_correlate",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -1382,6 +1460,63 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_drawdown")]
     public static extern int ph_fin_drawdown(double[] equity, int count, out double out_values, out double out_peak, out ph_drawdown out_info);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_histogram")]
+    public static extern int ph_stat_histogram(double[] values, int count, int bins, double lo, double hi, out double out_edges, out double out_counts, out double out_centers, int capacity, out int out_bins);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_histogram_edges")]
+    public static extern int ph_stat_histogram_edges(double[] values, int count, double[] edges, int edge_count, out double out_counts, out double out_centers);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_hist2d")]
+    public static extern int ph_stat_hist2d(double[] x, double[] y, int count, int cols, int rows, ph_range x_range, ph_range y_range, out double out_values, int capacity, out ph_grid_info out_info);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_quantile")]
+    public static extern int ph_stat_quantile(double[] sorted, int count, double q, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_box")]
+    public static extern int ph_stat_box(double[] values, int count, out ph_box_stats @out, out double out_outliers, int capacity);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_kde")]
+    public static extern int ph_stat_kde(double[] values, int count, double lo, double hi, int points, out double out_x, out double out_y);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_fft")]
+    public static extern int ph_stat_fft(out double re, out double im, int count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_spectrogram")]
+    public static extern int ph_stat_spectrogram(double[] signal, int count, int fft_size, int hop, double sample_rate, out double out_values, int capacity, out ph_grid_info out_info);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_linear_regression")]
+    public static extern int ph_stat_linear_regression(double[] x, double[] y, int count, out ph_linear_fit @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_linear_trend")]
+    public static extern int ph_stat_linear_trend(double[] x, double[] y, int count, int points, double band, out double out_x, out double out_y, out double out_lower, out double out_upper);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_loess")]
+    public static extern int ph_stat_loess(double[] x, double[] y, int count, double bandwidth, int points, out double out_x, out double out_y, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_ecdf")]
+    public static extern int ph_stat_ecdf(double[] values, int count, out double out_x, out double out_y, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_zscore")]
+    public static extern int ph_stat_zscore(double[] values, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_correlation")]
+    public static extern int ph_stat_correlation(double[] a, double[] b, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_corr_matrix")]
+    public static extern int ph_stat_corr_matrix(IntPtr columns, int k, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_window")]
+    public static extern int ph_stat_window(int window, int count, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_welch")]
+    public static extern int ph_stat_welch(double[] signal, int count, int segment, double overlap, int window, double sample_rate, out double out_frequencies, out double out_power, int capacity, out int out_bins);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_savitzky_golay")]
+    public static extern int ph_stat_savitzky_golay(double[] values, int count, int window, int order, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_cross_correlate")]
+    public static extern int ph_stat_cross_correlate(double[] a, double[] b, int count, int max_lag, int normalize, out int out_lags, out double out_values, int capacity, out int out_count);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_abi_version")]
     public static extern uint ph_abi_version();

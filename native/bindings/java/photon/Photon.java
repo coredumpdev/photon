@@ -113,6 +113,11 @@ public final class Photon {
     public static final int PH_LOG_WARN = 1;
     public static final int PH_LOG_INFO = 2;
     public static final int PH_LOG_DEBUG = 3;
+    public static final int PH_WINDOW_RECTANGULAR = 0;
+    public static final int PH_WINDOW_HANN = 1;
+    public static final int PH_WINDOW_HAMMING = 2;
+    public static final int PH_WINDOW_BLACKMAN = 3;
+    public static final int PH_WINDOW_BARTLETT = 4;
     public static final int PH_TOGGLE_DEFAULT = 0;
     public static final int PH_TOGGLE_ON = 1;
     public static final int PH_TOGGLE_OFF = -1;
@@ -364,6 +369,91 @@ public final class Photon {
         public static final long OFFSET_MAX_DRAWDOWN = 0L;
         public static final long OFFSET_TROUGH_INDEX = 8L;
         public static final long OFFSET_PEAK_INDEX = 12L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_grid_info — 40 bytes, alignment 8. */
+    public static final class ph_grid_info {
+        private ph_grid_info() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("cols"),
+            ValueLayout.JAVA_INT.withName("rows"),
+            ph_range.LAYOUT.withName("x"),
+            ph_range.LAYOUT.withName("y")
+        ).withName("ph_grid_info");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_COLS = 0L;
+        public static final long OFFSET_ROWS = 4L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_Y = 24L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_box_stats — 64 bytes, alignment 8. */
+    public static final class ph_box_stats {
+        private ph_box_stats() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("min"),
+            ValueLayout.JAVA_DOUBLE.withName("q1"),
+            ValueLayout.JAVA_DOUBLE.withName("median"),
+            ValueLayout.JAVA_DOUBLE.withName("q3"),
+            ValueLayout.JAVA_DOUBLE.withName("max"),
+            ValueLayout.JAVA_DOUBLE.withName("whisker_lo"),
+            ValueLayout.JAVA_DOUBLE.withName("whisker_hi"),
+            ValueLayout.JAVA_INT.withName("outlier_count"),
+            ValueLayout.JAVA_INT.withName("valid")
+        ).withName("ph_box_stats");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_MIN = 0L;
+        public static final long OFFSET_Q1 = 8L;
+        public static final long OFFSET_MEDIAN = 16L;
+        public static final long OFFSET_Q3 = 24L;
+        public static final long OFFSET_MAX = 32L;
+        public static final long OFFSET_WHISKER_LO = 40L;
+        public static final long OFFSET_WHISKER_HI = 48L;
+        public static final long OFFSET_OUTLIER_COUNT = 56L;
+        public static final long OFFSET_VALID = 60L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_linear_fit — 40 bytes, alignment 8. */
+    public static final class ph_linear_fit {
+        private ph_linear_fit() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("slope"),
+            ValueLayout.JAVA_DOUBLE.withName("intercept"),
+            ValueLayout.JAVA_DOUBLE.withName("r2"),
+            ValueLayout.JAVA_DOUBLE.withName("stderror"),
+            ValueLayout.JAVA_INT.withName("n"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_linear_fit");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_SLOPE = 0L;
+        public static final long OFFSET_INTERCEPT = 8L;
+        public static final long OFFSET_R2 = 16L;
+        public static final long OFFSET_STDERROR = 24L;
+        public static final long OFFSET_N = 32L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1608,6 +1698,25 @@ public final class Photon {
         "ph_fin_depth",
         "ph_fin_resample_ohlc",
         "ph_fin_drawdown",
+        "ph_stat_histogram",
+        "ph_stat_histogram_edges",
+        "ph_stat_hist2d",
+        "ph_stat_quantile",
+        "ph_stat_box",
+        "ph_stat_kde",
+        "ph_stat_fft",
+        "ph_stat_spectrogram",
+        "ph_stat_linear_regression",
+        "ph_stat_linear_trend",
+        "ph_stat_loess",
+        "ph_stat_ecdf",
+        "ph_stat_zscore",
+        "ph_stat_correlation",
+        "ph_stat_corr_matrix",
+        "ph_stat_window",
+        "ph_stat_welch",
+        "ph_stat_savitzky_golay",
+        "ph_stat_cross_correlate",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -1754,6 +1863,25 @@ public final class Photon {
     private static final MethodHandle PH_FIN_DEPTH = handle("ph_fin_depth", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_FIN_RESAMPLE_OHLC = handle("ph_fin_resample_ohlc", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
     private static final MethodHandle PH_FIN_DRAWDOWN = handle("ph_fin_drawdown", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_HISTOGRAM = handle("ph_stat_histogram", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_HISTOGRAM_EDGES = handle("ph_stat_histogram_edges", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_HIST2D = handle("ph_stat_hist2d", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ph_range.LAYOUT, ph_range.LAYOUT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_QUANTILE = handle("ph_stat_quantile", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_BOX = handle("ph_stat_box", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_STAT_KDE = handle("ph_stat_kde", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_FFT = handle("ph_stat_fft", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_STAT_SPECTROGRAM = handle("ph_stat_spectrogram", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_LINEAR_REGRESSION = handle("ph_stat_linear_regression", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_LINEAR_TREND = handle("ph_stat_linear_trend", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_LOESS = handle("ph_stat_loess", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_ECDF = handle("ph_stat_ecdf", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_ZSCORE = handle("ph_stat_zscore", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_CORRELATION = handle("ph_stat_correlation", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_CORR_MATRIX = handle("ph_stat_corr_matrix", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_WINDOW = handle("ph_stat_window", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_WELCH = handle("ph_stat_welch", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_SAVITZKY_GOLAY = handle("ph_stat_savitzky_golay", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STAT_CROSS_CORRELATE = handle("ph_stat_cross_correlate", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
     private static final MethodHandle PH_ABI_VERSION = handle("ph_abi_version", FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle PH_VERSION = handle("ph_version", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_INIT = handle("ph_init", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
@@ -2204,6 +2332,158 @@ public final class Photon {
             return (int) PH_FIN_DRAWDOWN.invokeExact(equity, count, out_values, out_peak, out_info);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_fin_drawdown failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_histogram(MemorySegment values, int count, int bins, double lo, double hi, MemorySegment out_edges, MemorySegment out_counts, MemorySegment out_centers, int capacity, MemorySegment out_bins) {
+        try {
+            return (int) PH_STAT_HISTOGRAM.invokeExact(values, count, bins, lo, hi, out_edges, out_counts, out_centers, capacity, out_bins);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_histogram failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_histogram_edges(MemorySegment values, int count, MemorySegment edges, int edge_count, MemorySegment out_counts, MemorySegment out_centers) {
+        try {
+            return (int) PH_STAT_HISTOGRAM_EDGES.invokeExact(values, count, edges, edge_count, out_counts, out_centers);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_histogram_edges failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_hist2d(MemorySegment x, MemorySegment y, int count, int cols, int rows, MemorySegment x_range, MemorySegment y_range, MemorySegment out_values, int capacity, MemorySegment out_info) {
+        try {
+            return (int) PH_STAT_HIST2D.invokeExact(x, y, count, cols, rows, x_range, y_range, out_values, capacity, out_info);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_hist2d failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_quantile(MemorySegment sorted, int count, double q, MemorySegment out) {
+        try {
+            return (int) PH_STAT_QUANTILE.invokeExact(sorted, count, q, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_quantile failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_box(MemorySegment values, int count, MemorySegment out, MemorySegment out_outliers, int capacity) {
+        try {
+            return (int) PH_STAT_BOX.invokeExact(values, count, out, out_outliers, capacity);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_box failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_kde(MemorySegment values, int count, double lo, double hi, int points, MemorySegment out_x, MemorySegment out_y) {
+        try {
+            return (int) PH_STAT_KDE.invokeExact(values, count, lo, hi, points, out_x, out_y);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_kde failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_fft(MemorySegment re, MemorySegment im, int count) {
+        try {
+            return (int) PH_STAT_FFT.invokeExact(re, im, count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_fft failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_spectrogram(MemorySegment signal, int count, int fft_size, int hop, double sample_rate, MemorySegment out_values, int capacity, MemorySegment out_info) {
+        try {
+            return (int) PH_STAT_SPECTROGRAM.invokeExact(signal, count, fft_size, hop, sample_rate, out_values, capacity, out_info);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_spectrogram failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_linear_regression(MemorySegment x, MemorySegment y, int count, MemorySegment out) {
+        try {
+            return (int) PH_STAT_LINEAR_REGRESSION.invokeExact(x, y, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_linear_regression failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_linear_trend(MemorySegment x, MemorySegment y, int count, int points, double band, MemorySegment out_x, MemorySegment out_y, MemorySegment out_lower, MemorySegment out_upper) {
+        try {
+            return (int) PH_STAT_LINEAR_TREND.invokeExact(x, y, count, points, band, out_x, out_y, out_lower, out_upper);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_linear_trend failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_loess(MemorySegment x, MemorySegment y, int count, double bandwidth, int points, MemorySegment out_x, MemorySegment out_y, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_STAT_LOESS.invokeExact(x, y, count, bandwidth, points, out_x, out_y, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_loess failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_ecdf(MemorySegment values, int count, MemorySegment out_x, MemorySegment out_y, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_STAT_ECDF.invokeExact(values, count, out_x, out_y, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_ecdf failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_zscore(MemorySegment values, int count, MemorySegment out) {
+        try {
+            return (int) PH_STAT_ZSCORE.invokeExact(values, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_zscore failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_correlation(MemorySegment a, MemorySegment b, int count, MemorySegment out) {
+        try {
+            return (int) PH_STAT_CORRELATION.invokeExact(a, b, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_correlation failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_corr_matrix(MemorySegment columns, int k, int count, MemorySegment out) {
+        try {
+            return (int) PH_STAT_CORR_MATRIX.invokeExact(columns, k, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_corr_matrix failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_window(int window, int count, MemorySegment out) {
+        try {
+            return (int) PH_STAT_WINDOW.invokeExact(window, count, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_window failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_welch(MemorySegment signal, int count, int segment, double overlap, int window, double sample_rate, MemorySegment out_frequencies, MemorySegment out_power, int capacity, MemorySegment out_bins) {
+        try {
+            return (int) PH_STAT_WELCH.invokeExact(signal, count, segment, overlap, window, sample_rate, out_frequencies, out_power, capacity, out_bins);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_welch failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_savitzky_golay(MemorySegment values, int count, int window, int order, MemorySegment out) {
+        try {
+            return (int) PH_STAT_SAVITZKY_GOLAY.invokeExact(values, count, window, order, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_savitzky_golay failed", photonFailure);
+        }
+    }
+
+    public static int ph_stat_cross_correlate(MemorySegment a, MemorySegment b, int count, int max_lag, int normalize, MemorySegment out_lags, MemorySegment out_values, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_STAT_CROSS_CORRELATE.invokeExact(a, b, count, max_lag, normalize, out_lags, out_values, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stat_cross_correlate failed", photonFailure);
         }
     }
 

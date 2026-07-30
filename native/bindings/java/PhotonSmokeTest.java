@@ -1441,6 +1441,198 @@ public final class PhotonSmokeTest {
         check(Photon.lastError().contains("non-negative"), "and it says so");
     }
 
+    /**
+     * The statistics family: histograms, fits, filters and spectra.
+     *
+     * Same argument as {@link #analysis}: no plot, no GL, and the widest
+     * pointer-out surface in the ABI. The arithmetic is checked against the
+     * TypeScript in tests/signal_test.cpp; what is checked here is that it
+     * arrives.
+     */
+    static void statistics(Arena arena) {
+        MemorySegment countOut = arena.allocate(ValueLayout.JAVA_INT);
+        MemorySegment sample = doubles(arena, 1, 2, 2, 3, 4, 5, 5, 5);
+
+        // Counted: the bin count is only known after Sturges' rule runs.
+        checkEq(ph_stat_histogram(sample, 8, 4, 0.0, 0.0, MemorySegment.NULL, MemorySegment.NULL,
+                                  MemorySegment.NULL, 0, countOut),
+                PH_OK, "ph_stat_histogram sizing pass");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 4, "four bins were asked for");
+        MemorySegment edges = room(arena, 5);
+        MemorySegment counts = room(arena, 4);
+        MemorySegment centers = room(arena, 4);
+        checkEq(ph_stat_histogram(sample, 8, 4, 0.0, 0.0, edges, counts, centers, 4, countOut),
+                PH_OK, "ph_stat_histogram");
+        check(at(edges, 0) == 1.0 && at(edges, 4) == 5.0, "the edges span the data");
+        check(at(counts, 0) + at(counts, 1) + at(counts, 2) + at(counts, 3) == 8.0,
+              "and every sample landed in one");
+        check(at(centers, 0) == 1.5, "centres sit between the edges");
+        checkEq(ph_stat_histogram_edges(sample, 8, edges, 5, counts, centers), PH_OK,
+                "ph_stat_histogram_edges");
+        checkEq(ph_stat_histogram_edges(sample, 8, edges, 1, counts, centers),
+                PH_E_INVALID_ARGUMENT, "one edge is not a histogram");
+        ran("ph_stat_histogram", "ph_stat_histogram_edges");
+
+        MemorySegment gx = doubles(arena, 0, 1, 0, 1);
+        MemorySegment gy = doubles(arena, 0, 0, 1, 1);
+        MemorySegment grid = room(arena, 4);
+        MemorySegment info = ph_grid_info.allocate(arena);
+        MemorySegment zero = ph_range.allocate(arena);
+        checkEq(ph_stat_hist2d(gx, gy, 4, 2, 2, zero, zero, grid, 4, info), PH_OK,
+                "ph_stat_hist2d");
+        checkEq(info.get(ValueLayout.JAVA_INT, ph_grid_info.OFFSET_COLS), 2, "two columns");
+        check(at(grid, 0) == 1.0 && at(grid, 3) == 1.0, "one point in each cell");
+        ran("ph_stat_hist2d");
+
+        MemorySegment scalar = arena.allocate(ValueLayout.JAVA_DOUBLE);
+        MemorySegment sorted = doubles(arena, 1, 2, 3, 4);
+        checkEq(ph_stat_quantile(sorted, 4, 0.5, scalar), PH_OK, "ph_stat_quantile");
+        check(scalar.get(ValueLayout.JAVA_DOUBLE, 0) == 2.5, "the median of 1..4");
+        ran("ph_stat_quantile");
+
+        MemorySegment spread = doubles(arena, 1, 2, 3, 4, 5, 6, 7, 8, 100);
+        MemorySegment box = ph_box_stats.allocate(arena);
+        MemorySegment outliers = room(arena, 4);
+        checkEq(ph_stat_box(spread, 9, box, outliers, 4), PH_OK, "ph_stat_box");
+        check(box.get(ValueLayout.JAVA_INT, ph_box_stats.OFFSET_VALID) != 0, "the box is valid");
+        checkEq(box.get(ValueLayout.JAVA_INT, ph_box_stats.OFFSET_OUTLIER_COUNT), 1,
+                "the 100 is the one outlier");
+        check(at(outliers, 0) == 100.0, "and it is handed back");
+        check(box.get(ValueLayout.JAVA_DOUBLE, ph_box_stats.OFFSET_WHISKER_HI) == 8.0,
+              "the whisker stops at the last value inside the fence");
+        ran("ph_stat_box");
+
+        MemorySegment kdeX = room(arena, 8);
+        MemorySegment kdeY = room(arena, 8);
+        checkEq(ph_stat_kde(spread, 9, 0.0, 10.0, 8, kdeX, kdeY), PH_OK, "ph_stat_kde");
+        check(at(kdeX, 0) == 0.0 && at(kdeX, 7) == 10.0, "the KDE grid spans what was asked");
+        checkEq(ph_stat_kde(spread, 9, 0.0, 10.0, 0, kdeX, kdeY), PH_E_INVALID_ARGUMENT,
+                "zero points is refused");
+        ran("ph_stat_kde");
+
+        // A real cosine of k cycles puts half its energy at bin k.
+        MemorySegment re = room(arena, 8);
+        MemorySegment im = room(arena, 8);
+        for (int i = 0; i < 8; i++) {
+            re.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.cos(2 * Math.PI * i / 8.0));
+        }
+        checkEq(ph_stat_fft(re, im, 8), PH_OK, "ph_stat_fft");
+        check(Math.abs(Math.hypot(at(re, 1), at(im, 1)) - 4.0) < 1e-9, "the tone is at bin 1");
+        checkEq(ph_stat_fft(re, im, 6), PH_E_INVALID_ARGUMENT, "a non-power-of-two is refused");
+        ran("ph_stat_fft");
+
+        MemorySegment tone = room(arena, 512);
+        for (int i = 0; i < 512; i++) {
+            tone.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.sin(2 * Math.PI * 32 * i / 256.0));
+        }
+        checkEq(ph_stat_spectrogram(tone, 512, 64, 32, 256.0, MemorySegment.NULL, 0, info), PH_OK,
+                "ph_stat_spectrogram sizing pass");
+        int cells = info.get(ValueLayout.JAVA_INT, ph_grid_info.OFFSET_COLS)
+                  * info.get(ValueLayout.JAVA_INT, ph_grid_info.OFFSET_ROWS);
+        check(cells > 0, "the spectrogram has cells");
+        MemorySegment spec = room(arena, cells);
+        checkEq(ph_stat_spectrogram(tone, 512, 64, 32, 256.0, spec, cells, info), PH_OK,
+                "ph_stat_spectrogram");
+        checkEq(ph_stat_spectrogram(tone, 512, 63, 32, 256.0, spec, cells, info),
+                PH_E_INVALID_ARGUMENT, "an odd frame size is refused");
+        ran("ph_stat_spectrogram");
+
+        MemorySegment lx = room(arena, 20);
+        MemorySegment ly = room(arena, 20);
+        for (int i = 0; i < 20; i++) {
+            lx.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ly.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 3.0 * i - 4.0);
+        }
+        MemorySegment fit = ph_linear_fit.allocate(arena);
+        checkEq(ph_stat_linear_regression(lx, ly, 20, fit), PH_OK, "ph_stat_linear_regression");
+        check(Math.abs(fit.get(ValueLayout.JAVA_DOUBLE, ph_linear_fit.OFFSET_SLOPE) - 3.0) < 1e-10,
+              "the slope comes back exactly");
+        checkEq(fit.get(ValueLayout.JAVA_INT, ph_linear_fit.OFFSET_N), 20, "over twenty points");
+
+        MemorySegment tx = room(arena, 4);
+        MemorySegment ty = room(arena, 4);
+        MemorySegment tlo = room(arena, 4);
+        MemorySegment thi = room(arena, 4);
+        checkEq(ph_stat_linear_trend(lx, ly, 20, 4, 2.0, tx, ty, tlo, thi), PH_OK,
+                "ph_stat_linear_trend");
+        check(at(tx, 0) == 0.0 && at(tx, 3) == 19.0, "sampled across the data range");
+        ran("ph_stat_linear_regression", "ph_stat_linear_trend");
+
+        checkEq(ph_stat_loess(lx, ly, 20, 0.4, 8, MemorySegment.NULL, MemorySegment.NULL, 0,
+                              countOut),
+                PH_OK, "ph_stat_loess sizing pass");
+        int grids = countOut.get(ValueLayout.JAVA_INT, 0);
+        checkEq(grids, 8, "eight grid points were asked for");
+        MemorySegment loX = room(arena, grids);
+        MemorySegment loY = room(arena, grids);
+        checkEq(ph_stat_loess(lx, ly, 20, 0.4, 8, loX, loY, grids, countOut), PH_OK,
+                "ph_stat_loess");
+        check(Math.abs(at(loY, 7) - (3.0 * at(loX, 7) - 4.0)) < 1e-6,
+              "LOESS through a straight line is that line");
+
+        MemorySegment eX = room(arena, 20);
+        MemorySegment eY = room(arena, 20);
+        checkEq(ph_stat_ecdf(ly, 20, eX, eY, 20, countOut), PH_OK, "ph_stat_ecdf");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 20, "every finite value is a step");
+        check(at(eY, 19) == 1.0, "and the last one is 1");
+
+        MemorySegment z = room(arena, 20);
+        checkEq(ph_stat_zscore(ly, 20, z), PH_OK, "ph_stat_zscore");
+        checkEq(ph_stat_correlation(lx, ly, 20, scalar), PH_OK, "ph_stat_correlation");
+        check(Math.abs(scalar.get(ValueLayout.JAVA_DOUBLE, 0) - 1.0) < 1e-10,
+              "a line correlates with itself perfectly");
+        ran("ph_stat_loess", "ph_stat_ecdf", "ph_stat_zscore", "ph_stat_correlation");
+
+        // An array of pointers, which is the one input shape here that is not a
+        // flat block of doubles.
+        MemorySegment columns = arena.allocate(ValueLayout.ADDRESS, 2);
+        columns.setAtIndex(ValueLayout.ADDRESS, 0, lx);
+        columns.setAtIndex(ValueLayout.ADDRESS, 1, ly);
+        MemorySegment matrix = room(arena, 4);
+        checkEq(ph_stat_corr_matrix(columns, 2, 20, matrix), PH_OK, "ph_stat_corr_matrix");
+        check(at(matrix, 0) == 1.0 && at(matrix, 3) == 1.0, "a unit diagonal");
+        check(Math.abs(at(matrix, 1) - at(matrix, 2)) < 1e-12, "and it is symmetric");
+        ran("ph_stat_corr_matrix");
+
+        MemorySegment win = room(arena, 32);
+        checkEq(ph_stat_window(PH_WINDOW_HANN, 32, win), PH_OK, "ph_stat_window");
+        check(at(win, 0) < 1e-9 && at(win, 16) > 0.9, "a Hann window tapers to zero");
+        checkEq(ph_stat_window(99, 32, win), PH_E_INVALID_ARGUMENT, "an unknown window is refused");
+        ran("ph_stat_window");
+
+        checkEq(ph_stat_welch(tone, 512, 256, 0.5, PH_WINDOW_HANN, 256.0, MemorySegment.NULL,
+                              MemorySegment.NULL, 0, countOut),
+                PH_OK, "ph_stat_welch sizing pass");
+        int bins = countOut.get(ValueLayout.JAVA_INT, 0);
+        checkEq(bins, 128, "a 256-sample segment gives 128 one-sided bins");
+        MemorySegment freqs = room(arena, bins);
+        MemorySegment power = room(arena, bins);
+        checkEq(ph_stat_welch(tone, 512, 256, 0.5, PH_WINDOW_HANN, 256.0, freqs, power, bins,
+                              countOut),
+                PH_OK, "ph_stat_welch");
+        int peak = 0;
+        for (int i = 1; i < bins; i++) if (at(power, i) > at(power, peak)) peak = i;
+        check(Math.abs(at(freqs, peak) - 32.0) < 1.5, "the peak is at the tone");
+        ran("ph_stat_welch");
+
+        MemorySegment smooth = room(arena, 512);
+        checkEq(ph_stat_savitzky_golay(tone, 512, 9, 2, smooth), PH_OK, "ph_stat_savitzky_golay");
+        ran("ph_stat_savitzky_golay");
+
+        checkEq(ph_stat_cross_correlate(lx, lx, 20, 5, 1, MemorySegment.NULL, MemorySegment.NULL, 0,
+                                        countOut),
+                PH_OK, "ph_stat_cross_correlate sizing pass");
+        int lagCount = countOut.get(ValueLayout.JAVA_INT, 0);
+        checkEq(lagCount, 11, "plus and minus five lags, and zero");
+        MemorySegment lags = arena.allocate(ValueLayout.JAVA_INT, lagCount);
+        MemorySegment corr = room(arena, lagCount);
+        checkEq(ph_stat_cross_correlate(lx, lx, 20, 5, 1, lags, corr, lagCount, countOut), PH_OK,
+                "ph_stat_cross_correlate");
+        checkEq(lags.getAtIndex(ValueLayout.JAVA_INT, 5), 0, "the middle lag is zero");
+        check(Math.abs(at(corr, 5) - 1.0) < 1e-9, "and an autocorrelation peaks there at 1");
+        ran("ph_stat_cross_correlate");
+    }
+
     public static void main(String[] args) {
         try (Arena arena = Arena.ofConfined()) {
             step("versionAndInit");
@@ -1453,6 +1645,8 @@ public final class PhotonSmokeTest {
             colormaps(arena);
             step("analysis");
             analysis(arena);
+            step("statistics");
+            statistics(arena);
             step("buildPlot");
             long plot = buildPlot(arena);
             step("axes");

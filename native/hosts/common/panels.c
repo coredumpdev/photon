@@ -39,6 +39,16 @@
 /* Short enough that the bands cover most of the 34 sessions rather than warming
  * up through half of them. */
 #define BOLLINGER_PERIOD 10
+/* A noisy quadratic: enough points for LOESS to have something to average over,
+ * few enough that the individual samples are still visible under the fit. */
+#define FIT_POINTS 160
+#define FIT_GRID 60
+/* Two tones plus noise, sampled long enough for Welch to average eight
+ * overlapping 256-sample segments. */
+#define PSD_SAMPLES 2048
+#define PSD_SEGMENT 256
+#define PSD_BINS (PSD_SEGMENT / 2)
+#define PSD_RATE 256.0
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -105,13 +115,26 @@ struct ph_panels {
   double band_mid[SESSIONS];
   double band_up[SESSIONS];
   double band_dn[SESSIONS];
+
+  double fit_x[FIT_POINTS];
+  double fit_y[FIT_POINTS];
+  double fit_grid_x[FIT_GRID];
+  double fit_grid_y[FIT_GRID];
+  double trend_x[2];
+  double trend_y[2];
+
+  double psd_signal[PSD_SAMPLES];
+  double psd_freq[PSD_BINS];
+  double psd_power[PSD_BINS];
+  int psd_count;
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
                                               "Revenue", "Funnel",    "Share",   "Impulse",
                                               "Yield",   "Latency",   "Field",   "Sprite",
                                               "Candles", "Bars",      "Density", "Flow",
-                                              "Contour", "Network",   "Signals"};
+                                              "Contour", "Network",   "Signals", "Fit",
+                                              "Spectrum"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -371,6 +394,35 @@ ph_panels* ph_panels_create(void) {
    * baked here with the rest of the data rather than recomputed per frame. */
   ph_fin_bollinger(p->bar_close, SESSIONS, BOLLINGER_PERIOD, 2.0, p->band_mid, p->band_up,
                    p->band_dn);
+
+  /* A parabola with noise on it. The OLS line through a symmetric parabola is
+   * flat, which is exactly what makes it worth drawing both fits: the straight
+   * line says nothing and the local one says everything. */
+  seed = 24681357u;
+  for (int i = 0; i < FIT_POINTS; i++) {
+    const double x = -3.0 + i * (6.0 / (FIT_POINTS - 1));
+    seed = seed * 1664525u + 1013904223u;
+    const double noise = ((double)(seed >> 8) / 16777216.0 - 0.5) * 2.4;
+    p->fit_x[i] = x;
+    p->fit_y[i] = 0.6 * x * x - 0.4 * x + 1.0 + noise;
+  }
+  int fit_grid = 0;
+  ph_stat_loess(p->fit_x, p->fit_y, FIT_POINTS, 0.3, FIT_GRID, p->fit_grid_x, p->fit_grid_y,
+                FIT_GRID, &fit_grid);
+  ph_stat_linear_trend(p->fit_x, p->fit_y, FIT_POINTS, 2, 0.0, p->trend_x, p->trend_y, NULL, NULL);
+
+  /* Two tones and broadband noise. Welch averages the noise down and leaves the
+   * tones standing, which is the whole reason to prefer it to one long FFT. */
+  seed = 31415926u;
+  for (int i = 0; i < PSD_SAMPLES; i++) {
+    const double t = i / PSD_RATE;
+    seed = seed * 1664525u + 1013904223u;
+    const double noise = ((double)(seed >> 8) / 16777216.0 - 0.5) * 0.8;
+    p->psd_signal[i] = sin(2.0 * 3.14159265358979323846 * 24.0 * t) +
+                       0.5 * sin(2.0 * 3.14159265358979323846 * 61.0 * t) + noise;
+  }
+  ph_stat_welch(p->psd_signal, PSD_SAMPLES, PSD_SEGMENT, 0.5, PH_WINDOW_HANN, PSD_RATE, p->psd_freq,
+                p->psd_power, PSD_BINS, &p->psd_count);
 
   return p;
 }
@@ -921,6 +973,79 @@ static void build_signals(ph_panels* p, ph_plot plot) {
   ph_plot_add_line(plot, &line, &layer);
 }
 
+/* Panel 19 — a noisy parabola under two fits.
+ *
+ * The straight line is what ordinary least squares has to say about a symmetric
+ * parabola, which is nothing: its slope is zero by construction. LOESS, fitting
+ * locally, recovers the curve. Drawing both is the point. */
+static void build_fit(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Fit");
+  ph_plot_set_pick_mode(plot, PH_PICK_XY);
+  style_axis(plot, "x", "x", 0);
+  style_axis(plot, "y", "y", 0);
+
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_scatter_desc points;
+  ph_scatter_desc_init(&points);
+  points.x = p->fit_x;
+  points.y = p->fit_y;
+  points.count = FIT_POINTS;
+  points.size = 4.0f;
+  points.color = parse("#64748b");
+  points.marker = PH_MARKER_CIRCLE;
+  ph_plot_add_scatter(plot, &points, &layer);
+
+  static const float dash[2] = {6.0f, 4.0f};
+  ph_line_desc line;
+  ph_line_desc_init(&line);
+  line.x = p->trend_x;
+  line.y = p->trend_y;
+  line.count = 2;
+  line.width = 1.5f;
+  line.color = parse("#f87171");
+  line.dash = dash;
+  line.dash_count = 2;
+  line.name = "least squares";
+  ph_plot_add_line(plot, &line, &layer);
+
+  ph_line_desc_init(&line);
+  line.x = p->fit_grid_x;
+  line.y = p->fit_grid_y;
+  line.count = FIT_GRID;
+  line.width = 2.5f;
+  line.color = parse("#22d3ee");
+  line.name = "loess";
+  ph_plot_add_line(plot, &line, &layer);
+}
+
+/* Panel 20 — a power spectral density on a log axis.
+ *
+ * Two tones buried in broadband noise. Welch averages eight overlapping
+ * segments, which pushes the noise floor down and leaves the tones standing —
+ * the reason to prefer it to one long FFT, and visible here as two spikes. */
+static void build_spectrum(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Spectrum");
+  style_axis(plot, "x", "frequency (Hz)", 0);
+  style_axis(plot, "y", "power", 0);
+
+  /* Power spans four decades, so a linear axis would show one spike and a flat
+   * line where the noise floor is. */
+  ph_axis_desc axis;
+  ph_axis_desc_init(&axis);
+  axis.type = PH_SCALE_LOG;
+  ph_plot_set_scale(plot, "y", &axis);
+
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_line_desc line;
+  ph_line_desc_init(&line);
+  line.x = p->psd_freq;
+  line.y = p->psd_power;
+  line.count = p->psd_count;
+  line.width = 1.5f;
+  line.color = parse("#a3e635");
+  ph_plot_add_line(plot, &line, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -943,7 +1068,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 15: build_flow(panels, plot); break;
     case 16: build_contour(panels, plot); break;
     case 17: build_network(panels, plot); break;
-    default: build_signals(panels, plot); break;
+    case 18: build_signals(panels, plot); break;
+    case 19: build_fit(panels, plot); break;
+    default: build_spectrum(panels, plot); break;
   }
 }
 

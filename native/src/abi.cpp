@@ -29,6 +29,9 @@
 #include "layer.hpp"
 #include "plot.hpp"
 #include "registry.hpp"
+#include "stats/regression.hpp"
+#include "stats/signal.hpp"
+#include "stats/stats.hpp"
 #include "text/text.hpp"
 
 using photon::clear_error;
@@ -880,6 +883,345 @@ extern "C" ph_result PH_CALL ph_fin_drawdown(const double* equity, int32_t count
     out_info->max_drawdown = dd.max_drawdown;
     out_info->trough_index = dd.trough_index;
     out_info->peak_index = dd.peak_index;
+  }
+  return PH_OK;
+}
+
+namespace {
+
+/// Copy at most `capacity` doubles into a caller buffer, if it asked for them.
+void emit_capped(const std::vector<double>& src, double* out, size_t writable) {
+  if (out && writable > 0 && !src.empty()) {
+    std::memcpy(out, src.data(), std::min(writable, src.size()) * sizeof(double));
+  }
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_stat_histogram(const double* values, int32_t count, int32_t bins,
+                                               double lo, double hi, double* out_edges,
+                                               double* out_counts, double* out_centers,
+                                               int32_t capacity, int32_t* out_bins) {
+  clear_error();
+  ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out_bins) return fail(PH_E_INVALID_ARGUMENT, "out_bins must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::Histogram h =
+      photon::stats::histogram(values, static_cast<size_t>(count), bins, lo, hi);
+  *out_bins = static_cast<int32_t>(h.counts.size());
+  const size_t writable = std::min(h.counts.size(), static_cast<size_t>(capacity));
+  emit_capped(h.counts, out_counts, writable);
+  emit_capped(h.centers, out_centers, writable);
+  // One more edge than there are bins, which is the whole point of edges.
+  emit_capped(h.edges, out_edges, writable > 0 ? writable + 1 : 0);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_histogram_edges(const double* values, int32_t count,
+                                                     const double* edges, int32_t edge_count,
+                                                     double* out_counts, double* out_centers) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!edges || edge_count < 2) {
+    return fail(PH_E_INVALID_ARGUMENT, "edges must hold at least two entries");
+  }
+  const photon::stats::Histogram h = photon::stats::histogram_edges(
+      values, static_cast<size_t>(count), edges, static_cast<size_t>(edge_count));
+  emit(h.counts, out_counts);
+  emit(h.centers, out_centers);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_hist2d(const double* x, const double* y, int32_t count,
+                                            int32_t cols, int32_t rows, ph_range x_range,
+                                            ph_range y_range, double* out_values, int32_t capacity,
+                                            ph_grid_info* out_info) {
+  clear_error();
+  ph_result r = check_series(x, count, "x");
+  if (r != PH_OK) return r;
+  r = check_series(y, count, "y");
+  if (r != PH_OK) return r;
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::Histogram2D h =
+      photon::stats::hist2d(x, y, static_cast<size_t>(count), cols, rows, x_range.lo, x_range.hi,
+                            y_range.lo, y_range.hi);
+  if (out_info) {
+    out_info->cols = static_cast<int32_t>(h.cols);
+    out_info->rows = static_cast<int32_t>(h.rows);
+    out_info->x = ph_range{h.x0, h.x1};
+    out_info->y = ph_range{h.y0, h.y1};
+  }
+  emit_capped(h.values, out_values, static_cast<size_t>(capacity));
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_quantile(const double* sorted, int32_t count, double q,
+                                              double* out) {
+  clear_error();
+  const ph_result r = check_series(sorted, count, "sorted");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  const std::vector<double> copy(sorted, sorted + count);
+  *out = photon::stats::quantile_sorted(copy, q);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_box(const double* values, int32_t count, ph_box_stats* out,
+                                         double* out_outliers, int32_t capacity) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::BoxStats box = photon::stats::box_stats(values, static_cast<size_t>(count));
+  out->min = box.min;
+  out->q1 = box.q1;
+  out->median = box.median;
+  out->q3 = box.q3;
+  out->max = box.max;
+  out->whisker_lo = box.whisker_lo;
+  out->whisker_hi = box.whisker_hi;
+  out->outlier_count = static_cast<int32_t>(box.outliers.size());
+  out->valid = box.valid ? 1 : 0;
+  emit_capped(box.outliers, out_outliers, static_cast<size_t>(capacity));
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_kde(const double* values, int32_t count, double lo, double hi,
+                                         int32_t points, double* out_x, double* out_y) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (points < 1) return fail(PH_E_INVALID_ARGUMENT, "points must be positive");
+  const photon::stats::Density d = photon::stats::kde(values, static_cast<size_t>(count), lo, hi,
+                                                      static_cast<size_t>(points));
+  emit(d.xs, out_x);
+  emit(d.ys, out_y);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_fft(double* re, double* im, int32_t count) {
+  clear_error();
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (count > 0 && (!re || !im)) {
+    return fail(PH_E_INVALID_ARGUMENT, "re and im must both be non-null");
+  }
+  if (count > 0 && (count & (count - 1)) != 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "count must be a power of two");
+  }
+  photon::stats::fft(re, im, static_cast<size_t>(count));
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_spectrogram(const double* signal, int32_t count,
+                                                 int32_t fft_size, int32_t hop, double sample_rate,
+                                                 double* out_values, int32_t capacity,
+                                                 ph_grid_info* out_info) {
+  clear_error();
+  const ph_result r = check_series(signal, count, "signal");
+  if (r != PH_OK) return r;
+  if (fft_size < 2 || (fft_size & (fft_size - 1)) != 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "fft_size must be a power of two of at least 2");
+  }
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::Spectrogram s = photon::stats::spectrogram(
+      signal, static_cast<size_t>(count), fft_size, hop, sample_rate);
+  if (out_info) {
+    out_info->cols = static_cast<int32_t>(s.cols);
+    out_info->rows = static_cast<int32_t>(s.rows);
+    out_info->x = ph_range{s.x0, s.x1};
+    out_info->y = ph_range{s.y0, s.y1};
+  }
+  emit_capped(s.values, out_values, static_cast<size_t>(capacity));
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_linear_regression(const double* x, const double* y,
+                                                       int32_t count, ph_linear_fit* out) {
+  clear_error();
+  ph_result r = check_series(x, count, "x");
+  if (r != PH_OK) return r;
+  r = check_series(y, count, "y");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  const photon::stats::LinearFit fit =
+      photon::stats::linear_regression(x, y, static_cast<size_t>(count));
+  out->slope = fit.slope;
+  out->intercept = fit.intercept;
+  out->r2 = fit.r2;
+  out->stderror = fit.stderror;
+  out->n = static_cast<int32_t>(fit.n);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_linear_trend(const double* x, const double* y, int32_t count,
+                                                  int32_t points, double band, double* out_x,
+                                                  double* out_y, double* out_lower,
+                                                  double* out_upper) {
+  clear_error();
+  ph_result r = check_series(x, count, "x");
+  if (r != PH_OK) return r;
+  r = check_series(y, count, "y");
+  if (r != PH_OK) return r;
+  const photon::stats::Trend t = photon::stats::linear_trend(
+      x, y, static_cast<size_t>(count), points > 0 ? points : 2, band);
+  emit(t.x, out_x);
+  emit(t.y, out_y);
+  emit(t.lower, out_lower);
+  emit(t.upper, out_upper);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_loess(const double* x, const double* y, int32_t count,
+                                           double bandwidth, int32_t points, double* out_x,
+                                           double* out_y, int32_t capacity, int32_t* out_count) {
+  clear_error();
+  ph_result r = check_series(x, count, "x");
+  if (r != PH_OK) return r;
+  r = check_series(y, count, "y");
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::Trend t =
+      photon::stats::loess(x, y, static_cast<size_t>(count), bandwidth, points);
+  *out_count = static_cast<int32_t>(t.x.size());
+  const size_t writable = std::min(t.x.size(), static_cast<size_t>(capacity));
+  emit_capped(t.x, out_x, writable);
+  emit_capped(t.y, out_y, writable);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_ecdf(const double* values, int32_t count, double* out_x,
+                                          double* out_y, int32_t capacity, int32_t* out_count) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::Trend e = photon::stats::ecdf(values, static_cast<size_t>(count));
+  *out_count = static_cast<int32_t>(e.x.size());
+  const size_t writable = std::min(e.x.size(), static_cast<size_t>(capacity));
+  emit_capped(e.x, out_x, writable);
+  emit_capped(e.y, out_y, writable);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_zscore(const double* values, int32_t count, double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::stats::zscore(values, static_cast<size_t>(count)), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_correlation(const double* a, const double* b, int32_t count,
+                                                 double* out) {
+  clear_error();
+  ph_result r = check_series(a, count, "a");
+  if (r != PH_OK) return r;
+  r = check_series(b, count, "b");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  *out = photon::stats::correlation(a, b, static_cast<size_t>(count));
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_corr_matrix(const double* const* columns, int32_t k,
+                                                 int32_t count, double* out) {
+  clear_error();
+  if (k < 0 || count < 0) return fail(PH_E_INVALID_ARGUMENT, "k and count must be non-negative");
+  if (k > 0 && !columns) return fail(PH_E_INVALID_ARGUMENT, "columns must be non-null when k > 0");
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  for (int32_t i = 0; i < k; ++i) {
+    if (count > 0 && !columns[i]) {
+      return fail(PH_E_INVALID_ARGUMENT, "every column must be non-null when count > 0");
+    }
+  }
+  emit(photon::stats::corr_matrix(columns, static_cast<size_t>(k), static_cast<size_t>(count)),
+       out);
+  return PH_OK;
+}
+
+namespace {
+
+/// An out-of-range window name is a caller error, not a silent fallback to Hann.
+bool to_window(ph_window value, photon::stats::Window& out) {
+  switch (value) {
+    case PH_WINDOW_RECTANGULAR: out = photon::stats::Window::Rectangular; return true;
+    case PH_WINDOW_HANN:        out = photon::stats::Window::Hann;        return true;
+    case PH_WINDOW_HAMMING:     out = photon::stats::Window::Hamming;     return true;
+    case PH_WINDOW_BLACKMAN:    out = photon::stats::Window::Blackman;    return true;
+    case PH_WINDOW_BARTLETT:    out = photon::stats::Window::Bartlett;    return true;
+    default:                                                             return false;
+  }
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_stat_window(ph_window window, int32_t count, double* out) {
+  clear_error();
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (count > 0 && !out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  photon::stats::Window kind = photon::stats::Window::Hann;
+  if (!to_window(window, kind)) return fail(PH_E_INVALID_ARGUMENT, "unknown window function");
+  emit(photon::stats::window_function(kind, static_cast<size_t>(count)), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_welch(const double* signal, int32_t count, int32_t segment,
+                                           double overlap, ph_window window, double sample_rate,
+                                           double* out_frequencies, double* out_power,
+                                           int32_t capacity, int32_t* out_bins) {
+  clear_error();
+  const ph_result r = check_series(signal, count, "signal");
+  if (r != PH_OK) return r;
+  if (!out_bins) return fail(PH_E_INVALID_ARGUMENT, "out_bins must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  photon::stats::Window kind = photon::stats::Window::Hann;
+  if (!to_window(window, kind)) return fail(PH_E_INVALID_ARGUMENT, "unknown window function");
+  const photon::stats::Psd psd = photon::stats::welch(signal, static_cast<size_t>(count), segment,
+                                                      overlap, kind, sample_rate);
+  *out_bins = static_cast<int32_t>(psd.power.size());
+  const size_t writable = std::min(psd.power.size(), static_cast<size_t>(capacity));
+  emit_capped(psd.frequencies, out_frequencies, writable);
+  emit_capped(psd.power, out_power, writable);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_savitzky_golay(const double* values, int32_t count,
+                                                    int32_t window, int32_t order, double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::stats::savitzky_golay(values, static_cast<size_t>(count), window > 0 ? window : 9,
+                                     order),
+       out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_stat_cross_correlate(const double* a, const double* b,
+                                                     int32_t count, int32_t max_lag,
+                                                     ph_bool normalize, int32_t* out_lags,
+                                                     double* out_values, int32_t capacity,
+                                                     int32_t* out_count) {
+  clear_error();
+  ph_result r = check_series(a, count, "a");
+  if (r != PH_OK) return r;
+  r = check_series(b, count, "b");
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::stats::Correlation c = photon::stats::cross_correlate(
+      a, b, static_cast<size_t>(count), max_lag, normalize != 0);
+  *out_count = static_cast<int32_t>(c.values.size());
+  const size_t writable = std::min(c.values.size(), static_cast<size_t>(capacity));
+  emit_capped(c.values, out_values, writable);
+  if (out_lags && writable > 0) {
+    std::memcpy(out_lags, c.lags.data(), writable * sizeof(int32_t));
   }
   return PH_OK;
 }
