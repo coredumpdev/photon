@@ -230,7 +230,12 @@ const PANELS = [
   // and are turned off in both cores, so the region is the whole comparison.
   ["Treemap", 1920, 1680], ["Sunburst", 2560, 1680],
   ["Sankey", 0, 2100], ["Chord", 640, 2100], ["Gauge", 1280, 2100],
-  ["Parallel", 1920, 2100],
+  ["Parallel", 1920, 2100], ["Grouped", 2560, 2100],
+  ["Stacked", 0, 2520], ["Histogram", 640, 2520],
+  // The spectrogram's heatmap covers its whole region, the same as Field's:
+  // there is no grid line to see in either image, and the two GL
+  // implementations resolve the quad's edge column differently.
+  ["Spectrogram", 1280, 2520, { grid: false }],
 ];
 const CELL_WIDTH = 640, CELL_HEIGHT = 420;
 

@@ -1075,6 +1075,12 @@ typedef struct ph_axis_desc {
   /** Per-index epoch-ms timestamps for PH_SCALE_ORDINAL_TIME. */
   const double* times;
   int32_t       time_count;
+  /**
+   * Tint for a secondary y axis added with ph_plot_add_y_axis: its line, ticks
+   * and labels all take it, so a reader can tell at a glance which series
+   * belongs to which side. PH_COLOR_AUTO keeps the theme's colour.
+   */
+  ph_color      color;
 } ph_axis_desc;
 
 /**
@@ -1759,22 +1765,27 @@ typedef struct ph_patch {
  * frame to frame. Everything the patch arrays point at is copied during the
  * call, like every other descriptor.
  *
- * The web core can also colour patches by a per-patch `value` through a
- * colormap (choropleth). That needs the colormap tables, which are not ported
- * yet, so those two fields are absent rather than accepted and ignored —
- * appending them later does not change this ABI version.
+ * A choropleth is `values` plus `colormap`: one number per patch, mapped
+ * through the ramp. It beats a patch's own `color`, the same way a scatter's
+ * `color_by` beats its per-point colours, and it contributes a colorbar.
  */
 typedef struct ph_patches_desc {
-  uint32_t        struct_size;
-  const ph_patch* patches;
-  int32_t         patch_count;
+  uint32_t                struct_size;
+  const ph_patch*         patches;
+  int32_t                 patch_count;
   /** Fill for patches that do not carry their own colour. */
-  ph_color        color;
+  ph_color                color;
   /** Fill opacity, 0..1. 0 means the core default of 1. */
-  float           opacity;
-  const char*     name;
-  const char*     y_axis;
-  ph_render_type  render_type;
+  float                   opacity;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+  /** One value per patch, mapped through `colormap`. NULL for a flat fill. */
+  const double*           values;
+  /** NULL with `values` set means viridis. */
+  const ph_colormap_spec* colormap;
+  /** Value range the ramp covers. Leave empty to measure it from `values`. */
+  ph_range                domain;
 } ph_patches_desc;
 
 /* ------------------------------------------------------------------------ */
@@ -1952,6 +1963,26 @@ PH_API ph_result PH_CALL ph_plot_set_title(ph_plot plot, const char* title);
  */
 PH_API ph_result PH_CALL ph_plot_set_equal_aspect(ph_plot plot, ph_bool enabled);
 
+/** How the plot title is drawn. All-zero is the theme's own styling. */
+typedef struct ph_title_config {
+  uint32_t      struct_size;
+  /** The text. NULL clears the title, the same as ph_plot_set_title(NULL). */
+  const char*   text;
+  ph_color      color;
+  /** Em size in logical px. 0 means 15. */
+  float         size;
+  /** Where the text sits across the top strip. 0 is centred. */
+  ph_text_align align;
+} ph_title_config;
+
+PH_API void PH_CALL ph_title_config_init(ph_title_config* out);
+
+/**
+ * Set the title and how it is drawn. `ph_plot_set_title` is the short form and
+ * leaves the styling alone; this is the whole of what `drawTitle` accepts.
+ */
+PH_API ph_result PH_CALL ph_plot_set_title_config(ph_plot plot, const ph_title_config* config);
+
 /**
  * Show or hide the colorbar stack. On by default, as in the core.
  *
@@ -2076,6 +2107,107 @@ PH_API ph_result PH_CALL ph_plot_add_image(ph_plot plot, const ph_image_desc* de
 /* ------------------------------------------------------------------------ */
 /* Composed charts                                                            */
 /* ------------------------------------------------------------------------ */
+
+/*
+ * One series of a multi-series builder. `y` is `count` long, parallel to the
+ * builder's shared `x`.
+ */
+typedef struct ph_series {
+  const double* y;
+  ph_color      color;
+  const char*   name;
+} ph_series;
+
+/**
+ * Grouped (clustered) bars: one bar layer per series, each shifted inside its
+ * category so they sit side by side. Counted, like every other builder that
+ * returns more than one layer.
+ */
+typedef struct ph_grouped_bar_desc {
+  uint32_t         struct_size;
+  const double*    x;
+  int32_t          count;
+  const ph_series* series;
+  int32_t          series_count;
+  /** Data-space width of one whole cluster. 0 means 0.8. */
+  double           group_width;
+  /** Fraction of each slot left empty between bars. 0 means 0.1. */
+  double           gap;
+  ph_orientation   orientation;
+  const char*      y_axis;
+  ph_render_type   render_type;
+} ph_grouped_bar_desc;
+
+PH_API void PH_CALL ph_grouped_bar_desc_init(ph_grouped_bar_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_grouped_bars(ph_plot plot, const ph_grouped_bar_desc* desc,
+                                                  ph_layer* out_layers, int32_t capacity,
+                                                  int32_t* out_count);
+
+/**
+ * Stacked bars or a stacked area: each series is drawn from the running total
+ * of the ones before it, so they stack. Returned bottom to top.
+ */
+typedef struct ph_stacked_desc {
+  uint32_t         struct_size;
+  const double*    x;
+  int32_t          count;
+  const ph_series* series;
+  int32_t          series_count;
+  /** Bar width in data units; ignored by the area form. 0 is the core default. */
+  double           width;
+  ph_orientation   orientation;
+  const char*      y_axis;
+  ph_render_type   render_type;
+} ph_stacked_desc;
+
+PH_API void PH_CALL ph_stacked_desc_init(ph_stacked_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_stacked_bars(ph_plot plot, const ph_stacked_desc* desc,
+                                                  ph_layer* out_layers, int32_t capacity,
+                                                  int32_t* out_count);
+PH_API ph_result PH_CALL ph_plot_add_stacked_area(ph_plot plot, const ph_stacked_desc* desc,
+                                                  ph_layer* out_layers, int32_t capacity,
+                                                  int32_t* out_count);
+
+/** Bin raw values and draw the result as bars. */
+typedef struct ph_histogram_desc {
+  uint32_t       struct_size;
+  const double*  values;
+  int32_t        count;
+  /** 0 means Sturges' rule, as in the core. */
+  int32_t        bins;
+  /** Range to bin over. Leave empty to measure it from the data. */
+  ph_range       range;
+  ph_color       color;
+  const char*    name;
+  const char*    y_axis;
+  ph_render_type render_type;
+} ph_histogram_desc;
+
+PH_API void PH_CALL ph_histogram_desc_init(ph_histogram_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_histogram(ph_plot plot, const ph_histogram_desc* desc,
+                                               ph_layer* out);
+
+/** A short-time Fourier transform drawn as a heatmap: time across, frequency up. */
+typedef struct ph_spectrogram_desc {
+  uint32_t                struct_size;
+  const double*           signal;
+  int32_t                 count;
+  /** Frame size, a power of two. 0 means 256. */
+  int32_t                 fft_size;
+  /** Samples between frames. 0 means half the frame. */
+  int32_t                 hop;
+  /** 0 means 1, which makes the axes read in cycles per sample. */
+  double                  sample_rate;
+  /** NULL means plasma, which is the core's default for this chart. */
+  const ph_colormap_spec* colormap;
+  const char*             name;
+  const char*             y_axis;
+  ph_render_type          render_type;
+} ph_spectrogram_desc;
+
+PH_API void PH_CALL ph_spectrogram_desc_init(ph_spectrogram_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_spectrogram(ph_plot plot, const ph_spectrogram_desc* desc,
+                                                 ph_layer* out);
 
 /*
  * Seven diagrams that are not layers.

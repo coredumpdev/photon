@@ -128,7 +128,16 @@ void draw_colorbars(Painter& painter, const Rect& region,
                     ph_theme theme);
 
 /// The plot title, centred in the strip reserved above the region.
-void draw_title(Painter& painter, const Rect& region, const std::string& title, ph_theme theme);
+/// How the title is drawn. All-default is the theme's own styling.
+struct TitleStyle {
+  ph_color color = PH_COLOR_AUTO;
+  /// Em size in logical px; 0 takes the core's 15.
+  float size = 0.0f;
+  text::Align align = text::Align::Center;
+};
+
+void draw_title(Painter& painter, const Rect& region, const std::string& title, ph_theme theme,
+                const TitleStyle& style = {});
 
 /// Dashed guide lines through (px, py) while the pointer is down.
 void draw_crosshair_xy(Painter& painter, const Rect& region, double px, double py, ph_theme theme);

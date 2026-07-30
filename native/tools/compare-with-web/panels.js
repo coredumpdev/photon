@@ -1,5 +1,5 @@
 /**
- * The twenty-nine demo charts, built with @photonviz/core.
+ * The thirty-three demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -40,6 +40,8 @@ const EMBED_POINTS = 300;
 const EMBED_DIMS = 4;
 const PARALLEL_DIMS = 4;
 const PARALLEL_ROWS = 40;
+const STREAMS = 3;
+const HIST_SAMPLES = 4000;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -190,6 +192,8 @@ function funnel(container) {
       x: [0.5 - halfTop, 0.5 + halfTop, 0.5 + halfBottom, 0.5 - halfBottom],
       y: [top, top, bottom, bottom],
       color: colors[i],
+      // A choropleth: the value beats the colour above, and earns a colorbar.
+      value: 5 - i,
     });
   }
 
@@ -198,7 +202,7 @@ function funnel(container) {
     title: "Funnel",
     axes: { x: { title: "share" }, y: { title: "stage" } },
   });
-  plot.addPatches({ patches });
+  plot.addPatches({ patches, colormap: "cividis" });
   return plot;
 }
 
@@ -778,8 +782,90 @@ function parallel(container) {
   return plot;
 }
 
+/** The three revenue streams the grouped and stacked panels share. */
+function streams() {
+  const revenue = [42, 47, 51, 49, 58, 63, 61, 68, 72, 70, 78, 84];
+  const weight = [0.55, 0.3, 0.15];
+  const names = ["licence", "services", "support"];
+  const colors = ["#60a5fa", "#f59e0b", "#34d399"];
+  return Array.from({ length: STREAMS }, (_, s) => ({
+    y: Float64Array.from(revenue, (v) => v * weight[s]),
+    color: colors[s],
+    name: names[s],
+  }));
+}
+
+const MONTH_X = Float64Array.from({ length: 12 }, (_, i) => i);
+
+function grouped(container) {
+  const plot = new Plot(container, {
+    ...common,
+    title: "Grouped",
+    axes: { x: { title: "month" }, y: { title: "revenue" } },
+  });
+  plot.addGroupedBars({ x: MONTH_X, series: streams() });
+  return plot;
+}
+
+function stacked(container) {
+  const plot = new Plot(container, {
+    ...common,
+    title: "Stacked",
+    axes: { x: { title: "month" }, y: { title: "revenue" } },
+    legend: { position: "top-left" },
+  });
+  plot.addStackedArea({ x: MONTH_X, series: streams() });
+  return plot;
+}
+
+function histogramPanel(container) {
+  const values = new Float64Array(HIST_SAMPLES);
+  let seed = 44556677;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < HIST_SAMPLES; i++) {
+    const u = nextUnit();
+    const v = nextUnit();
+    const g = Math.sqrt(-2 * Math.log(u + 1e-12)) * Math.cos(2 * Math.PI * v);
+    values[i] = (i % 3 === 0 ? 6 : 2) + g * (i % 3 === 0 ? 0.8 : 1.2);
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Histogram",
+    axes: { x: { title: "value" }, y: { title: "count" } },
+  });
+  plot.addHistogram(values, { bins: 40, color: "#38bdf8" });
+  return plot;
+}
+
+function spectrogramPanel(container) {
+  const signal = new Float64Array(PSD_SAMPLES);
+  let seed = 31415926;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < PSD_SAMPLES; i++) {
+    const t = i / PSD_RATE;
+    const noise = (nextUnit() - 0.5) * 0.8;
+    signal[i] = Math.sin(2 * Math.PI * 24 * t) + 0.5 * Math.sin(2 * Math.PI * 61 * t) + noise;
+  }
+  const plot = new Plot(container, {
+    ...common,
+    title: "Spectrogram",
+    axes: { x: { title: "time (s)" }, y: { title: "frequency (Hz)" } },
+  });
+  // The same two tones as the Spectrum panel, seen the other way round: the PSD
+  // says what frequencies are there, this says when.
+  plot.addHeatmapSpectrogram(signal, { fftSize: 128, sampleRate: PSD_RATE });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
                        candles, bars, density, flow, contour, network, signals,
                        fit, spectrum, roc, embedding, treemap, sunburst, sankey,
-                       chord, gauge, parallel];
+                       chord, gauge, parallel, grouped, stacked, histogramPanel,
+                       spectrogramPanel];

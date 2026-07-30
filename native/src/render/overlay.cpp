@@ -307,11 +307,18 @@ void draw_colorbars(Painter& painter, const Rect& region,
   }
 }
 
-void draw_title(Painter& painter, const Rect& region, const std::string& title, ph_theme theme) {
+void draw_title(Painter& painter, const Rect& region, const std::string& title, ph_theme theme,
+                const TitleStyle& style) {
   if (title.empty()) return;
-  const Rgba color = unpack_color_exact(theme_for(theme).title);
-  painter.label(title, region.left + region.width / 2.0, region.top / 2.0, text::Align::Center,
-                text::Baseline::Middle, color, kTitleSize, 0.0, kTitleBold);
+  const Rgba color = style.color != PH_COLOR_AUTO ? unpack_color_exact(style.color)
+                                                  : unpack_color_exact(theme_for(theme).title);
+  // Left and right align to the plot region rather than the canvas, so a title
+  // lines up with the data it names rather than with the axis labels.
+  const double x = style.align == text::Align::Left    ? region.left
+                   : style.align == text::Align::Right ? region.right()
+                                                       : region.left + region.width / 2.0;
+  painter.label(title, x, region.top / 2.0, style.align, text::Baseline::Middle, color,
+                style.size > 0.0f ? style.size : kTitleSize, 0.0, kTitleBold);
 }
 
 void draw_crosshair_xy(Painter& painter, const Rect& region, double px, double py,

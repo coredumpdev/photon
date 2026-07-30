@@ -413,6 +413,7 @@ bool Plot::add_y_axis(const char* id, const ph_axis_desc& desc, int32_t side) {
   axis.id = id;
   if (!axis.scale.configure(desc)) return false;
   axis.side = side;
+  axis.color = desc.color;
   axis.automatic = desc.domain.lo == desc.domain.hi;
   if (!axis.automatic) {
     axis.has_initial = true;
@@ -1077,7 +1078,8 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
     YAxis& axis = y_axes_[i];
     const std::vector<Tick>& ticks = axis.axis.resolve(axis.scale);
     const render::AxisStyle style =
-        &axis == &primary ? style_y : render::resolve_axis_style(axis.axis.config, theme_);
+        &axis == &primary ? style_y
+                          : render::resolve_axis_style(axis.axis.config, theme_, axis.color);
     render::draw_y_axis(painter, rect, axis.scale, ticks, style, axis.axis.config.title,
                         placements[i]);
   }
@@ -1146,7 +1148,7 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
         render::draw_legend(painter, rect, entries, legend_position_, legend_horizontal_, theme_);
   }
 
-  render::draw_title(painter, rect, title_, theme_);
+  render::draw_title(painter, rect, title_, theme_, title_style_);
 
   if (!shapes_.flush(api, gfx, pixels, error)) return false;
   if (!labels_.flush(api, gfx, pixels, error)) return false;

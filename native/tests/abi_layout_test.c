@@ -177,6 +177,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_axis_desc, factors) == 24, "ph_axis_desc.factors of
 PH_ASSERT_LAYOUT(offsetof(ph_axis_desc, factor_count) == 32, "ph_axis_desc.factor_count offset");
 PH_ASSERT_LAYOUT(offsetof(ph_axis_desc, times) == 40, "ph_axis_desc.times offset");
 PH_ASSERT_LAYOUT(offsetof(ph_axis_desc, time_count) == 48, "ph_axis_desc.time_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_axis_desc, color) == 52, "ph_axis_desc.color offset");
 
 PH_ASSERT_LAYOUT(sizeof(ph_tick) == 24, "ph_tick size");
 PH_ASSERT_LAYOUT(_Alignof(ph_tick) == 8, "ph_tick alignment");
@@ -552,7 +553,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_patch, holes) == 24, "ph_patch.holes offset");
 PH_ASSERT_LAYOUT(offsetof(ph_patch, hole_count) == 32, "ph_patch.hole_count offset");
 PH_ASSERT_LAYOUT(offsetof(ph_patch, color) == 36, "ph_patch.color offset");
 
-PH_ASSERT_LAYOUT(sizeof(ph_patches_desc) == 56, "ph_patches_desc size");
+PH_ASSERT_LAYOUT(sizeof(ph_patches_desc) == 88, "ph_patches_desc size");
 PH_ASSERT_LAYOUT(_Alignof(ph_patches_desc) == 8, "ph_patches_desc alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, struct_size) == 0, "ph_patches_desc.struct_size offset");
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, patches) == 8, "ph_patches_desc.patches offset");
@@ -562,6 +563,9 @@ PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, opacity) == 24, "ph_patches_desc.opac
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, name) == 32, "ph_patches_desc.name offset");
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, y_axis) == 40, "ph_patches_desc.y_axis offset");
 PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, render_type) == 48, "ph_patches_desc.render_type offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, values) == 56, "ph_patches_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, colormap) == 64, "ph_patches_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_patches_desc, domain) == 72, "ph_patches_desc.domain offset");
 
 PH_ASSERT_LAYOUT(sizeof(ph_event) == 104, "ph_event size");
 PH_ASSERT_LAYOUT(_Alignof(ph_event) == 8, "ph_event alignment");
@@ -579,6 +583,70 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_x) == 80, "ph_event.point_x offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, point_y) == 88, "ph_event.point_y offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, point_index) == 96, "ph_event.point_index offset");
 PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_title_config) == 32, "ph_title_config size");
+PH_ASSERT_LAYOUT(_Alignof(ph_title_config) == 8, "ph_title_config alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_title_config, struct_size) == 0, "ph_title_config.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_title_config, text) == 8, "ph_title_config.text offset");
+PH_ASSERT_LAYOUT(offsetof(ph_title_config, color) == 16, "ph_title_config.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_title_config, size) == 20, "ph_title_config.size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_title_config, align) == 24, "ph_title_config.align offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_series) == 24, "ph_series size");
+PH_ASSERT_LAYOUT(_Alignof(ph_series) == 8, "ph_series alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_series, y) == 0, "ph_series.y offset");
+PH_ASSERT_LAYOUT(offsetof(ph_series, color) == 8, "ph_series.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_series, name) == 16, "ph_series.name offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_grouped_bar_desc) == 80, "ph_grouped_bar_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_grouped_bar_desc) == 8, "ph_grouped_bar_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, struct_size) == 0, "ph_grouped_bar_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, x) == 8, "ph_grouped_bar_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, count) == 16, "ph_grouped_bar_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, series) == 24, "ph_grouped_bar_desc.series offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, series_count) == 32, "ph_grouped_bar_desc.series_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, group_width) == 40, "ph_grouped_bar_desc.group_width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, gap) == 48, "ph_grouped_bar_desc.gap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, orientation) == 56, "ph_grouped_bar_desc.orientation offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, y_axis) == 64, "ph_grouped_bar_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_grouped_bar_desc, render_type) == 72, "ph_grouped_bar_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_stacked_desc) == 72, "ph_stacked_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_stacked_desc) == 8, "ph_stacked_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, struct_size) == 0, "ph_stacked_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, x) == 8, "ph_stacked_desc.x offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, count) == 16, "ph_stacked_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, series) == 24, "ph_stacked_desc.series offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, series_count) == 32, "ph_stacked_desc.series_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, width) == 40, "ph_stacked_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, orientation) == 48, "ph_stacked_desc.orientation offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, y_axis) == 56, "ph_stacked_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_stacked_desc, render_type) == 64, "ph_stacked_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_histogram_desc) == 72, "ph_histogram_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_histogram_desc) == 8, "ph_histogram_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, struct_size) == 0, "ph_histogram_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, values) == 8, "ph_histogram_desc.values offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, count) == 16, "ph_histogram_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, bins) == 20, "ph_histogram_desc.bins offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, range) == 24, "ph_histogram_desc.range offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, color) == 40, "ph_histogram_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, name) == 48, "ph_histogram_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, y_axis) == 56, "ph_histogram_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_histogram_desc, render_type) == 64, "ph_histogram_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_spectrogram_desc) == 72, "ph_spectrogram_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_spectrogram_desc) == 8, "ph_spectrogram_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, struct_size) == 0, "ph_spectrogram_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, signal) == 8, "ph_spectrogram_desc.signal offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, count) == 16, "ph_spectrogram_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, fft_size) == 20, "ph_spectrogram_desc.fft_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, hop) == 24, "ph_spectrogram_desc.hop offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, sample_rate) == 32, "ph_spectrogram_desc.sample_rate offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, colormap) == 40, "ph_spectrogram_desc.colormap offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, name) == 48, "ph_spectrogram_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, y_axis) == 56, "ph_spectrogram_desc.y_axis offset");
+PH_ASSERT_LAYOUT(offsetof(ph_spectrogram_desc, render_type) == 64, "ph_spectrogram_desc.render_type offset");
 
 PH_ASSERT_LAYOUT(sizeof(ph_chart_item) == 24, "ph_chart_item size");
 PH_ASSERT_LAYOUT(_Alignof(ph_chart_item) == 8, "ph_chart_item alignment");
@@ -721,7 +789,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, no_axes) == 76, "ph_parallel_desc.no
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 57);
+  printf("%d struct layouts match the generated bindings\n", 63);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

@@ -620,7 +620,7 @@ public final class Photon {
             MemoryLayout.paddingLayout(4),
             ValueLayout.ADDRESS.withName("times"),
             ValueLayout.JAVA_INT.withName("time_count"),
-            MemoryLayout.paddingLayout(4)
+            ValueLayout.JAVA_INT.withName("color")
         ).withName("ph_axis_desc");
 
         public static final long SIZE = LAYOUT.byteSize();
@@ -632,6 +632,7 @@ public final class Photon {
         public static final long OFFSET_FACTOR_COUNT = 32L;
         public static final long OFFSET_TIMES = 40L;
         public static final long OFFSET_TIME_COUNT = 48L;
+        public static final long OFFSET_COLOR = 52L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1687,7 +1688,7 @@ public final class Photon {
         }
     }
 
-    /** ph_patches_desc — 56 bytes, alignment 8. */
+    /** ph_patches_desc — 88 bytes, alignment 8. */
     public static final class ph_patches_desc {
         private ph_patches_desc() {}
 
@@ -1702,7 +1703,10 @@ public final class Photon {
             ValueLayout.ADDRESS.withName("name"),
             ValueLayout.ADDRESS.withName("y_axis"),
             ValueLayout.JAVA_INT.withName("render_type"),
-            MemoryLayout.paddingLayout(4)
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ph_range.LAYOUT.withName("domain")
         ).withName("ph_patches_desc");
 
         public static final long SIZE = LAYOUT.byteSize();
@@ -1715,6 +1719,9 @@ public final class Photon {
         public static final long OFFSET_NAME = 32L;
         public static final long OFFSET_Y_AXIS = 40L;
         public static final long OFFSET_RENDER_TYPE = 48L;
+        public static final long OFFSET_VALUES = 56L;
+        public static final long OFFSET_COLORMAP = 64L;
+        public static final long OFFSET_DOMAIN = 72L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -1760,6 +1767,213 @@ public final class Photon {
         public static final long OFFSET_POINT_Y = 88L;
         public static final long OFFSET_POINT_INDEX = 96L;
         public static final long OFFSET_POINT_VALID = 100L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_title_config — 32 bytes, alignment 8. */
+    public static final class ph_title_config {
+        private ph_title_config() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("text"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("size"),
+            ValueLayout.JAVA_INT.withName("align"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_title_config");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_TEXT = 8L;
+        public static final long OFFSET_COLOR = 16L;
+        public static final long OFFSET_SIZE = 20L;
+        public static final long OFFSET_ALIGN = 24L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_series — 24 bytes, alignment 8. */
+    public static final class ph_series {
+        private ph_series() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.ADDRESS.withName("y"),
+            ValueLayout.JAVA_INT.withName("color"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name")
+        ).withName("ph_series");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_Y = 0L;
+        public static final long OFFSET_COLOR = 8L;
+        public static final long OFFSET_NAME = 16L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_grouped_bar_desc — 80 bytes, alignment 8. */
+    public static final class ph_grouped_bar_desc {
+        private ph_grouped_bar_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("series"),
+            ValueLayout.JAVA_INT.withName("series_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("group_width"),
+            ValueLayout.JAVA_DOUBLE.withName("gap"),
+            ValueLayout.JAVA_INT.withName("orientation"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_grouped_bar_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_SERIES = 24L;
+        public static final long OFFSET_SERIES_COUNT = 32L;
+        public static final long OFFSET_GROUP_WIDTH = 40L;
+        public static final long OFFSET_GAP = 48L;
+        public static final long OFFSET_ORIENTATION = 56L;
+        public static final long OFFSET_Y_AXIS = 64L;
+        public static final long OFFSET_RENDER_TYPE = 72L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_stacked_desc — 72 bytes, alignment 8. */
+    public static final class ph_stacked_desc {
+        private ph_stacked_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("x"),
+            ValueLayout.JAVA_INT.withName("count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("series"),
+            ValueLayout.JAVA_INT.withName("series_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("width"),
+            ValueLayout.JAVA_INT.withName("orientation"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_stacked_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_X = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_SERIES = 24L;
+        public static final long OFFSET_SERIES_COUNT = 32L;
+        public static final long OFFSET_WIDTH = 40L;
+        public static final long OFFSET_ORIENTATION = 48L;
+        public static final long OFFSET_Y_AXIS = 56L;
+        public static final long OFFSET_RENDER_TYPE = 64L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_histogram_desc — 72 bytes, alignment 8. */
+    public static final class ph_histogram_desc {
+        private ph_histogram_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("values"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("bins"),
+            ph_range.LAYOUT.withName("range"),
+            ValueLayout.JAVA_INT.withName("color"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_histogram_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_VALUES = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_BINS = 20L;
+        public static final long OFFSET_RANGE = 24L;
+        public static final long OFFSET_COLOR = 40L;
+        public static final long OFFSET_NAME = 48L;
+        public static final long OFFSET_Y_AXIS = 56L;
+        public static final long OFFSET_RENDER_TYPE = 64L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_spectrogram_desc — 72 bytes, alignment 8. */
+    public static final class ph_spectrogram_desc {
+        private ph_spectrogram_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("signal"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("fft_size"),
+            ValueLayout.JAVA_INT.withName("hop"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("sample_rate"),
+            ValueLayout.ADDRESS.withName("colormap"),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.ADDRESS.withName("y_axis"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_spectrogram_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_SIGNAL = 8L;
+        public static final long OFFSET_COUNT = 16L;
+        public static final long OFFSET_FFT_SIZE = 20L;
+        public static final long OFFSET_HOP = 24L;
+        public static final long OFFSET_SAMPLE_RATE = 32L;
+        public static final long OFFSET_COLORMAP = 40L;
+        public static final long OFFSET_NAME = 48L;
+        public static final long OFFSET_Y_AXIS = 56L;
+        public static final long OFFSET_RENDER_TYPE = 64L;
 
         /** Allocate one, zero-filled — which the ABI defines as all defaults. */
         public static MemorySegment allocate(Arena arena) {
@@ -2323,6 +2537,8 @@ public final class Photon {
         "ph_plot_set_theme",
         "ph_plot_set_title",
         "ph_plot_set_equal_aspect",
+        "ph_title_config_init",
+        "ph_plot_set_title_config",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
         "ph_plot_set_tooltip",
@@ -2356,6 +2572,15 @@ public final class Photon {
         "ph_plot_add_ohlc",
         "ph_plot_add_heatmap",
         "ph_plot_add_image",
+        "ph_grouped_bar_desc_init",
+        "ph_plot_add_grouped_bars",
+        "ph_stacked_desc_init",
+        "ph_plot_add_stacked_bars",
+        "ph_plot_add_stacked_area",
+        "ph_histogram_desc_init",
+        "ph_plot_add_histogram",
+        "ph_spectrogram_desc_init",
+        "ph_plot_add_spectrogram",
         "ph_treemap_desc_init",
         "ph_plot_add_treemap",
         "ph_funnel_desc_init",
@@ -2526,6 +2751,8 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_SET_THEME = handle("ph_plot_set_theme", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_TITLE = handle("ph_plot_set_title", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_EQUAL_ASPECT = handle("ph_plot_set_equal_aspect", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_TITLE_CONFIG_INIT = handle("ph_title_config_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_SET_TITLE_CONFIG = handle("ph_plot_set_title_config", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_SET_COLORBAR = handle("ph_plot_set_colorbar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_PICK_MODE = handle("ph_plot_set_pick_mode", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PLOT_SET_TOOLTIP = handle("ph_plot_set_tooltip", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
@@ -2559,6 +2786,15 @@ public final class Photon {
     private static final MethodHandle PH_PLOT_ADD_OHLC = handle("ph_plot_add_ohlc", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_HEATMAP = handle("ph_plot_add_heatmap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_IMAGE = handle("ph_plot_add_image", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_GROUPED_BAR_DESC_INIT = handle("ph_grouped_bar_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_GROUPED_BARS = handle("ph_plot_add_grouped_bars", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_STACKED_DESC_INIT = handle("ph_stacked_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_STACKED_BARS = handle("ph_plot_add_stacked_bars", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_STACKED_AREA = handle("ph_plot_add_stacked_area", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_HISTOGRAM_DESC_INIT = handle("ph_histogram_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_HISTOGRAM = handle("ph_plot_add_histogram", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_SPECTROGRAM_DESC_INIT = handle("ph_spectrogram_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_SPECTROGRAM = handle("ph_plot_add_spectrogram", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_TREEMAP_DESC_INIT = handle("ph_treemap_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
     private static final MethodHandle PH_PLOT_ADD_TREEMAP = handle("ph_plot_add_treemap", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle PH_FUNNEL_DESC_INIT = handle("ph_funnel_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
@@ -3596,6 +3832,22 @@ public final class Photon {
         }
     }
 
+    public static void ph_title_config_init(MemorySegment out) {
+        try {
+            PH_TITLE_CONFIG_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_title_config_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_set_title_config(long plot, MemorySegment config) {
+        try {
+            return (int) PH_PLOT_SET_TITLE_CONFIG.invokeExact(plot, config);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_title_config failed", photonFailure);
+        }
+    }
+
     public static int ph_plot_set_colorbar(long plot, int enabled) {
         try {
             return (int) PH_PLOT_SET_COLORBAR.invokeExact(plot, enabled);
@@ -3857,6 +4109,78 @@ public final class Photon {
             return (int) PH_PLOT_ADD_IMAGE.invokeExact(plot, desc, out);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_plot_add_image failed", photonFailure);
+        }
+    }
+
+    public static void ph_grouped_bar_desc_init(MemorySegment out) {
+        try {
+            PH_GROUPED_BAR_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_grouped_bar_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_grouped_bars(long plot, MemorySegment desc, MemorySegment out_layers, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_PLOT_ADD_GROUPED_BARS.invokeExact(plot, desc, out_layers, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_grouped_bars failed", photonFailure);
+        }
+    }
+
+    public static void ph_stacked_desc_init(MemorySegment out) {
+        try {
+            PH_STACKED_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_stacked_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_stacked_bars(long plot, MemorySegment desc, MemorySegment out_layers, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_PLOT_ADD_STACKED_BARS.invokeExact(plot, desc, out_layers, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_stacked_bars failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_stacked_area(long plot, MemorySegment desc, MemorySegment out_layers, int capacity, MemorySegment out_count) {
+        try {
+            return (int) PH_PLOT_ADD_STACKED_AREA.invokeExact(plot, desc, out_layers, capacity, out_count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_stacked_area failed", photonFailure);
+        }
+    }
+
+    public static void ph_histogram_desc_init(MemorySegment out) {
+        try {
+            PH_HISTOGRAM_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_histogram_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_histogram(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_HISTOGRAM.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_histogram failed", photonFailure);
+        }
+    }
+
+    public static void ph_spectrogram_desc_init(MemorySegment out) {
+        try {
+            PH_SPECTROGRAM_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_spectrogram_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_spectrogram(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_SPECTROGRAM.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_spectrogram failed", photonFailure);
         }
     }
 

@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -185,10 +186,45 @@ extern "C" ph_result PH_CALL ph_color_parse(const char* css, ph_color* out) {
 
   const char* s = css;
   while (*s == ' ' || *s == '\t') ++s;
+
+  // rgb() and rgba(), which is the other half of what the web core's parseColor
+  // reads. Nothing else: a named colour or an hsl() would render as opaque
+  // black on the web, and accepting one here would mean the two cores draw
+  // different charts from the same string. Refusing is the honest difference.
+  if ((s[0] == 'r' || s[0] == 'R') && (s[1] == 'g' || s[1] == 'G') && (s[2] == 'b' || s[2] == 'B')) {
+    const char* open = std::strchr(s, '(');
+    if (!open) return fail(PH_E_INVALID_ARGUMENT, std::string("bad rgb colour: ") + css);
+    double parts[4] = {0.0, 0.0, 0.0, 1.0};
+    int found = 0;
+    const char* cursor = open + 1;
+    while (found < 4) {
+      while (*cursor == ' ' || *cursor == ',' || *cursor == '\t' || *cursor == '/') ++cursor;
+      if (*cursor == ')' || *cursor == '\0') break;
+      char* end = nullptr;
+      const double v = std::strtod(cursor, &end);
+      if (end == cursor) return fail(PH_E_INVALID_ARGUMENT, std::string("bad rgb colour: ") + css);
+      cursor = end;
+      // A percentage is of the channel's full range, which for alpha is 1.
+      if (*cursor == '%') {
+        parts[found] = found == 3 ? v / 100.0 : v * 255.0 / 100.0;
+        ++cursor;
+      } else {
+        parts[found] = v;
+      }
+      ++found;
+    }
+    if (found < 3) return fail(PH_E_INVALID_ARGUMENT, std::string("bad rgb colour: ") + css);
+    const auto byte = [](double v) {
+      return static_cast<uint32_t>(std::min(255.0, std::max(0.0, v)) + 0.5);
+    };
+    *out = (byte(parts[0]) << 24) | (byte(parts[1]) << 16) | (byte(parts[2]) << 8) |
+           byte(parts[3] * 255.0);
+    return PH_OK;
+  }
+
   if (*s != '#') {
-    // rgb()/rgba()/named colors arrive with the text renderer in Faz 1, which is
-    // where a real CSS color parser has to exist anyway.
-    return fail(PH_E_UNSUPPORTED, "only #rgb, #rgba, #rrggbb and #rrggbbaa are parsed in this build");
+    return fail(PH_E_UNSUPPORTED,
+                "only #rgb, #rgba, #rrggbb, #rrggbbaa, rgb() and rgba() are parsed");
   }
   ++s;
 
@@ -1756,6 +1792,33 @@ extern "C" ph_result PH_CALL ph_plot_set_title(ph_plot handle, const char* title
   return PH_OK;
 }
 
+extern "C" void PH_CALL ph_title_config_init(ph_title_config* out) {
+  if (!out) return;
+  *out = ph_title_config{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_title_config));
+}
+
+extern "C" ph_result PH_CALL ph_plot_set_title_config(ph_plot handle,
+                                                      const ph_title_config* config) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (config && !desc_size_ok(config)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_title_config.struct_size is larger than this build's");
+  }
+  const ph_title_config c = normalize(config, ph_title_config_init);
+  photon::render::TitleStyle style;
+  style.color = c.color;
+  style.size = c.size;
+  style.align = c.align == PH_ALIGN_LEFT    ? photon::text::Align::Left
+                : c.align == PH_ALIGN_RIGHT ? photon::text::Align::Right
+                                            : photon::text::Align::Center;
+  plot->set_title(c.text);
+  plot->set_title_style(style);
+  return PH_OK;
+}
+
 extern "C" ph_result PH_CALL ph_plot_set_equal_aspect(ph_plot handle, ph_bool enabled) {
   clear_error();
   Plot* plot = nullptr;
@@ -3041,6 +3104,299 @@ extern "C" ph_result PH_CALL ph_plot_add_parallel(ph_plot handle, const ph_paral
     }
   }
   return PH_OK;
+}
+
+extern "C" void PH_CALL ph_grouped_bar_desc_init(ph_grouped_bar_desc* out) {
+  if (!out) return;
+  *out = ph_grouped_bar_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_grouped_bar_desc));
+}
+
+extern "C" void PH_CALL ph_stacked_desc_init(ph_stacked_desc* out) {
+  if (!out) return;
+  *out = ph_stacked_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_stacked_desc));
+}
+
+extern "C" void PH_CALL ph_histogram_desc_init(ph_histogram_desc* out) {
+  if (!out) return;
+  *out = ph_histogram_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_histogram_desc));
+}
+
+extern "C" void PH_CALL ph_spectrogram_desc_init(ph_spectrogram_desc* out) {
+  if (!out) return;
+  *out = ph_spectrogram_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_spectrogram_desc));
+}
+
+namespace {
+
+/// Shared validation for the three multi-series builders.
+ph_result check_series_set(const double* x, int32_t count, const ph_series* series,
+                           int32_t series_count, int32_t capacity, const int32_t* out_count) {
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  if (count < 0 || series_count < 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "count and series_count must be non-negative");
+  }
+  if (count > 0 && !x) return fail(PH_E_INVALID_ARGUMENT, "x must be non-null when count > 0");
+  if (series_count > 0 && !series) {
+    return fail(PH_E_INVALID_ARGUMENT, "series must be non-null when series_count > 0");
+  }
+  for (int32_t i = 0; i < series_count; ++i) {
+    if (count > 0 && !series[i].y) {
+      return fail(PH_E_INVALID_ARGUMENT, "every series needs a y when count > 0");
+    }
+  }
+  return PH_OK;
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_plot_add_grouped_bars(ph_plot handle,
+                                                      const ph_grouped_bar_desc* desc,
+                                                      ph_layer* out_layers, int32_t capacity,
+                                                      int32_t* out_count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_grouped_bar_desc.struct_size is larger than this build's");
+  }
+  const ph_grouped_bar_desc d = normalize(desc, ph_grouped_bar_desc_init);
+  const ph_result checked =
+      check_series_set(d.x, d.count, d.series, d.series_count, capacity, out_count);
+  if (checked != PH_OK) return checked;
+  *out_count = d.series_count;
+  if (capacity == 0) return PH_OK;
+  if (!out_layers) return fail(PH_E_INVALID_ARGUMENT, "out_layers must be non-null");
+
+  const double group_width = d.group_width > 0.0 ? d.group_width : 0.8;
+  const double slot = d.series_count > 0 ? group_width / d.series_count : group_width;
+  const double bar_width = slot * (1.0 - (d.gap > 0.0 ? d.gap : 0.1));
+  const size_t writable =
+      std::min(static_cast<size_t>(d.series_count), static_cast<size_t>(capacity));
+  for (size_t s = 0; s < writable; ++s) {
+    ph_bar_desc bar{};
+    ph_bar_desc_init(&bar);
+    bar.x = d.x;
+    bar.y = d.series[s].y;
+    bar.count = d.count;
+    bar.width = bar_width;
+    // Symmetric about zero, so the cluster is centred on its category.
+    bar.offset = (static_cast<double>(s) - (d.series_count - 1) / 2.0) * slot;
+    bar.color = d.series[s].color;
+    bar.name = d.series[s].name;
+    bar.orientation = d.orientation;
+    bar.y_axis = d.y_axis;
+    bar.render_type = d.render_type;
+    try {
+      const ph_result added =
+          register_layer(handle, plot, std::make_unique<photon::BarLayer>(bar), &out_layers[s]);
+      if (added != PH_OK) return added;
+    } catch (const std::bad_alloc&) {
+      return fail(PH_E_OUT_OF_MEMORY, "out of memory creating a grouped bar layer");
+    }
+  }
+  return PH_OK;
+}
+
+namespace {
+
+/**
+ * The stacking itself, shared by the bar and area forms: each series is drawn
+ * from the running total of the ones before it, so `base` is where the previous
+ * series stopped and `top` is where this one ends.
+ */
+struct Stack {
+  std::vector<double> base;
+  std::vector<double> top;
+};
+
+void advance_stack(Stack& stack, std::vector<double>& running, const double* y, size_t count) {
+  stack.base = running;
+  stack.top.assign(count, 0.0);
+  for (size_t i = 0; i < count; ++i) {
+    stack.top[i] = running[i] + (y ? y[i] : 0.0);
+    running[i] = stack.top[i];
+  }
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_plot_add_stacked_bars(ph_plot handle, const ph_stacked_desc* desc,
+                                                      ph_layer* out_layers, int32_t capacity,
+                                                      int32_t* out_count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_stacked_desc.struct_size is larger than this build's");
+  }
+  const ph_stacked_desc d = normalize(desc, ph_stacked_desc_init);
+  const ph_result checked =
+      check_series_set(d.x, d.count, d.series, d.series_count, capacity, out_count);
+  if (checked != PH_OK) return checked;
+  *out_count = d.series_count;
+  if (capacity == 0) return PH_OK;
+  if (!out_layers) return fail(PH_E_INVALID_ARGUMENT, "out_layers must be non-null");
+
+  const size_t n = static_cast<size_t>(d.count);
+  std::vector<double> running(n, 0.0);
+  Stack stack;
+  const size_t writable =
+      std::min(static_cast<size_t>(d.series_count), static_cast<size_t>(capacity));
+  for (size_t s = 0; s < writable; ++s) {
+    advance_stack(stack, running, d.series[s].y, n);
+    ph_bar_desc bar{};
+    ph_bar_desc_init(&bar);
+    bar.x = d.x;
+    bar.y = stack.top.data();
+    bar.base = stack.base.data();
+    bar.count = d.count;
+    bar.width = d.width;
+    bar.color = d.series[s].color;
+    bar.name = d.series[s].name;
+    bar.orientation = d.orientation;
+    bar.y_axis = d.y_axis;
+    bar.render_type = d.render_type;
+    try {
+      const ph_result added =
+          register_layer(handle, plot, std::make_unique<photon::BarLayer>(bar), &out_layers[s]);
+      if (added != PH_OK) return added;
+    } catch (const std::bad_alloc&) {
+      return fail(PH_E_OUT_OF_MEMORY, "out of memory creating a stacked bar layer");
+    }
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_stacked_area(ph_plot handle, const ph_stacked_desc* desc,
+                                                      ph_layer* out_layers, int32_t capacity,
+                                                      int32_t* out_count) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_stacked_desc.struct_size is larger than this build's");
+  }
+  const ph_stacked_desc d = normalize(desc, ph_stacked_desc_init);
+  const ph_result checked =
+      check_series_set(d.x, d.count, d.series, d.series_count, capacity, out_count);
+  if (checked != PH_OK) return checked;
+  *out_count = d.series_count;
+  if (capacity == 0) return PH_OK;
+  if (!out_layers) return fail(PH_E_INVALID_ARGUMENT, "out_layers must be non-null");
+
+  const size_t n = static_cast<size_t>(d.count);
+  std::vector<double> running(n, 0.0);
+  Stack stack;
+  const size_t writable =
+      std::min(static_cast<size_t>(d.series_count), static_cast<size_t>(capacity));
+  for (size_t s = 0; s < writable; ++s) {
+    advance_stack(stack, running, d.series[s].y, n);
+    ph_area_desc area{};
+    ph_area_desc_init(&area);
+    area.x = d.x;
+    area.y = stack.top.data();
+    area.base = stack.base.data();
+    area.count = d.count;
+    area.color = d.series[s].color;
+    area.name = d.series[s].name;
+    area.y_axis = d.y_axis;
+    area.render_type = d.render_type;
+    try {
+      const ph_result added =
+          register_layer(handle, plot, std::make_unique<photon::AreaLayer>(area), &out_layers[s]);
+      if (added != PH_OK) return added;
+    } catch (const std::bad_alloc&) {
+      return fail(PH_E_OUT_OF_MEMORY, "out of memory creating a stacked area layer");
+    }
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_histogram(ph_plot handle, const ph_histogram_desc* desc,
+                                                   ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_histogram_desc.struct_size is larger than this build's");
+  }
+  const ph_histogram_desc d = normalize(desc, ph_histogram_desc_init);
+  const ph_result checked = check_series(d.values, d.count, "values");
+  if (checked != PH_OK) return checked;
+
+  const photon::stats::Histogram h = photon::stats::histogram(
+      d.values, static_cast<size_t>(d.count), d.bins, d.range.lo, d.range.hi);
+  ph_bar_desc bar{};
+  ph_bar_desc_init(&bar);
+  bar.x = h.centers.data();
+  bar.y = h.counts.data();
+  bar.count = static_cast<int32_t>(h.counts.size());
+  // Just under the bin width, so the bars touch without overlapping.
+  bar.width = h.bin_width * 0.98;
+  bar.color = d.color;
+  bar.name = d.name;
+  bar.y_axis = d.y_axis;
+  bar.render_type = d.render_type;
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::BarLayer>(bar), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the histogram layer");
+  }
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_spectrogram(ph_plot handle,
+                                                     const ph_spectrogram_desc* desc,
+                                                     ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_spectrogram_desc.struct_size is larger than this build's");
+  }
+  const ph_spectrogram_desc d = normalize(desc, ph_spectrogram_desc_init);
+  const ph_result checked = check_series(d.signal, d.count, "signal");
+  if (checked != PH_OK) return checked;
+  const int32_t size = d.fft_size > 0 ? d.fft_size : 256;
+  if (size < 2 || (size & (size - 1)) != 0) {
+    return fail(PH_E_INVALID_ARGUMENT, "fft_size must be a power of two of at least 2");
+  }
+
+  const photon::stats::Spectrogram s = photon::stats::spectrogram(
+      d.signal, static_cast<size_t>(d.count), size, d.hop,
+      d.sample_rate > 0.0 ? d.sample_rate : 1.0);
+  ph_colormap_spec plasma{};
+  ph_colormap_spec_init(&plasma);
+  plasma.name = "plasma";
+  ph_heatmap_desc heatmap{};
+  ph_heatmap_desc_init(&heatmap);
+  heatmap.values = s.values.data();
+  heatmap.cols = static_cast<int32_t>(s.cols);
+  heatmap.rows = static_cast<int32_t>(s.rows);
+  heatmap.x = ph_range{s.x0, s.x1};
+  heatmap.y = ph_range{s.y0, s.y1};
+  heatmap.colormap = d.colormap ? d.colormap : &plasma;
+  heatmap.name = d.name;
+  heatmap.y_axis = d.y_axis;
+  heatmap.render_type = d.render_type;
+  try {
+    return register_layer(handle, plot, std::make_unique<photon::HeatmapLayer>(heatmap), out);
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating the spectrogram layer");
+  }
 }
 
 extern "C" ph_result PH_CALL ph_plot_add_scatter(ph_plot handle, const ph_scatter_desc* desc, ph_layer* out) {

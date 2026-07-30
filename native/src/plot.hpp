@@ -45,6 +45,9 @@ struct YAxis {
   /// Domain at creation, for reset_view. Absent when the axis started automatic.
   bool has_initial = false;
   ph_range initial{0.0, 1.0};
+  /// This axis's own tint. An unstyled coloured axis tints its line, ticks,
+  /// labels and title, which is how a reader tells the two sides apart.
+  ph_color color = PH_COLOR_AUTO;
 };
 
 class Plot {
@@ -56,6 +59,11 @@ class Plot {
   void set_margin(const ph_margin& margin);
   void set_theme(ph_theme theme) { theme_ = theme; request_render(); }
   void set_title(const char* title);
+  /// The whole of what drawTitle accepts: text plus how it is drawn.
+  void set_title_style(const render::TitleStyle& style) {
+    title_style_ = style;
+    request_render();
+  }
   PlotRegion region() const;
   /// The base margin grown for the title strip and any extra y axes.
   ph_margin compute_margin() const;
@@ -226,6 +234,7 @@ class Plot {
   ph_margin margin_{16.0f, 16.0f, 40.0f, 56.0f};
   ph_theme theme_ = PH_THEME_DARK;
   std::string title_;
+  render::TitleStyle title_style_;
   /// Plot-region fill and full-canvas fill. PH_COLOR_AUTO leaves both clear.
   ph_color background_ = PH_COLOR_AUTO;
   ph_color border_ = PH_COLOR_AUTO;

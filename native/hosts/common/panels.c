@@ -67,6 +67,12 @@
 #define CHORD_GROUPS 4
 #define PARALLEL_DIMS 4
 #define PARALLEL_ROWS 40
+/* Three revenue streams over the same twelve months as the Revenue panel, so
+ * the grouped and stacked forms of the same data sit side by side. */
+#define STREAMS 3
+/* A bimodal sample, big enough that the bin shape is the data's and not the
+ * sampler's. */
+#define HIST_SAMPLES 4000
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -165,6 +171,12 @@ struct ph_panels {
   double parallel[PARALLEL_ROWS * PARALLEL_DIMS];
   double parallel_class[PARALLEL_ROWS];
   ph_layer parallel_layers[PARALLEL_ROWS];
+
+  double stream_series[STREAMS][MONTHS];
+  ph_series streams[STREAMS];
+  ph_layer stream_layers[STREAMS];
+  double hist[HIST_SAMPLES];
+  double funnel_value[FUNNEL_STAGES];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -174,7 +186,8 @@ static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
                                               "Contour", "Network",   "Signals", "Fit",
                                               "Spectrum", "ROC",      "Embedding", "Treemap",
                                               "Sunburst", "Sankey",   "Chord",     "Gauge",
-                                              "Parallel"};
+                                              "Parallel", "Grouped",  "Stacked",   "Histogram",
+                                              "Spectrogram"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -563,6 +576,37 @@ ph_panels* ph_panels_create(void) {
         p->parallel[r * PARALLEL_DIMS + d] = base + noise;
       }
     }
+
+    /* Three streams that add up to the Revenue panel's total, so the grouped
+     * and stacked forms are the same data seen two ways. */
+    static const char* stream_names[STREAMS] = {"licence", "services", "support"};
+    static const ph_color stream_color[STREAMS] = {0x60a5faffu, 0xf59e0bffu, 0x34d399ffu};
+    static const double weight[STREAMS] = {0.55, 0.3, 0.15};
+    for (int s = 0; s < STREAMS; s++) {
+      for (int m = 0; m < MONTHS; m++) {
+        p->stream_series[s][m] = p->revenue[m] * weight[s];
+      }
+      p->streams[s].y = p->stream_series[s];
+      p->streams[s].color = stream_color[s];
+      p->streams[s].name = stream_names[s];
+    }
+
+    /* Two Gaussian modes, so the histogram has a shape worth binning. */
+    seed = 44556677u;
+    for (int i = 0; i < HIST_SAMPLES; i++) {
+      seed = seed * 1664525u + 1013904223u;
+      const double u = (double)(seed >> 8) / 16777216.0;
+      seed = seed * 1664525u + 1013904223u;
+      const double v = (double)(seed >> 8) / 16777216.0;
+      const double g = sqrt(-2.0 * log(u + 1e-12)) * cos(6.283185307179586 * v);
+      p->hist[i] = (i % 3 == 0 ? 6.0 : 2.0) + g * (i % 3 == 0 ? 0.8 : 1.2);
+    }
+
+    /* The funnel stages' own values, so the panel can colour them by value
+     * through a colormap rather than by index through a palette. */
+    for (int i = 0; i < FUNNEL_STAGES; i++) {
+      p->funnel_value[i] = (double)(FUNNEL_STAGES - i);
+    }
   }
 
   return p;
@@ -724,6 +768,13 @@ static void build_funnel(ph_panels* p, ph_plot plot) {
   ph_patches_desc_init(&desc);
   desc.patches = p->funnel;
   desc.patch_count = FUNNEL_STAGES;
+  /* A choropleth: one value per patch through a ramp, which beats each patch's
+   * own colour and earns the panel a colorbar. */
+  desc.values = p->funnel_value;
+  ph_colormap_spec ramp;
+  ph_colormap_spec_init(&ramp);
+  ramp.name = "cividis";
+  desc.colormap = &ramp;
   ph_layer layer = PH_NULL_HANDLE;
   ph_plot_add_patches(plot, &desc, &layer);
 }
@@ -1362,6 +1413,81 @@ static void build_parallel(ph_panels* p, ph_plot plot) {
   ph_plot_add_parallel(plot, &desc, p->parallel_layers, PARALLEL_ROWS, &written);
 }
 
+/* Panel 29 — the same three streams as clusters. */
+static void build_grouped(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Grouped");
+  style_axis(plot, "x", "month", 0);
+  style_axis(plot, "y", "revenue", 0);
+
+  ph_grouped_bar_desc desc;
+  ph_grouped_bar_desc_init(&desc);
+  desc.x = p->month;
+  desc.count = MONTHS;
+  desc.series = p->streams;
+  desc.series_count = STREAMS;
+  int written = 0;
+  ph_plot_add_grouped_bars(plot, &desc, p->stream_layers, STREAMS, &written);
+}
+
+/* Panel 30 — and stacked, which is the same numbers reading as a total. */
+static void build_stacked(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Stacked");
+  style_axis(plot, "x", "month", 0);
+  style_axis(plot, "y", "revenue", 0);
+  ph_legend_config legend;
+  ph_legend_config_init(&legend);
+  /* `enabled` is the one field that is off by default — an omitted legend in
+   * the TypeScript means no legend, not a legend in the default corner. */
+  legend.enabled = 1;
+  legend.position = PH_LEGEND_TOP_LEFT;
+  ph_plot_set_legend(plot, &legend);
+
+  ph_stacked_desc desc;
+  ph_stacked_desc_init(&desc);
+  desc.x = p->month;
+  desc.count = MONTHS;
+  desc.series = p->streams;
+  desc.series_count = STREAMS;
+  int written = 0;
+  ph_plot_add_stacked_area(plot, &desc, p->stream_layers, STREAMS, &written);
+}
+
+/* Panel 31 — a bimodal sample binned into bars. */
+static void build_histogram(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Histogram");
+  style_axis(plot, "x", "value", 0);
+  style_axis(plot, "y", "count", 0);
+
+  ph_histogram_desc desc;
+  ph_histogram_desc_init(&desc);
+  desc.values = p->hist;
+  desc.count = HIST_SAMPLES;
+  desc.bins = 40;
+  desc.color = parse("#38bdf8");
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_histogram(plot, &desc, &layer);
+}
+
+/* Panel 32 — the Spectrum panel's signal as a time-frequency image.
+ *
+ * The same two tones, seen the other way round: the PSD says what frequencies
+ * are there, the spectrogram says when. */
+static void build_spectrogram(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Spectrogram");
+  style_axis(plot, "x", "time (s)", 0);
+  style_axis(plot, "y", "frequency (Hz)", 0);
+
+  ph_spectrogram_desc desc;
+  ph_spectrogram_desc_init(&desc);
+  desc.signal = p->psd_signal;
+  desc.count = PSD_SAMPLES;
+  desc.fft_size = 128;
+  desc.sample_rate = PSD_RATE;
+  desc.name = "dB";
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_plot_add_spectrogram(plot, &desc, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -1394,7 +1520,11 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 25: build_sankey(panels, plot); break;
     case 26: build_chord(panels, plot); break;
     case 27: build_gauge(panels, plot); break;
-    default: build_parallel(panels, plot); break;
+    case 28: build_parallel(panels, plot); break;
+    case 29: build_grouped(panels, plot); break;
+    case 30: build_stacked(panels, plot); break;
+    case 31: build_histogram(panels, plot); break;
+    default: build_spectrogram(panels, plot); break;
   }
 }
 

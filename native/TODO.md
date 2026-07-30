@@ -7,14 +7,16 @@ file to port **to** in `native/src/`, so a task can be picked up cold.
 Line counts are the TypeScript source, as a rough size signal — the C++ tends to
 land within about 20% of it.
 
-**State right now:** Faz 0 through Faz 3 are done. The ABI (52 entry points),
-the interaction model, the five scales, ticks, the GL 3.3 backend, line +
-scatter, the SDF text renderer, the grid/axes/labels/title overlay, theme and
-axis styling, offscreen readback, three hosts — GLFW, Qt Quick and Qt Widgets —
-and generated C# and Java bindings all work and are tested: 8/8 tests on GCC and
-Clang across debug/release/asan, including one that drives all 52 entry points
-through Panama. **Only Linux has ever been compiled, and the C# binding has not
-been compiled at all.**
+**State right now:** Faz 0 through Faz 3 are done, and most of Faz 4. The ABI is
+212 entry points: every 2-D layer the web core has, the interaction model, the
+five scales, hover picking, the legend, the tooltip, annotations, colormaps and
+the colorbar, the whole analysis half (indicators, transforms, statistics,
+signal processing, model metrics, PCA, CSV, LTTB), the seven composed diagrams,
+and the multi-series builders. Seventeen tests pass on GCC and Clang across
+debug/release/asan, one of which drives all 212 entry points through Panama, and
+the thirty-three demo panels are identical to the web core in every plot region
+and grid line. **What is left is polar, 3-D, the remaining chart builders and
+PNG export** — and the C# binding, which has still never been compiled.
 
 ---
 
@@ -24,7 +26,7 @@ been compiled at all.**
       `tools/compare-with-web/` transcribes the demo panels onto the web core,
       renders them in headless Chromium, and compares the plot region and every
       grid line against a native grab. **The layout now matches exactly**, in
-      all eighteen panels.
+      all thirty-three panels.
 - [ ] It is not run by CI. It needs Playwright and a Chromium, which the native
       workflow does not install; running it there would make a native change
       that shifts the layout fail immediately rather than at the next manual

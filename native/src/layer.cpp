@@ -1043,6 +1043,26 @@ PatchesLayer::PatchesLayer(const ph_patches_desc& desc) {
   const Rgba fallback = unpack_color(desc.color);
   const int32_t patch_count = desc.patches ? std::max(0, desc.patch_count) : 0;
 
+  // A choropleth: one value per patch through a ramp. Resolved once here rather
+  // than per patch, because `lut()` takes a lock and returns a reference the
+  // layer then holds for its whole life.
+  if (desc.values && patch_count > 0) {
+    const photon::color::Spec spec = colormap_spec(desc.colormap);
+    color_lut_ = &photon::color::lut(spec);
+    value_domain_ = desc.domain;
+    if (value_domain_.lo == value_domain_.hi) {
+      double lo = std::numeric_limits<double>::infinity();
+      double hi = -lo;
+      for (int32_t i = 0; i < patch_count; ++i) {
+        if (!finite(desc.values[i])) continue;
+        lo = std::min(lo, desc.values[i]);
+        hi = std::max(hi, desc.values[i]);
+      }
+      value_domain_ = std::isfinite(lo) ? ph_range{lo, hi == lo ? lo + 1.0 : hi}
+                                        : ph_range{0.0, 1.0};
+    }
+  }
+
   // The first vertex of the first non-empty patch anchors the float32
   // reference, exactly as it does for a line — the same precision problem, and
   // a map's coordinates are just as capable of exhausting a float.
@@ -1066,6 +1086,14 @@ PatchesLayer::PatchesLayer(const ph_patches_desc& desc) {
     const size_t n = static_cast<size_t>(patch.count);
 
     Rgba rgba = patch.color != PH_COLOR_AUTO ? unpack_color_exact(patch.color) : fallback;
+    if (color_lut_) {
+      // The ramp wins over the patch's own colour, the same way a scatter's
+      // color_by wins over its per-point colours.
+      const double span = value_domain_.hi - value_domain_.lo;
+      const double t = span == 0.0 ? 0.0 : (desc.values[p] - value_domain_.lo) / span;
+      const photon::color::Rgb c = photon::color::sample(*color_lut_, t);
+      rgba = Rgba{c.r, c.g, c.b, 1.0f};
+    }
     rgba.a *= opacity;
 
     // Flat [x0,y0,x1,y1,…] in raw coordinates for earcut; the reference is
@@ -1114,6 +1142,14 @@ PatchesLayer::PatchesLayer(const ph_patches_desc& desc) {
     x_bounds_ = ph_range{min_x, max_x};
     y_bounds_ = ph_range{min_y, max_y};
   }
+}
+
+bool PatchesLayer::color_info(ColorInfo& out) const {
+  if (!color_lut_) return false;
+  out.lut = color_lut_;
+  out.domain = value_domain_;
+  out.label = name_;
+  return true;
 }
 
 bool PatchesLayer::bounds(ph_range& x, ph_range& y) const {

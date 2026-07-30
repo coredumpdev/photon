@@ -292,6 +292,10 @@ class PieLayer : public Layer {
   ph_render_type render_type_ = PH_RENDER_STATIC;
   bool dirty_ = true;
 
+  /// Set only for a choropleth, which is what earns the layer a colorbar.
+  const photon::color::Lut* color_lut_ = nullptr;
+  ph_range value_domain_{0.0, 1.0};
+
   gl::GLuint vao_ = 0;
   gl::GLuint position_buffer_ = 0;
   gl::GLuint color_buffer_ = 0;
@@ -746,6 +750,7 @@ class PatchesLayer : public Layer {
  public:
   explicit PatchesLayer(const ph_patches_desc& desc);
   bool bounds(ph_range& x, ph_range& y) const override;
+  bool color_info(ColorInfo& out) const override;
   bool draw(const DrawState& state, std::string& error) override;
   void release_gl(gl::Api& api) override;
 
@@ -763,6 +768,10 @@ class PatchesLayer : public Layer {
   bool has_bounds_ = false;
   ph_render_type render_type_ = PH_RENDER_STATIC;
   bool dirty_ = true;
+
+  /// Set only for a choropleth, which is what earns the layer a colorbar.
+  const photon::color::Lut* color_lut_ = nullptr;
+  ph_range value_domain_{0.0, 1.0};
 
   gl::GLuint vao_ = 0;
   gl::GLuint position_buffer_ = 0;

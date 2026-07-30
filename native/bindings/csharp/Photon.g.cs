@@ -420,6 +420,8 @@ public static partial class Ph
         public IntPtr times;
         /// <summary>offset 48</summary>
         public int time_count;
+        /// <summary>offset 52</summary>
+        public uint color;
     }
 
     /// <summary>ph_tick — 24 bytes, alignment 8.</summary>
@@ -1170,7 +1172,7 @@ public static partial class Ph
         public uint color;
     }
 
-    /// <summary>ph_patches_desc — 56 bytes, alignment 8.</summary>
+    /// <summary>ph_patches_desc — 88 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_patches_desc
     {
@@ -1190,6 +1192,12 @@ public static partial class Ph
         public IntPtr y_axis;
         /// <summary>offset 48</summary>
         public int render_type;
+        /// <summary>offset 56</summary>
+        public IntPtr values;
+        /// <summary>offset 64</summary>
+        public IntPtr colormap;
+        /// <summary>offset 72</summary>
+        public ph_range domain;
     }
 
     /// <summary>ph_event — 104 bytes, alignment 8.</summary>
@@ -1224,6 +1232,134 @@ public static partial class Ph
         public int point_index;
         /// <summary>offset 100</summary>
         public int point_valid;
+    }
+
+    /// <summary>ph_title_config — 32 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_title_config
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr text;
+        /// <summary>offset 16</summary>
+        public uint color;
+        /// <summary>offset 20</summary>
+        public float size;
+        /// <summary>offset 24</summary>
+        public int align;
+    }
+
+    /// <summary>ph_series — 24 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_series
+    {
+        /// <summary>offset 0</summary>
+        public IntPtr y;
+        /// <summary>offset 8</summary>
+        public uint color;
+        /// <summary>offset 16</summary>
+        public IntPtr name;
+    }
+
+    /// <summary>ph_grouped_bar_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_grouped_bar_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 24</summary>
+        public IntPtr series;
+        /// <summary>offset 32</summary>
+        public int series_count;
+        /// <summary>offset 40</summary>
+        public double group_width;
+        /// <summary>offset 48</summary>
+        public double gap;
+        /// <summary>offset 56</summary>
+        public int orientation;
+        /// <summary>offset 64</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 72</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_stacked_desc — 72 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_stacked_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr x;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 24</summary>
+        public IntPtr series;
+        /// <summary>offset 32</summary>
+        public int series_count;
+        /// <summary>offset 40</summary>
+        public double width;
+        /// <summary>offset 48</summary>
+        public int orientation;
+        /// <summary>offset 56</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 64</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_histogram_desc — 72 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_histogram_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr values;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 20</summary>
+        public int bins;
+        /// <summary>offset 24</summary>
+        public ph_range range;
+        /// <summary>offset 40</summary>
+        public uint color;
+        /// <summary>offset 48</summary>
+        public IntPtr name;
+        /// <summary>offset 56</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 64</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_spectrogram_desc — 72 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_spectrogram_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr signal;
+        /// <summary>offset 16</summary>
+        public int count;
+        /// <summary>offset 20</summary>
+        public int fft_size;
+        /// <summary>offset 24</summary>
+        public int hop;
+        /// <summary>offset 32</summary>
+        public double sample_rate;
+        /// <summary>offset 40</summary>
+        public IntPtr colormap;
+        /// <summary>offset 48</summary>
+        public IntPtr name;
+        /// <summary>offset 56</summary>
+        public IntPtr y_axis;
+        /// <summary>offset 64</summary>
+        public int render_type;
     }
 
     /// <summary>ph_chart_item — 24 bytes, alignment 8.</summary>
@@ -1629,6 +1765,8 @@ public static partial class Ph
         "ph_plot_set_theme",
         "ph_plot_set_title",
         "ph_plot_set_equal_aspect",
+        "ph_title_config_init",
+        "ph_plot_set_title_config",
         "ph_plot_set_colorbar",
         "ph_plot_set_pick_mode",
         "ph_plot_set_tooltip",
@@ -1662,6 +1800,15 @@ public static partial class Ph
         "ph_plot_add_ohlc",
         "ph_plot_add_heatmap",
         "ph_plot_add_image",
+        "ph_grouped_bar_desc_init",
+        "ph_plot_add_grouped_bars",
+        "ph_stacked_desc_init",
+        "ph_plot_add_stacked_bars",
+        "ph_plot_add_stacked_area",
+        "ph_histogram_desc_init",
+        "ph_plot_add_histogram",
+        "ph_spectrogram_desc_init",
+        "ph_plot_add_spectrogram",
         "ph_treemap_desc_init",
         "ph_plot_add_treemap",
         "ph_funnel_desc_init",
@@ -2095,6 +2242,15 @@ public static partial class Ph
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_equal_aspect")]
     public static extern int ph_plot_set_equal_aspect(ulong plot, int enabled);
 
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_title_config_init")]
+    public static extern void ph_title_config_init(out ph_title_config @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_title_config")]
+    public static extern int ph_plot_set_title_config(ulong plot, IntPtr config);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_title_config")]
+    public static extern int ph_plot_set_title_config(ulong plot, in ph_title_config config);
+
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_colorbar")]
     public static extern int ph_plot_set_colorbar(ulong plot, int enabled);
 
@@ -2259,6 +2415,48 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_image")]
     public static extern int ph_plot_add_image(ulong plot, in ph_image_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_grouped_bar_desc_init")]
+    public static extern void ph_grouped_bar_desc_init(out ph_grouped_bar_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_grouped_bars")]
+    public static extern int ph_plot_add_grouped_bars(ulong plot, IntPtr desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_grouped_bars")]
+    public static extern int ph_plot_add_grouped_bars(ulong plot, in ph_grouped_bar_desc desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stacked_desc_init")]
+    public static extern void ph_stacked_desc_init(out ph_stacked_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stacked_bars")]
+    public static extern int ph_plot_add_stacked_bars(ulong plot, IntPtr desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stacked_bars")]
+    public static extern int ph_plot_add_stacked_bars(ulong plot, in ph_stacked_desc desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stacked_area")]
+    public static extern int ph_plot_add_stacked_area(ulong plot, IntPtr desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_stacked_area")]
+    public static extern int ph_plot_add_stacked_area(ulong plot, in ph_stacked_desc desc, out ulong out_layers, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_histogram_desc_init")]
+    public static extern void ph_histogram_desc_init(out ph_histogram_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_histogram")]
+    public static extern int ph_plot_add_histogram(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_histogram")]
+    public static extern int ph_plot_add_histogram(ulong plot, in ph_histogram_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_spectrogram_desc_init")]
+    public static extern void ph_spectrogram_desc_init(out ph_spectrogram_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_spectrogram")]
+    public static extern int ph_plot_add_spectrogram(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_spectrogram")]
+    public static extern int ph_plot_add_spectrogram(ulong plot, in ph_spectrogram_desc desc, out ulong @out);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_treemap_desc_init")]
     public static extern void ph_treemap_desc_init(out ph_treemap_desc @out);

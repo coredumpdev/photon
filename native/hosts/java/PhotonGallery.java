@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 29;
+    private static final int PANELS = 33;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -78,6 +78,8 @@ public final class PhotonGallery {
     private static final int CHORD_GROUPS = 4;
     private static final int PARALLEL_DIMS = 4;
     private static final int PARALLEL_ROWS = 40;
+    private static final int STREAMS = 3;
+    private static final int HIST_SAMPLES = 4000;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -425,6 +427,17 @@ public final class PhotonGallery {
         ph_patches_desc_init(desc);
         desc.set(ValueLayout.ADDRESS, ph_patches_desc.OFFSET_PATCHES, patches);
         desc.set(ValueLayout.JAVA_INT, ph_patches_desc.OFFSET_PATCH_COUNT, FUNNEL_STAGES);
+        // A choropleth: one value per patch through a ramp, which beats each
+        // patch's own colour and earns the panel a colorbar.
+        MemorySegment values = doubles(FUNNEL_STAGES);
+        for (int i = 0; i < FUNNEL_STAGES; i++) {
+            values.setAtIndex(ValueLayout.JAVA_DOUBLE, i, FUNNEL_STAGES - i);
+        }
+        MemorySegment ramp = ph_colormap_spec.allocate(ARENA);
+        ph_colormap_spec_init(ramp);
+        ramp.set(ValueLayout.ADDRESS, ph_colormap_spec.OFFSET_NAME, ARENA.allocateFrom("cividis"));
+        desc.set(ValueLayout.ADDRESS, ph_patches_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.ADDRESS, ph_patches_desc.OFFSET_COLORMAP, ramp);
         MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
         if (ph_plot_add_patches(plot, desc, out) != PH_OK) {
             throw new IllegalStateException(Photon.lastError());
@@ -1423,6 +1436,141 @@ public final class PhotonGallery {
         }
     }
 
+    /** The three revenue streams the grouped and stacked panels share. */
+    private static MemorySegment streams() {
+        double[] revenue = {42, 47, 51, 49, 58, 63, 61, 68, 72, 70, 78, 84};
+        double[] weight = {0.55, 0.3, 0.15};
+        String[] names = {"licence", "services", "support"};
+        String[] colors = {"#60a5fa", "#f59e0b", "#34d399"};
+        MemorySegment series = ARENA.allocate(ph_series.LAYOUT, STREAMS);
+        for (int s = 0; s < STREAMS; s++) {
+            MemorySegment y = doubles(MONTHS);
+            for (int m = 0; m < MONTHS; m++) {
+                y.setAtIndex(ValueLayout.JAVA_DOUBLE, m, revenue[m] * weight[s]);
+            }
+            long base = ph_series.SIZE * s;
+            series.set(ValueLayout.ADDRESS, base + ph_series.OFFSET_Y, y);
+            series.set(ValueLayout.JAVA_INT, base + ph_series.OFFSET_COLOR, color(colors[s]));
+            series.set(ValueLayout.ADDRESS, base + ph_series.OFFSET_NAME,
+                       ARENA.allocateFrom(names[s]));
+        }
+        return series;
+    }
+
+    private static MemorySegment months() {
+        MemorySegment x = doubles(MONTHS);
+        for (int i = 0; i < MONTHS; i++) x.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+        return x;
+    }
+
+    /** Panel 29 — the same three streams as clusters. */
+    private static void buildGrouped(long plot) {
+        setTitle(plot, "Grouped");
+        styleAxis(plot, "x", "month", 0);
+        styleAxis(plot, "y", "revenue", 0);
+
+        MemorySegment desc = ph_grouped_bar_desc.allocate(ARENA);
+        ph_grouped_bar_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_grouped_bar_desc.OFFSET_X, months());
+        desc.set(ValueLayout.JAVA_INT, ph_grouped_bar_desc.OFFSET_COUNT, MONTHS);
+        desc.set(ValueLayout.ADDRESS, ph_grouped_bar_desc.OFFSET_SERIES, streams());
+        desc.set(ValueLayout.JAVA_INT, ph_grouped_bar_desc.OFFSET_SERIES_COUNT, STREAMS);
+        MemorySegment layers = ARENA.allocate(ValueLayout.JAVA_LONG, STREAMS);
+        MemorySegment written = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_plot_add_grouped_bars(plot, desc, layers, STREAMS, written) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 30 — and stacked, which is the same numbers reading as a total. */
+    private static void buildStacked(long plot) {
+        setTitle(plot, "Stacked");
+        styleAxis(plot, "x", "month", 0);
+        styleAxis(plot, "y", "revenue", 0);
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment legend = ph_legend_config.allocate(scratch);
+            ph_legend_config_init(legend);
+            // `enabled` is the one field that is off by default.
+            legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_ENABLED, 1);
+            legend.set(ValueLayout.JAVA_INT, ph_legend_config.OFFSET_POSITION, PH_LEGEND_TOP_LEFT);
+            ph_plot_set_legend(plot, legend);
+        }
+
+        MemorySegment desc = ph_stacked_desc.allocate(ARENA);
+        ph_stacked_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_stacked_desc.OFFSET_X, months());
+        desc.set(ValueLayout.JAVA_INT, ph_stacked_desc.OFFSET_COUNT, MONTHS);
+        desc.set(ValueLayout.ADDRESS, ph_stacked_desc.OFFSET_SERIES, streams());
+        desc.set(ValueLayout.JAVA_INT, ph_stacked_desc.OFFSET_SERIES_COUNT, STREAMS);
+        MemorySegment layers = ARENA.allocate(ValueLayout.JAVA_LONG, STREAMS);
+        MemorySegment written = ARENA.allocate(ValueLayout.JAVA_INT);
+        if (ph_plot_add_stacked_area(plot, desc, layers, STREAMS, written) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /** Panel 31 — a bimodal sample binned into bars. */
+    private static void buildHistogram(long plot) {
+        MemorySegment values = doubles(HIST_SAMPLES);
+        int seed = 44556677;
+        for (int i = 0; i < HIST_SAMPLES; i++) {
+            seed = seed * 1664525 + 1013904223;
+            double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            seed = seed * 1664525 + 1013904223;
+            double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            double g = Math.sqrt(-2.0 * Math.log(u + 1e-12)) * Math.cos(2 * Math.PI * v);
+            values.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                              (i % 3 == 0 ? 6.0 : 2.0) + g * (i % 3 == 0 ? 0.8 : 1.2));
+        }
+        setTitle(plot, "Histogram");
+        styleAxis(plot, "x", "value", 0);
+        styleAxis(plot, "y", "count", 0);
+
+        MemorySegment desc = ph_histogram_desc.allocate(ARENA);
+        ph_histogram_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_histogram_desc.OFFSET_VALUES, values);
+        desc.set(ValueLayout.JAVA_INT, ph_histogram_desc.OFFSET_COUNT, HIST_SAMPLES);
+        desc.set(ValueLayout.JAVA_INT, ph_histogram_desc.OFFSET_BINS, 40);
+        desc.set(ValueLayout.JAVA_INT, ph_histogram_desc.OFFSET_COLOR, color("#38bdf8"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_histogram(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
+    /**
+     * Panel 32 — the Spectrum panel's signal as a time-frequency image.
+     *
+     * The same two tones seen the other way round: the PSD says what
+     * frequencies are there, the spectrogram says when.
+     */
+    private static void buildSpectrogram(long plot) {
+        MemorySegment signal = doubles(PSD_SAMPLES);
+        int seed = 31415926;
+        for (int i = 0; i < PSD_SAMPLES; i++) {
+            double t = i / PSD_RATE;
+            seed = seed * 1664525 + 1013904223;
+            double noise = (((seed >>> 8) & 0xFFFFFF) / 16777216.0 - 0.5) * 0.8;
+            signal.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                Math.sin(2 * Math.PI * 24.0 * t) + 0.5 * Math.sin(2 * Math.PI * 61.0 * t) + noise);
+        }
+        setTitle(plot, "Spectrogram");
+        styleAxis(plot, "x", "time (s)", 0);
+        styleAxis(plot, "y", "frequency (Hz)", 0);
+
+        MemorySegment desc = ph_spectrogram_desc.allocate(ARENA);
+        ph_spectrogram_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_spectrogram_desc.OFFSET_SIGNAL, signal);
+        desc.set(ValueLayout.JAVA_INT, ph_spectrogram_desc.OFFSET_COUNT, PSD_SAMPLES);
+        desc.set(ValueLayout.JAVA_INT, ph_spectrogram_desc.OFFSET_FFT_SIZE, 128);
+        desc.set(ValueLayout.JAVA_DOUBLE, ph_spectrogram_desc.OFFSET_SAMPLE_RATE, PSD_RATE);
+        desc.set(ValueLayout.ADDRESS, ph_spectrogram_desc.OFFSET_NAME, ARENA.allocateFrom("dB"));
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_spectrogram(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1669,6 +1817,10 @@ public final class PhotonGallery {
         buildChord(plots[26]);
         buildGauge(plots[27]);
         buildParallel(plots[28]);
+        buildGrouped(plots[29]);
+        buildStacked(plots[30]);
+        buildHistogram(plots[31]);
+        buildSpectrogram(plots[32]);
 
         installCallbacks();
 

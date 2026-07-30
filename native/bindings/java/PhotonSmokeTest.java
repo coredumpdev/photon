@@ -1951,6 +1951,118 @@ public final class PhotonSmokeTest {
         checkEq(ph_plot_set_equal_aspect(plot, 1), PH_OK, "ph_plot_set_equal_aspect");
         checkEq(ph_plot_set_equal_aspect(plot, 0), PH_OK, "and it turns back off");
         ran("ph_plot_set_equal_aspect");
+
+        MemorySegment title = ph_title_config.allocate(arena);
+        ph_title_config_init(title);
+        title.set(ValueLayout.ADDRESS, ph_title_config.OFFSET_TEXT, utf8(arena, "Composed"));
+        title.set(ValueLayout.JAVA_FLOAT, ph_title_config.OFFSET_SIZE, 18.0f);
+        title.set(ValueLayout.JAVA_INT, ph_title_config.OFFSET_ALIGN, PH_ALIGN_LEFT);
+        checkEq(ph_plot_set_title_config(plot, title), PH_OK, "ph_plot_set_title_config");
+        ran("ph_title_config_init", "ph_plot_set_title_config");
+    }
+
+    /**
+     * The multi-series builders and the two that compute their own data.
+     *
+     * Grouped and stacked bars are the caller's job in the web core too — both
+     * are `offset` and `base` on an ordinary bar layer. What these add is the
+     * arithmetic, and the thing worth checking from this side is that the layer
+     * count comes back before the layers do.
+     */
+    static void multiSeries(Arena arena, long plot) {
+        MemorySegment x = doubles(arena, 0, 1, 2, 3);
+        MemorySegment a = doubles(arena, 1, 2, 3, 4);
+        MemorySegment b = doubles(arena, 4, 3, 2, 1);
+        MemorySegment series = arena.allocate(ph_series.LAYOUT, 2);
+        series.set(ValueLayout.ADDRESS, ph_series.OFFSET_Y, a);
+        series.set(ValueLayout.JAVA_INT, ph_series.OFFSET_COLOR, 0x60a5faff);
+        series.set(ValueLayout.ADDRESS, ph_series.OFFSET_NAME, utf8(arena, "first"));
+        series.set(ValueLayout.ADDRESS, ph_series.SIZE + ph_series.OFFSET_Y, b);
+        series.set(ValueLayout.JAVA_INT, ph_series.SIZE + ph_series.OFFSET_COLOR, 0xf59e0bff);
+        series.set(ValueLayout.ADDRESS, ph_series.SIZE + ph_series.OFFSET_NAME,
+                   utf8(arena, "second"));
+
+        MemorySegment countOut = arena.allocate(ValueLayout.JAVA_INT);
+        MemorySegment layers = arena.allocate(ValueLayout.JAVA_LONG, 2);
+
+        MemorySegment grouped = ph_grouped_bar_desc.allocate(arena);
+        ph_grouped_bar_desc_init(grouped);
+        grouped.set(ValueLayout.ADDRESS, ph_grouped_bar_desc.OFFSET_X, x);
+        grouped.set(ValueLayout.JAVA_INT, ph_grouped_bar_desc.OFFSET_COUNT, 4);
+        grouped.set(ValueLayout.ADDRESS, ph_grouped_bar_desc.OFFSET_SERIES, series);
+        grouped.set(ValueLayout.JAVA_INT, ph_grouped_bar_desc.OFFSET_SERIES_COUNT, 2);
+        checkEq(ph_plot_add_grouped_bars(plot, grouped, MemorySegment.NULL, 0, countOut), PH_OK,
+                "ph_plot_add_grouped_bars sizing pass");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 2, "one layer per series");
+        checkEq(ph_plot_add_grouped_bars(plot, grouped, layers, 2, countOut), PH_OK,
+                "ph_plot_add_grouped_bars");
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(layers.getAtIndex(ValueLayout.JAVA_LONG, 0), bx, by), PH_OK,
+                "the first cluster has bounds");
+        for (int i = 0; i < 2; i++) {
+            checkEq(ph_layer_destroy(layers.getAtIndex(ValueLayout.JAVA_LONG, i)), PH_OK,
+                    "grouped layer " + i + " is destroyed");
+        }
+        ran("ph_grouped_bar_desc_init", "ph_plot_add_grouped_bars");
+
+        MemorySegment stacked = ph_stacked_desc.allocate(arena);
+        ph_stacked_desc_init(stacked);
+        stacked.set(ValueLayout.ADDRESS, ph_stacked_desc.OFFSET_X, x);
+        stacked.set(ValueLayout.JAVA_INT, ph_stacked_desc.OFFSET_COUNT, 4);
+        stacked.set(ValueLayout.ADDRESS, ph_stacked_desc.OFFSET_SERIES, series);
+        stacked.set(ValueLayout.JAVA_INT, ph_stacked_desc.OFFSET_SERIES_COUNT, 2);
+        checkEq(ph_plot_add_stacked_bars(plot, stacked, layers, 2, countOut), PH_OK,
+                "ph_plot_add_stacked_bars");
+        // The second series is drawn from the first's total, so its top reaches
+        // the sum: 1+4 = 5 at the first category, and 4+1 = 5 at the last.
+        checkEq(ph_layer_bounds(layers.getAtIndex(ValueLayout.JAVA_LONG, 1), bx, by), PH_OK,
+                "the top of the stack has bounds");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 5.0,
+              "and it reaches the sum of both series");
+        for (int i = 0; i < 2; i++) {
+            ph_layer_destroy(layers.getAtIndex(ValueLayout.JAVA_LONG, i));
+        }
+        checkEq(ph_plot_add_stacked_area(plot, stacked, layers, 2, countOut), PH_OK,
+                "ph_plot_add_stacked_area");
+        for (int i = 0; i < 2; i++) {
+            ph_layer_destroy(layers.getAtIndex(ValueLayout.JAVA_LONG, i));
+        }
+        ran("ph_stacked_desc_init", "ph_plot_add_stacked_bars", "ph_plot_add_stacked_area");
+
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment sample = doubles(arena, 1, 2, 2, 3, 3, 3, 4, 9);
+        MemorySegment histogram = ph_histogram_desc.allocate(arena);
+        ph_histogram_desc_init(histogram);
+        histogram.set(ValueLayout.ADDRESS, ph_histogram_desc.OFFSET_VALUES, sample);
+        histogram.set(ValueLayout.JAVA_INT, ph_histogram_desc.OFFSET_COUNT, 8);
+        histogram.set(ValueLayout.JAVA_INT, ph_histogram_desc.OFFSET_BINS, 4);
+        checkEq(ph_plot_add_histogram(plot, histogram, handle), PH_OK, "ph_plot_add_histogram");
+        checkEq(ph_layer_bounds(handle.get(ValueLayout.JAVA_LONG, 0), bx, by), PH_OK,
+                "the histogram has bounds");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and is destroyed");
+        ran("ph_histogram_desc_init", "ph_plot_add_histogram");
+
+        MemorySegment tone = room(arena, 512);
+        for (int i = 0; i < 512; i++) {
+            tone.setAtIndex(ValueLayout.JAVA_DOUBLE, i, Math.sin(2 * Math.PI * 32 * i / 256.0));
+        }
+        MemorySegment spec = ph_spectrogram_desc.allocate(arena);
+        ph_spectrogram_desc_init(spec);
+        spec.set(ValueLayout.ADDRESS, ph_spectrogram_desc.OFFSET_SIGNAL, tone);
+        spec.set(ValueLayout.JAVA_INT, ph_spectrogram_desc.OFFSET_COUNT, 512);
+        spec.set(ValueLayout.JAVA_INT, ph_spectrogram_desc.OFFSET_FFT_SIZE, 64);
+        spec.set(ValueLayout.JAVA_DOUBLE, ph_spectrogram_desc.OFFSET_SAMPLE_RATE, 256.0);
+        checkEq(ph_plot_add_spectrogram(plot, spec, handle), PH_OK, "ph_plot_add_spectrogram");
+        checkEq(ph_layer_bounds(handle.get(ValueLayout.JAVA_LONG, 0), bx, by), PH_OK,
+                "the spectrogram has bounds");
+        check(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) == 128.0,
+              "and its y axis reaches Nyquist");
+        checkEq(ph_layer_destroy(handle.get(ValueLayout.JAVA_LONG, 0)), PH_OK, "and is destroyed");
+        spec.set(ValueLayout.JAVA_INT, ph_spectrogram_desc.OFFSET_FFT_SIZE, 63);
+        checkEq(ph_plot_add_spectrogram(plot, spec, handle), PH_E_INVALID_ARGUMENT,
+                "an odd frame size is refused");
+        ran("ph_spectrogram_desc_init", "ph_plot_add_spectrogram");
     }
 
     /** A NUL-terminated UTF-8 copy, kept alive by `arena`. */
@@ -2006,6 +2118,8 @@ public final class PhotonSmokeTest {
             patches(arena, plot);
             step("composedCharts");
             composedCharts(arena, plot);
+            step("multiSeries");
+            multiSeries(arena, plot);
             step("interaction");
             interaction(arena, plot);
             step("events");
