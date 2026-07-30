@@ -34,7 +34,9 @@ presets).
 
 ### The galleries
 
-The same thirty-four charts, under four hosts. The CMake host options are off by
+The same thirty-four charts, under four hosts — plus three 3-D scenes, which
+only the Java gallery shows so far: the other three hold an array of `ph_plot`
+and a scene is a `ph_plot3d`. The CMake host options are off by
 default — GLFW because it is fetched over the network, Qt because it is a large
 thing to require of anyone building the library.
 
