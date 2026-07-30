@@ -150,9 +150,28 @@ convenience wrappers above the ABI and the streaming setters below it.
 
 - [ ] `finance/indicators.ts` + `transforms.ts` — pure array→array, port
       directly with their vitest tests.
-- [ ] `finance/charts.ts`
-- [ ] `charts/`: `chord` `fields` `funnel` `gauge` `parallel` `sankey`
-      `sunburst` `treemap` `tri` — pure layout + `addPatches`.
+- [ ] `finance/charts.ts`, `stats/charts.ts`, `ml/charts.ts` — **deliberately
+      not ported as entry points, so far.** Every one of them is "compute
+      something the ABI already exposes, then add a line or two":
+      `addRocCurve` is `ph_ml_roc_curve` plus two `ph_plot_add_line` calls,
+      `addBollinger` is `ph_fin_bollinger` plus three. Twenty entry points that
+      each save four lines is ABI surface for nothing, and the demo panels
+      (Signals, Fit, ROC, Embedding) are exactly those recipes written out. The
+      ones with a real algorithm underneath — the field charts, the diagrams —
+      *are* ported. Revisit if a host asks.
+- [ ] `stats/waterfall.ts` — a scrolling spectrogram with a moving time axis.
+      It needs a handle of its own (push a column, the history ages one row and
+      the ticks slide with it), which is why it is not just a heatmap setter.
+- [ ] `ml/model.ts` + `ml/model-chart.ts` (1600 lines) — a training-loop model,
+      which is further from charting than anything else on this list. Decide
+      whether it belongs in the native core at all.
+- [x] ~~`charts/`: `chord` `fields` `funnel` `gauge` `parallel` `sankey`
+      `sunburst` `treemap`~~ — pure layout plus a patches layer, exactly as in
+      the web core. `fields` brought the half of `_geom.ts` it needs with it:
+      the scalar clipper isobands runs a few times per straddling cell, and the
+      stroke quad the barbs are made of.
+- [ ] `charts/tri` needs `geo/delaunay.ts` under it, which is the one geometry
+      module still unported.
 - [ ] `ml/metrics.ts`, `ml/reduce.ts`, `ml/charts.ts`, `ml/model.ts`,
       `ml/model-chart.ts`
 - [ ] `stats/regression.ts`, `signal.ts`, `waterfall.ts`, `charts.ts`
