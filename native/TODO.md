@@ -181,7 +181,20 @@ All of the above are pure functions with existing unit tests in
 
 ### Polar
 
-- [ ] `polar/polar.ts` (812 lines) — its own handle type and ABI surface.
+- [x] ~~`polar/polar.ts` (812 lines)~~ — and **not** its own handle type, which
+      is the one place this port deliberately differs from the web core. The web
+      has a whole `PolarPlot` class because it owns three canvases and a DOM
+      tooltip; here there is no DOM, and what actually differs is three things:
+      the grid is rings and spokes, the two axes take the same square domain,
+      and (theta, r) is projected on the way in. So it is `ph_plot_set_polar` on
+      an ordinary plot, and panning, zooming, the legend, annotations, hover and
+      the event queue all keep working without a second copy of any of them.
+      Rotation is the one thing that needs more: each polar layer keeps the
+      (theta, r) it was built from, because the Cartesian x/y it holds have
+      already lost the angle.
+- [ ] The two cores therefore centre a polar chart differently — the web on the
+      container, this one inside the plot region its margins leave — so the
+      Polar panel is built in both galleries and compared in neither.
 
 ---
 
