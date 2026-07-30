@@ -154,6 +154,60 @@ void Plot::set_title(const char* title) {
   request_render();
 }
 
+void Plot::project_polar(const double* theta, const double* r, size_t count, bool closed,
+                         std::vector<double>& out_x, std::vector<double>& out_y) const {
+  const double to_rad = polar_.degrees ? 3.14159265358979323846 / 180.0 : 1.0;
+  const size_t n = closed && count > 0 ? count + 1 : count;
+  out_x.assign(n, 0.0);
+  out_y.assign(n, 0.0);
+  for (size_t i = 0; i < count; ++i) {
+    const double a = theta[i] * to_rad + polar_.rotation;
+    out_x[i] = r[i] * std::cos(a);
+    out_y[i] = r[i] * std::sin(a);
+  }
+  if (closed && count > 0) {
+    out_x[count] = out_x[0];
+    out_y[count] = out_y[0];
+  }
+}
+
+void Plot::refit_polar() {
+  if (!polar_.enabled) return;
+
+  double max_r = 0.0;
+  std::vector<double> xs;
+  std::vector<double> ys;
+  for (const std::unique_ptr<Layer>& layer : layers_) {
+    const Layer::PolarSource& source = layer->polar;
+    if (source.theta.empty()) continue;
+    for (const double v : source.r) max_r = std::max(max_r, std::abs(v));
+    // Only an XYLayer can be polar — a line or a scatter — and that is checked
+    // where the source is attached, so the cast cannot fail here.
+    XYLayer* xy = dynamic_cast<XYLayer*>(layer.get());
+    if (!xy) continue;
+    project_polar(source.theta.data(), source.r.data(), source.theta.size(), source.closed, xs,
+                  ys);
+    xy->set_xy(xs.data(), ys.data(), xs.size());
+  }
+  polar_radius_ = polar_.max_radius > 0.0 ? polar_.max_radius : (max_r > 0.0 ? max_r : 1.0);
+  // Both axes take the same square domain; the equal-aspect lock then makes the
+  // circle round whatever shape the region is.
+  scale_x_.set_domain(-polar_radius_, polar_radius_);
+  primary_y().scale.set_domain(-polar_radius_, polar_radius_);
+  request_render();
+}
+
+void Plot::set_polar(const PolarConfig& config) {
+  polar_ = config;
+  if (polar_.enabled) {
+    // A polar plot is square by construction; without the lock the circle is an
+    // ellipse and every angle on it is a lie.
+    equal_aspect_ = true;
+    refit_polar();
+  }
+  request_render();
+}
+
 void Plot::set_equal_aspect(bool on) {
   if (equal_aspect_ == on) return;
   equal_aspect_ = on;
@@ -994,9 +1048,16 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
   if (background_ != PH_COLOR_AUTO) {
     painter.fill(r.left, r.top, r.width, r.height, unpack_color_exact(background_));
   }
-  // Only the x and primary-y grids are drawn, so a secondary axis does not
-  // double the lines — the same choice the web core makes.
-  render::draw_grid(painter, rect, scale_x_, primary.scale, ticks_x, ticks_y, style_x, style_y);
+  if (polar_.enabled) {
+    // Concentric rings at the y ticks, which are already nice numbers over the
+    // same range the radius spans.
+    render::draw_polar_grid(painter, rect, scale_x_, primary.scale, polar_radius_,
+                            polar_.rotation, polar_.spoke_step, ticks_y, style_y, theme_);
+  } else {
+    // Only the x and primary-y grids are drawn, so a secondary axis does not
+    // double the lines — the same choice the web core makes.
+    render::draw_grid(painter, rect, scale_x_, primary.scale, ticks_x, ticks_y, style_x, style_y);
+  }
   if (!shapes_.flush(api, gfx, pixels, error)) return false;
 
   // 2. The data itself, scissored to the plot region.
@@ -1070,18 +1131,21 @@ bool Plot::render_upright(gl::Api& api, ph_gfx_api gfx, const ph_frame_target& t
   }
   if (!ok) return false;
 
-  // 3. Over the data: axes, guides and the title.
-  render::draw_x_axis(painter, rect, scale_x_, ticks_x, style_x, axis_x_.config.title);
+  // 3. Over the data: axes, guides and the title. A polar plot has no cartesian
+  // axes to draw — its grid already carries the angles and the radii.
+  if (!polar_.enabled) {
+    render::draw_x_axis(painter, rect, scale_x_, ticks_x, style_x, axis_x_.config.title);
 
-  const std::vector<render::YAxisPlacement> placements = y_axis_placements(r);
-  for (size_t i = 0; i < y_axes_.size(); ++i) {
-    YAxis& axis = y_axes_[i];
-    const std::vector<Tick>& ticks = axis.axis.resolve(axis.scale);
-    const render::AxisStyle style =
-        &axis == &primary ? style_y
-                          : render::resolve_axis_style(axis.axis.config, theme_, axis.color);
-    render::draw_y_axis(painter, rect, axis.scale, ticks, style, axis.axis.config.title,
-                        placements[i]);
+    const std::vector<render::YAxisPlacement> placements = y_axis_placements(r);
+    for (size_t i = 0; i < y_axes_.size(); ++i) {
+      YAxis& axis = y_axes_[i];
+      const std::vector<Tick>& ticks = axis.axis.resolve(axis.scale);
+      const render::AxisStyle style =
+          &axis == &primary ? style_y
+                            : render::resolve_axis_style(axis.axis.config, theme_, axis.color);
+      render::draw_y_axis(painter, rect, axis.scale, ticks, style, axis.axis.config.title,
+                          placements[i]);
+    }
   }
 
   if (selecting_) {

@@ -2065,6 +2065,81 @@ public final class PhotonSmokeTest {
         ran("ph_spectrogram_desc_init", "ph_plot_add_spectrogram");
     }
 
+    /**
+     * Polar mode.
+     *
+     * The point of the shape is that there is no second plot type: the same
+     * handle, the same render, the same events. What is checked here is that a
+     * rotation actually re-projects a series that was added before it — the one
+     * thing a polar plot needs that a Cartesian one does not.
+     */
+    static void polar(Arena arena, long plot) {
+        MemorySegment config = ph_polar_config.allocate(arena);
+        ph_polar_config_init(config);
+        checkEq(config.get(ValueLayout.JAVA_INT, ph_polar_config.OFFSET_STRUCT_SIZE),
+                (int) ph_polar_config.SIZE, "ph_polar_config_init");
+        config.set(ValueLayout.JAVA_INT, ph_polar_config.OFFSET_ENABLED, 1);
+        config.set(ValueLayout.JAVA_INT, ph_polar_config.OFFSET_DEGREES, 1);
+        checkEq(ph_plot_set_polar(plot, config), PH_OK, "ph_plot_set_polar");
+        ran("ph_polar_config_init", "ph_plot_set_polar");
+
+        // Four points on the axes at radius 1, in degrees.
+        MemorySegment theta = doubles(arena, 0, 90, 180, 270);
+        MemorySegment radius = doubles(arena, 1, 1, 1, 1);
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment line = ph_polar_line_desc.allocate(arena);
+        ph_polar_line_desc_init(line);
+        line.set(ValueLayout.ADDRESS, ph_polar_line_desc.OFFSET_THETA, theta);
+        line.set(ValueLayout.ADDRESS, ph_polar_line_desc.OFFSET_R, radius);
+        line.set(ValueLayout.JAVA_INT, ph_polar_line_desc.OFFSET_COUNT, 4);
+        line.set(ValueLayout.JAVA_INT, ph_polar_line_desc.OFFSET_CLOSED, 1);
+        checkEq(ph_plot_add_polar_line(plot, line, handle), PH_OK, "ph_plot_add_polar_line");
+        long lineLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+
+        MemorySegment bx = ph_range.allocate(arena);
+        MemorySegment by = ph_range.allocate(arena);
+        checkEq(ph_layer_bounds(lineLayer, bx, by), PH_OK, "the polar line has bounds");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 1.0) < 1e-9,
+              "0 degrees at radius 1 lands at x = 1");
+        check(Math.abs(by.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 1.0) < 1e-9,
+              "and 90 degrees at y = 1");
+
+        // Rotate a quarter turn: the point that was at x = 1 is now at y = 1,
+        // which only works because the layer kept its (theta, r).
+        config.set(ValueLayout.JAVA_DOUBLE, ph_polar_config.OFFSET_ROTATION, Math.PI / 2);
+        checkEq(ph_plot_set_polar(plot, config), PH_OK, "a rotation re-projects");
+        checkEq(ph_layer_bounds(lineLayer, bx, by), PH_OK, "the bounds still resolve");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 1.0) < 1e-9,
+              "a symmetric ring is its own rotation");
+        config.set(ValueLayout.JAVA_DOUBLE, ph_polar_config.OFFSET_ROTATION, 0.0);
+        ph_plot_set_polar(plot, config);
+
+        MemorySegment scatter = ph_polar_scatter_desc.allocate(arena);
+        ph_polar_scatter_desc_init(scatter);
+        scatter.set(ValueLayout.ADDRESS, ph_polar_scatter_desc.OFFSET_THETA, theta);
+        scatter.set(ValueLayout.ADDRESS, ph_polar_scatter_desc.OFFSET_R, radius);
+        scatter.set(ValueLayout.JAVA_INT, ph_polar_scatter_desc.OFFSET_COUNT, 4);
+        checkEq(ph_plot_add_polar_scatter(plot, scatter, handle), PH_OK,
+                "ph_plot_add_polar_scatter");
+        long scatterLayer = handle.get(ValueLayout.JAVA_LONG, 0);
+        ran("ph_polar_line_desc_init", "ph_plot_add_polar_line", "ph_polar_scatter_desc_init",
+            "ph_plot_add_polar_scatter");
+
+        MemorySegment bigger = doubles(arena, 3, 3, 3, 3);
+        checkEq(ph_layer_set_polar(lineLayer, theta, bigger, 4), PH_OK, "ph_layer_set_polar");
+        checkEq(ph_layer_bounds(lineLayer, bx, by), PH_OK, "the new radius resolves");
+        check(Math.abs(bx.get(ValueLayout.JAVA_DOUBLE, ph_range.OFFSET_HI) - 3.0) < 1e-9,
+              "and the ring grew with it");
+        checkEq(ph_layer_set_polar(lineLayer, MemorySegment.NULL, MemorySegment.NULL, 4),
+                PH_E_INVALID_ARGUMENT, "a null pair with a count is refused");
+        ran("ph_layer_set_polar");
+
+        checkEq(ph_layer_destroy(lineLayer), PH_OK, "the polar line is destroyed");
+        checkEq(ph_layer_destroy(scatterLayer), PH_OK, "and the scatter");
+        config.set(ValueLayout.JAVA_INT, ph_polar_config.OFFSET_ENABLED, 0);
+        ph_plot_set_polar(plot, config);
+    }
+
     /** A NUL-terminated UTF-8 copy, kept alive by `arena`. */
     static MemorySegment ARENA_TEXT(Arena arena, String text) {
         return arena.allocateFrom(text);
@@ -2120,6 +2195,8 @@ public final class PhotonSmokeTest {
             composedCharts(arena, plot);
             step("multiSeries");
             multiSeries(arena, plot);
+            step("polar");
+            polar(arena, plot);
             step("interaction");
             interaction(arena, plot);
             step("events");

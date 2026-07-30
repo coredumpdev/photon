@@ -26,7 +26,16 @@ Not a pixel diff, because two things differ by design and always will:
 - **Antialiasing.** Different GL implementations round edge coverage
   differently, and headless Chromium runs on SwiftShader.
 
-One panel opts out of the *grid* comparison: **Field**. Its heatmap covers the
+One panel is left out of the comparison entirely: **Polar**. The web core has a
+whole `PolarPlot` class because it owns three canvases and a DOM tooltip; the
+native core has no DOM, so a polar chart is a *mode* on the ordinary plot. The
+data and the grid are the same and the two pictures are worth putting side by
+side, but they centre their square differently — the web on the container, the
+native inside the plot region its margins leave — so there is no shared
+rectangle to compare. It is still built in both, so the images line up cell for
+cell and the difference is visible rather than hidden.
+
+Two panels opt out of the *grid* comparison: **Field** and **Spectrogram**. Their heatmaps cover the
 whole plot region, so no grid line is visible in either image — and worse than
 nothing, the two GL implementations resolve the quad's edge column differently
 and the native blend lands within a level of the grid colour, which the detector

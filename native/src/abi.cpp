@@ -3399,6 +3399,179 @@ extern "C" ph_result PH_CALL ph_plot_add_spectrogram(ph_plot handle,
   }
 }
 
+// ---------------------------------------------------------------------------
+// Polar
+// ---------------------------------------------------------------------------
+
+extern "C" void PH_CALL ph_polar_config_init(ph_polar_config* out) {
+  if (!out) return;
+  *out = ph_polar_config{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_polar_config));
+}
+
+extern "C" void PH_CALL ph_polar_line_desc_init(ph_polar_line_desc* out) {
+  if (!out) return;
+  *out = ph_polar_line_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_polar_line_desc));
+}
+
+extern "C" void PH_CALL ph_polar_scatter_desc_init(ph_polar_scatter_desc* out) {
+  if (!out) return;
+  *out = ph_polar_scatter_desc{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_polar_scatter_desc));
+}
+
+extern "C" ph_result PH_CALL ph_plot_set_polar(ph_plot handle, const ph_polar_config* config) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (config && !desc_size_ok(config)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_polar_config.struct_size is larger than this build's");
+  }
+  const ph_polar_config c = normalize(config, ph_polar_config_init);
+  Plot::PolarConfig polar;
+  polar.enabled = c.enabled != 0;
+  polar.degrees = c.degrees != 0;
+  polar.max_radius = c.max_radius;
+  polar.rotation = c.rotation;
+  polar.spoke_step = c.spoke_step;
+  plot->set_polar(polar);
+  return PH_OK;
+}
+
+namespace {
+
+/// The (theta, r) pair every polar builder takes, checked once.
+ph_result check_polar(const double* theta, const double* r, int32_t count) {
+  if (count < 0) return fail(PH_E_INVALID_ARGUMENT, "count must be non-negative");
+  if (count > 0 && (!theta || !r)) {
+    return fail(PH_E_INVALID_ARGUMENT, "theta and r must be non-null when count > 0");
+  }
+  return PH_OK;
+}
+
+/// Record what a layer was built from, so a later rotation can re-project it.
+void attach_polar(Plot* plot, ph_layer handle, const double* theta, const double* r,
+                  int32_t count, bool closed) {
+  Plot* owner = nullptr;
+  photon::Layer* layer = nullptr;
+  if (photon::resolve_layer(handle, &owner, &layer) != PH_OK) return;
+  layer->polar.theta.assign(theta, theta + count);
+  layer->polar.r.assign(r, r + count);
+  layer->polar.closed = closed;
+  plot->refit_polar();
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_plot_add_polar_line(ph_plot handle,
+                                                    const ph_polar_line_desc* desc,
+                                                    ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_polar_line_desc.struct_size is larger than this build's");
+  }
+  const ph_polar_line_desc d = normalize(desc, ph_polar_line_desc_init);
+  const ph_result checked = check_polar(d.theta, d.r, d.count);
+  if (checked != PH_OK) return checked;
+
+  std::vector<double> xs;
+  std::vector<double> ys;
+  plot->project_polar(d.theta, d.r, static_cast<size_t>(d.count), d.closed != 0, xs, ys);
+  ph_line_desc line{};
+  ph_line_desc_init(&line);
+  line.x = xs.data();
+  line.y = ys.data();
+  line.count = static_cast<int32_t>(xs.size());
+  line.color = d.color;
+  line.width = d.width > 0.0f ? d.width : 2.0f;
+  line.dash = d.dash;
+  line.dash_count = d.dash_count;
+  line.name = d.name;
+  line.render_type = d.render_type;
+  // A polar series is short and already resampled by whatever produced it;
+  // decimation assumes a monotonic x, which a spiral does not have.
+  line.no_decimate = 1;
+  try {
+    const ph_result added =
+        register_layer(handle, plot, std::make_unique<photon::LineLayer>(line), out);
+    if (added != PH_OK) return added;
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating polar line layer");
+  }
+  attach_polar(plot, *out, d.theta, d.r, d.count, d.closed != 0);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_plot_add_polar_scatter(ph_plot handle,
+                                                       const ph_polar_scatter_desc* desc,
+                                                       ph_layer* out) {
+  clear_error();
+  Plot* plot = nullptr;
+  const ph_result r = resolve_plot(handle, &plot);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (desc && !desc_size_ok(desc)) {
+    return fail(PH_E_INVALID_ARGUMENT,
+                "ph_polar_scatter_desc.struct_size is larger than this build's");
+  }
+  const ph_polar_scatter_desc d = normalize(desc, ph_polar_scatter_desc_init);
+  const ph_result checked = check_polar(d.theta, d.r, d.count);
+  if (checked != PH_OK) return checked;
+
+  std::vector<double> xs;
+  std::vector<double> ys;
+  plot->project_polar(d.theta, d.r, static_cast<size_t>(d.count), false, xs, ys);
+  ph_scatter_desc scatter{};
+  ph_scatter_desc_init(&scatter);
+  scatter.x = xs.data();
+  scatter.y = ys.data();
+  scatter.count = d.count;
+  scatter.color = d.color;
+  scatter.size = d.size > 0.0f ? d.size : 5.0f;
+  scatter.sizes = d.sizes;
+  scatter.colors = d.colors;
+  scatter.marker = d.marker;
+  scatter.name = d.name;
+  scatter.render_type = d.render_type;
+  try {
+    const ph_result added =
+        register_layer(handle, plot, std::make_unique<photon::ScatterLayer>(scatter), out);
+    if (added != PH_OK) return added;
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory creating polar scatter layer");
+  }
+  attach_polar(plot, *out, d.theta, d.r, d.count, false);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_layer_set_polar(ph_layer handle, const double* theta,
+                                                const double* r, int32_t count) {
+  clear_error();
+  Plot* plot = nullptr;
+  photon::Layer* layer = nullptr;
+  const ph_result resolved = photon::resolve_layer(handle, &plot, &layer);
+  if (resolved != PH_OK) return resolved;
+  const ph_result checked = check_polar(theta, r, count);
+  if (checked != PH_OK) return checked;
+  if (layer->polar.theta.empty() && count > 0 && !dynamic_cast<photon::XYLayer*>(layer)) {
+    return fail(PH_E_INVALID_ARGUMENT, "this layer is not a polar line or scatter");
+  }
+  const bool closed = layer->polar.closed;
+  layer->polar.theta.assign(theta, theta + count);
+  layer->polar.r.assign(r, r + count);
+  layer->polar.closed = closed;
+  // The re-projection and the re-fit are the same ones a rotation does.
+  plot->refit_polar();
+  return PH_OK;
+}
+
 extern "C" ph_result PH_CALL ph_plot_add_scatter(ph_plot handle, const ph_scatter_desc* desc, ph_layer* out) {
   clear_error();
   Plot* plot = nullptr;

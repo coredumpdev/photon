@@ -1,6 +1,7 @@
 #include "render/overlay.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 
 #include "scale.hpp"
@@ -147,6 +148,54 @@ void draw_grid(Painter& painter, const Rect& region, const Scale& scale_x, const
                      region.right(), style_y.grid_width, style_y.grid_dash, color);
     }
   }
+}
+
+void draw_polar_grid(Painter& painter, const Rect& region, const Scale& scale_x,
+                     const Scale& scale_y, double radius, double rotation, double spoke_step,
+                     const std::vector<Tick>& rings, const AxisStyle& style, ph_theme theme) {
+  if (!(radius > 0.0)) return;
+  // Everything is projected through the two scales rather than assumed square:
+  // the equal-aspect lock makes one data unit the same length on both axes, and
+  // measuring it is cheaper to trust than reproducing it.
+  const double cx = px_x(region, scale_x.norm(0.0));
+  const double cy = px_y(region, scale_y.norm(0.0));
+  const double pr = px_x(region, scale_x.norm(radius)) - cx;
+  if (!(pr > 0.0)) return;
+
+  const std::vector<float> solid;
+  const double step = spoke_step > 0.0 ? spoke_step : 30.0;
+  for (double deg = 0.0; deg < 360.0; deg += step) {
+    const double a = deg * kPi / 180.0 + rotation;
+    painter.segment(cx, cy, cx + std::cos(a) * pr, cy - std::sin(a) * pr, style.grid_width,
+                    solid, style.grid_color);
+    // The labels sit outside the outermost ring, where they cannot be read as
+    // part of the data.
+    char text[8];
+    const int whole = static_cast<int>(std::lround(deg));
+    const std::to_chars_result written = std::to_chars(text, text + sizeof(text) - 3, whole);
+    std::string label(text, written.ec == std::errc() ? written.ptr : text);
+    label += "\xc2\xb0";  // U+00B0 DEGREE SIGN
+    painter.label(label, cx + std::cos(a) * (pr + 12.0), cy - std::sin(a) * (pr + 12.0),
+                  text::Align::Center, text::Baseline::Middle, style.label_color,
+                  style.label_size);
+  }
+
+  constexpr int kSegments = 96;
+  for (const Tick& tick : rings) {
+    if (!(tick.value > 0.0)) continue;
+    const double ring = (tick.value / radius) * pr;
+    double px = cx + ring;
+    double py = cy;
+    for (int i = 1; i <= kSegments; ++i) {
+      const double a = 2.0 * kPi * static_cast<double>(i) / kSegments;
+      const double nx = cx + std::cos(a) * ring;
+      const double ny = cy - std::sin(a) * ring;
+      painter.segment(px, py, nx, ny, style.grid_width, solid, style.grid_color);
+      px = nx;
+      py = ny;
+    }
+  }
+  (void)theme;
 }
 
 void draw_x_axis(Painter& painter, const Rect& region, const Scale& scale,

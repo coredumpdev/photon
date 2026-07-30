@@ -251,6 +251,118 @@ public final class Photon {
         }
     }
 
+    /** ph_polar_config — 40 bytes, alignment 8. */
+    public static final class ph_polar_config {
+        private ph_polar_config() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            ValueLayout.JAVA_INT.withName("enabled"),
+            ValueLayout.JAVA_INT.withName("degrees"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.JAVA_DOUBLE.withName("max_radius"),
+            ValueLayout.JAVA_DOUBLE.withName("rotation"),
+            ValueLayout.JAVA_DOUBLE.withName("spoke_step")
+        ).withName("ph_polar_config");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_ENABLED = 4L;
+        public static final long OFFSET_DEGREES = 8L;
+        public static final long OFFSET_MAX_RADIUS = 16L;
+        public static final long OFFSET_ROTATION = 24L;
+        public static final long OFFSET_SPOKE_STEP = 32L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_polar_line_desc — 72 bytes, alignment 8. */
+    public static final class ph_polar_line_desc {
+        private ph_polar_line_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("theta"),
+            ValueLayout.ADDRESS.withName("r"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("width"),
+            ValueLayout.JAVA_INT.withName("closed"),
+            ValueLayout.ADDRESS.withName("dash"),
+            ValueLayout.JAVA_INT.withName("dash_count"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_polar_line_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_THETA = 8L;
+        public static final long OFFSET_R = 16L;
+        public static final long OFFSET_COUNT = 24L;
+        public static final long OFFSET_COLOR = 28L;
+        public static final long OFFSET_WIDTH = 32L;
+        public static final long OFFSET_CLOSED = 36L;
+        public static final long OFFSET_DASH = 40L;
+        public static final long OFFSET_DASH_COUNT = 48L;
+        public static final long OFFSET_NAME = 56L;
+        public static final long OFFSET_RENDER_TYPE = 64L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
+    /** ph_polar_scatter_desc — 80 bytes, alignment 8. */
+    public static final class ph_polar_scatter_desc {
+        private ph_polar_scatter_desc() {}
+
+        public static final MemoryLayout LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("struct_size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("theta"),
+            ValueLayout.ADDRESS.withName("r"),
+            ValueLayout.JAVA_INT.withName("count"),
+            ValueLayout.JAVA_INT.withName("color"),
+            ValueLayout.JAVA_FLOAT.withName("size"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("sizes"),
+            ValueLayout.ADDRESS.withName("colors"),
+            ValueLayout.JAVA_INT.withName("marker"),
+            MemoryLayout.paddingLayout(4),
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_INT.withName("render_type"),
+            MemoryLayout.paddingLayout(4)
+        ).withName("ph_polar_scatter_desc");
+
+        public static final long SIZE = LAYOUT.byteSize();
+
+        public static final long OFFSET_STRUCT_SIZE = 0L;
+        public static final long OFFSET_THETA = 8L;
+        public static final long OFFSET_R = 16L;
+        public static final long OFFSET_COUNT = 24L;
+        public static final long OFFSET_COLOR = 28L;
+        public static final long OFFSET_SIZE = 32L;
+        public static final long OFFSET_SIZES = 40L;
+        public static final long OFFSET_COLORS = 48L;
+        public static final long OFFSET_MARKER = 56L;
+        public static final long OFFSET_NAME = 64L;
+        public static final long OFFSET_RENDER_TYPE = 72L;
+
+        /** Allocate one, zero-filled — which the ABI defines as all defaults. */
+        public static MemorySegment allocate(Arena arena) {
+            return arena.allocate(LAYOUT);
+        }
+    }
+
     /** ph_pivot_levels — 56 bytes, alignment 8. */
     public static final class ph_pivot_levels {
         private ph_pivot_levels() {}
@@ -2423,6 +2535,13 @@ public final class Photon {
         "ph_palette_count",
         "ph_palette_name",
         "ph_palette_color",
+        "ph_polar_config_init",
+        "ph_plot_set_polar",
+        "ph_polar_line_desc_init",
+        "ph_plot_add_polar_line",
+        "ph_polar_scatter_desc_init",
+        "ph_plot_add_polar_scatter",
+        "ph_layer_set_polar",
         "ph_fin_sma",
         "ph_fin_wma",
         "ph_fin_ema",
@@ -2637,6 +2756,13 @@ public final class Photon {
     private static final MethodHandle PH_PALETTE_COUNT = handle("ph_palette_count", FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PALETTE_NAME = handle("ph_palette_name", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_PALETTE_COLOR = handle("ph_palette_color", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+    private static final MethodHandle PH_POLAR_CONFIG_INIT = handle("ph_polar_config_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_SET_POLAR = handle("ph_plot_set_polar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_POLAR_LINE_DESC_INIT = handle("ph_polar_line_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_POLAR_LINE = handle("ph_plot_add_polar_line", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_POLAR_SCATTER_DESC_INIT = handle("ph_polar_scatter_desc_init", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+    private static final MethodHandle PH_PLOT_ADD_POLAR_SCATTER = handle("ph_plot_add_polar_scatter", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+    private static final MethodHandle PH_LAYER_SET_POLAR = handle("ph_layer_set_polar", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
     private static final MethodHandle PH_FIN_SMA = handle("ph_fin_sma", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
     private static final MethodHandle PH_FIN_WMA = handle("ph_fin_wma", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
     private static final MethodHandle PH_FIN_EMA = handle("ph_fin_ema", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
@@ -2917,6 +3043,62 @@ public final class Photon {
             return (int) PH_PALETTE_COLOR.invokeExact(name, index);
         } catch (Throwable photonFailure) {
             throw new AssertionError("photon: ph_palette_color failed", photonFailure);
+        }
+    }
+
+    public static void ph_polar_config_init(MemorySegment out) {
+        try {
+            PH_POLAR_CONFIG_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_polar_config_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_set_polar(long plot, MemorySegment config) {
+        try {
+            return (int) PH_PLOT_SET_POLAR.invokeExact(plot, config);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_set_polar failed", photonFailure);
+        }
+    }
+
+    public static void ph_polar_line_desc_init(MemorySegment out) {
+        try {
+            PH_POLAR_LINE_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_polar_line_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_polar_line(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_POLAR_LINE.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_polar_line failed", photonFailure);
+        }
+    }
+
+    public static void ph_polar_scatter_desc_init(MemorySegment out) {
+        try {
+            PH_POLAR_SCATTER_DESC_INIT.invokeExact(out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_polar_scatter_desc_init failed", photonFailure);
+        }
+    }
+
+    public static int ph_plot_add_polar_scatter(long plot, MemorySegment desc, MemorySegment out) {
+        try {
+            return (int) PH_PLOT_ADD_POLAR_SCATTER.invokeExact(plot, desc, out);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_plot_add_polar_scatter failed", photonFailure);
+        }
+    }
+
+    public static int ph_layer_set_polar(long layer, MemorySegment theta, MemorySegment r, int count) {
+        try {
+            return (int) PH_LAYER_SET_POLAR.invokeExact(layer, theta, r, count);
+        } catch (Throwable photonFailure) {
+            throw new AssertionError("photon: ph_layer_set_polar failed", photonFailure);
         }
     }
 

@@ -1,5 +1,5 @@
 /**
- * The thirty-three demo charts, built with @photonviz/core.
+ * The thirty-four demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -10,6 +10,7 @@
 import {
   Plot, addChord, addGauge, addParallelCoordinates, addSankey, addSunburst, addTreemap,
   bollinger, linearTrend, loess, pca, rocCurve, welch,
+  PolarPlot,
 } from "@photonviz/core";
 
 const SAMPLES = 512;
@@ -42,6 +43,8 @@ const PARALLEL_DIMS = 4;
 const PARALLEL_ROWS = 40;
 const STREAMS = 3;
 const HIST_SAMPLES = 4000;
+const ROSE_POINTS = 361;
+const ROSE_MARKS = 12;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -863,9 +866,45 @@ function spectrogramPanel(container) {
   return plot;
 }
 
+/**
+ * The polar panel, and the one place the two cores are laid out differently on
+ * purpose.
+ *
+ * The web core has a whole PolarPlot class because it owns three canvases and a
+ * DOM tooltip; the native core has no DOM, so a polar chart is a *mode* on the
+ * ordinary plot. The data and the grid are the same, but the two centre their
+ * square differently — the web on the container, the native inside the plot
+ * region its margins leave. compare.mjs therefore does not list this panel; it
+ * is here so the two images still line up cell for cell.
+ */
+function polar(container) {
+  const theta = new Float64Array(ROSE_POINTS);
+  const radius = new Float64Array(ROSE_POINTS);
+  for (let i = 0; i < ROSE_POINTS; i++) {
+    theta[i] = i;
+    radius[i] = Math.abs(Math.cos((2 * i * Math.PI) / 180));
+  }
+  const markTheta = new Float64Array(ROSE_MARKS);
+  const markR = new Float64Array(ROSE_MARKS);
+  for (let i = 0; i < ROSE_MARKS; i++) {
+    markTheta[i] = i * 30;
+    markR[i] = 0.55 + 0.35 * Math.sin(i * 0.9);
+  }
+  const plot = new PolarPlot(container, {
+    theme: "dark",
+    angleUnit: "deg",
+    interactive: false,
+    hover: false,
+    showToolbar: false,
+  });
+  plot.addLine({ theta, r: radius, color: "#22d3ee", width: 2, closed: true });
+  plot.addScatter({ theta: markTheta, r: markR, color: "#f472b6", size: 7 });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
                        candles, bars, density, flow, contour, network, signals,
                        fit, spectrum, roc, embedding, treemap, sunburst, sankey,
                        chord, gauge, parallel, grouped, stacked, histogramPanel,
-                       spectrogramPanel];
+                       spectrogramPanel, polar];

@@ -1,5 +1,5 @@
 /*
- * The GLFW gallery: thirty-three charts in one window, one GL context, one swap.
+ * The GLFW gallery: thirty-four charts in one window, one GL context, one swap.
  *
  * The charts themselves come from hosts/common/panels.c, shared verbatim with
  * the Qt galleries — so anything that looks different between the two hosts is

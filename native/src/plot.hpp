@@ -119,6 +119,32 @@ class Plot {
   /// Add an annotation and return its id. Copies everything it points at.
   ph_annotation_id add_annotation(const ph_annotation& annotation);
 
+  /// What makes an ordinary plot a polar one: the grid, the projection and the
+  /// square view are all that differ, so this is a mode rather than a type.
+  struct PolarConfig {
+    bool enabled = false;
+    /// theta arrives in degrees rather than radians.
+    bool degrees = false;
+    /// Fixed outer radius; 0 fits the data.
+    double max_radius = 0.0;
+    /// Rotation offset, radians CCW.
+    double rotation = 0.0;
+    /// Degrees between spokes; 0 means 30.
+    double spoke_step = 0.0;
+  };
+
+  void set_polar(const PolarConfig& config);
+  const PolarConfig& polar() const { return polar_; }
+
+  /// Project (theta, r) into the Cartesian x/y a layer actually holds, through
+  /// the current angle unit and rotation.
+  void project_polar(const double* theta, const double* r, size_t count, bool closed,
+                     std::vector<double>& out_x, std::vector<double>& out_y) const;
+
+  /// Re-project every polar layer and re-fit the view. Called after a rotation
+  /// or a data change; a no-op when the plot is not polar.
+  void refit_polar();
+
   /// Turn the equal-aspect lock on or off, re-fitting either way — switching it
   /// on should balance the data extent rather than whatever the free-aspect
   /// view happened to be.
@@ -235,6 +261,9 @@ class Plot {
   ph_theme theme_ = PH_THEME_DARK;
   std::string title_;
   render::TitleStyle title_style_;
+  PolarConfig polar_;
+  /// The outer radius the polar grid is drawn at, and the domain both axes take.
+  double polar_radius_ = 1.0;
   /// Plot-region fill and full-canvas fill. PH_COLOR_AUTO leaves both clear.
   ph_color background_ = PH_COLOR_AUTO;
   ph_color border_ = PH_COLOR_AUTO;

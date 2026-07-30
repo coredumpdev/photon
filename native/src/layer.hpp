@@ -105,6 +105,21 @@ class Layer {
   /// layer is registered; zero for a layer that never reached the ABI.
   ph_layer handle = 0;
 
+  /**
+   * The (theta, r) a polar series was built from.
+   *
+   * Kept because rotating a polar plot re-projects every series, and the
+   * Cartesian x/y the layer actually holds have already lost the angle. Empty
+   * for every layer that is not polar, which is nearly all of them.
+   */
+  struct PolarSource {
+    std::vector<double> theta;
+    std::vector<double> r;
+    /// Join the last point back to the first.
+    bool closed = false;
+  };
+  PolarSource polar;
+
  protected:
   std::string name_;
   std::string y_axis_;

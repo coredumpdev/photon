@@ -90,6 +90,21 @@ void draw_grid(Painter& painter, const Rect& region, const Scale& scale_x, const
                const AxisStyle& style_x, const AxisStyle& style_y);
 
 /// The bottom axis: line, ticks, labels and an optional title.
+/**
+ * The polar grid: angular spokes with degree labels and concentric radius
+ * circles, over a plot whose two scales both run -radius..radius.
+ *
+ * Drawn instead of the cartesian grid and axes, not on top of them. `rotation`
+ * is CCW in radians and turns the spokes with the data; `spoke_step` is the
+ * gap between spokes in degrees.
+ *
+ * There is no circle primitive, so each ring is a closed polyline — 96 segments,
+ * which is under half a pixel of chord error at any chart size anyone plots at.
+ */
+void draw_polar_grid(Painter& painter, const Rect& region, const Scale& scale_x,
+                     const Scale& scale_y, double radius, double rotation, double spoke_step,
+                     const std::vector<Tick>& rings, const AxisStyle& style, ph_theme theme);
+
 void draw_x_axis(Painter& painter, const Rect& region, const Scale& scale,
                  const std::vector<Tick>& ticks, const AxisStyle& style, const std::string& title);
 

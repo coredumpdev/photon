@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 33;
+    private static final int PANELS = 34;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -80,6 +80,8 @@ public final class PhotonGallery {
     private static final int PARALLEL_ROWS = 40;
     private static final int STREAMS = 3;
     private static final int HIST_SAMPLES = 4000;
+    private static final int ROSE_POINTS = 361;
+    private static final int ROSE_MARKS = 12;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -1571,6 +1573,65 @@ public final class PhotonGallery {
         }
     }
 
+    /**
+     * Panel 33 — a polar plot, which is a mode rather than a type.
+     *
+     * The same plot handle, the same render, the same events: what differs is
+     * that the grid is rings and spokes, the two axes share a square domain,
+     * and (theta, r) is projected on the way in.
+     */
+    private static void buildPolar(long plot) {
+        MemorySegment theta = doubles(ROSE_POINTS);
+        MemorySegment radius = doubles(ROSE_POINTS);
+        for (int i = 0; i < ROSE_POINTS; i++) {
+            theta.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            radius.setAtIndex(ValueLayout.JAVA_DOUBLE, i,
+                              Math.abs(Math.cos(2.0 * i * Math.PI / 180.0)));
+        }
+        MemorySegment markTheta = doubles(ROSE_MARKS);
+        MemorySegment markR = doubles(ROSE_MARKS);
+        for (int i = 0; i < ROSE_MARKS; i++) {
+            markTheta.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i * 30.0);
+            markR.setAtIndex(ValueLayout.JAVA_DOUBLE, i, 0.55 + 0.35 * Math.sin(i * 0.9));
+        }
+
+        setTitle(plot, "Polar");
+        try (Arena scratch = Arena.ofConfined()) {
+            MemorySegment config = ph_polar_config.allocate(scratch);
+            ph_polar_config_init(config);
+            config.set(ValueLayout.JAVA_INT, ph_polar_config.OFFSET_ENABLED, 1);
+            config.set(ValueLayout.JAVA_INT, ph_polar_config.OFFSET_DEGREES, 1);
+            if (ph_plot_set_polar(plot, config) != PH_OK) {
+                throw new IllegalStateException(Photon.lastError());
+            }
+        }
+
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment rose = ph_polar_line_desc.allocate(ARENA);
+        ph_polar_line_desc_init(rose);
+        rose.set(ValueLayout.ADDRESS, ph_polar_line_desc.OFFSET_THETA, theta);
+        rose.set(ValueLayout.ADDRESS, ph_polar_line_desc.OFFSET_R, radius);
+        rose.set(ValueLayout.JAVA_INT, ph_polar_line_desc.OFFSET_COUNT, ROSE_POINTS);
+        rose.set(ValueLayout.JAVA_INT, ph_polar_line_desc.OFFSET_COLOR, color("#22d3ee"));
+        rose.set(ValueLayout.JAVA_FLOAT, ph_polar_line_desc.OFFSET_WIDTH, 2.0f);
+        rose.set(ValueLayout.JAVA_INT, ph_polar_line_desc.OFFSET_CLOSED, 1);
+        if (ph_plot_add_polar_line(plot, rose, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        MemorySegment marks = ph_polar_scatter_desc.allocate(ARENA);
+        ph_polar_scatter_desc_init(marks);
+        marks.set(ValueLayout.ADDRESS, ph_polar_scatter_desc.OFFSET_THETA, markTheta);
+        marks.set(ValueLayout.ADDRESS, ph_polar_scatter_desc.OFFSET_R, markR);
+        marks.set(ValueLayout.JAVA_INT, ph_polar_scatter_desc.OFFSET_COUNT, ROSE_MARKS);
+        marks.set(ValueLayout.JAVA_INT, ph_polar_scatter_desc.OFFSET_COLOR, color("#f472b6"));
+        marks.set(ValueLayout.JAVA_FLOAT, ph_polar_scatter_desc.OFFSET_SIZE, 7.0f);
+        marks.set(ValueLayout.JAVA_INT, ph_polar_scatter_desc.OFFSET_MARKER, PH_MARKER_CIRCLE);
+        if (ph_plot_add_polar_scatter(plot, marks, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1821,6 +1882,7 @@ public final class PhotonGallery {
         buildStacked(plots[30]);
         buildHistogram(plots[31]);
         buildSpectrogram(plots[32]);
+        buildPolar(plots[33]);
 
         installCallbacks();
 

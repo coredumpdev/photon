@@ -62,6 +62,43 @@ PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, stop_count) == 24, "ph_colormap_spec
 PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, reverse) == 28, "ph_colormap_spec.reverse offset");
 PH_ASSERT_LAYOUT(offsetof(ph_colormap_spec, discrete_steps) == 32, "ph_colormap_spec.discrete_steps offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_polar_config) == 40, "ph_polar_config size");
+PH_ASSERT_LAYOUT(_Alignof(ph_polar_config) == 8, "ph_polar_config alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_config, struct_size) == 0, "ph_polar_config.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_config, enabled) == 4, "ph_polar_config.enabled offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_config, degrees) == 8, "ph_polar_config.degrees offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_config, max_radius) == 16, "ph_polar_config.max_radius offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_config, rotation) == 24, "ph_polar_config.rotation offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_config, spoke_step) == 32, "ph_polar_config.spoke_step offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_polar_line_desc) == 72, "ph_polar_line_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_polar_line_desc) == 8, "ph_polar_line_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, struct_size) == 0, "ph_polar_line_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, theta) == 8, "ph_polar_line_desc.theta offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, r) == 16, "ph_polar_line_desc.r offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, count) == 24, "ph_polar_line_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, color) == 28, "ph_polar_line_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, width) == 32, "ph_polar_line_desc.width offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, closed) == 36, "ph_polar_line_desc.closed offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, dash) == 40, "ph_polar_line_desc.dash offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, dash_count) == 48, "ph_polar_line_desc.dash_count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, name) == 56, "ph_polar_line_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_line_desc, render_type) == 64, "ph_polar_line_desc.render_type offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_polar_scatter_desc) == 80, "ph_polar_scatter_desc size");
+PH_ASSERT_LAYOUT(_Alignof(ph_polar_scatter_desc) == 8, "ph_polar_scatter_desc alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, struct_size) == 0, "ph_polar_scatter_desc.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, theta) == 8, "ph_polar_scatter_desc.theta offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, r) == 16, "ph_polar_scatter_desc.r offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, count) == 24, "ph_polar_scatter_desc.count offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, color) == 28, "ph_polar_scatter_desc.color offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, size) == 32, "ph_polar_scatter_desc.size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, sizes) == 40, "ph_polar_scatter_desc.sizes offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, colors) == 48, "ph_polar_scatter_desc.colors offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, marker) == 56, "ph_polar_scatter_desc.marker offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, name) == 64, "ph_polar_scatter_desc.name offset");
+PH_ASSERT_LAYOUT(offsetof(ph_polar_scatter_desc, render_type) == 72, "ph_polar_scatter_desc.render_type offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_pivot_levels) == 56, "ph_pivot_levels size");
 PH_ASSERT_LAYOUT(_Alignof(ph_pivot_levels) == 8, "ph_pivot_levels alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_pivot_levels, pivot) == 0, "ph_pivot_levels.pivot offset");
@@ -789,7 +826,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_parallel_desc, no_axes) == 76, "ph_parallel_desc.no
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 63);
+  printf("%d struct layouts match the generated bindings\n", 66);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");

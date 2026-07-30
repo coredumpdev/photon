@@ -409,6 +409,97 @@ PH_API const char* PH_CALL ph_palette_name(int32_t index);
 PH_API ph_color PH_CALL ph_palette_color(const char* name, int32_t index);
 
 /* ------------------------------------------------------------------------ */
+/* Polar                                                                      */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A polar plot is a mode, not a type.
+ *
+ * The web core has a whole PolarPlot class because it has to own three canvases
+ * and a DOM tooltip. Here there is no DOM, and what actually differs is three
+ * things: the grid is rings and spokes rather than lines, the two axes take the
+ * same square domain, and (theta, r) is projected to (x, y) on the way in. So
+ * this is `ph_plot_set_polar` on an ordinary plot — which means panning,
+ * zooming, the legend, annotations, hover and the event queue all keep working
+ * without a second copy of any of them.
+ *
+ * Rotation is the one thing that needs more than a projection at construction:
+ * turning the plot re-projects every polar series, so each one keeps the
+ * (theta, r) it was built from.
+ */
+typedef struct ph_polar_config {
+  uint32_t struct_size;
+  ph_bool  enabled;
+  /** theta arrives in degrees rather than radians. */
+  ph_bool  degrees;
+  /** Fixed outer radius. 0 fits the data. */
+  double   max_radius;
+  /** Rotation offset, radians counter-clockwise. */
+  double   rotation;
+  /** Degrees between angular spokes. 0 means 30. */
+  double   spoke_step;
+} ph_polar_config;
+
+PH_API void PH_CALL ph_polar_config_init(ph_polar_config* out);
+
+/**
+ * Turn polar mode on or off. Turning it on locks the aspect — a polar plot is
+ * square by construction, and without the lock the circle is an ellipse and
+ * every angle on it is a lie.
+ */
+PH_API ph_result PH_CALL ph_plot_set_polar(ph_plot plot, const ph_polar_config* config);
+
+/** Mirrors core `PolarLineOptions`. */
+typedef struct ph_polar_line_desc {
+  uint32_t       struct_size;
+  const double*  theta;
+  const double*  r;
+  int32_t        count;
+  ph_color       color;
+  /** Stroke width in logical px. 0 means 2, as in the core's polar. */
+  float          width;
+  /** Join the last point back to the first — what a closed rose needs. */
+  ph_bool        closed;
+  const float*   dash;
+  int32_t        dash_count;
+  const char*    name;
+  ph_render_type render_type;
+} ph_polar_line_desc;
+
+PH_API void PH_CALL ph_polar_line_desc_init(ph_polar_line_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_polar_line(ph_plot plot, const ph_polar_line_desc* desc,
+                                                ph_layer* out);
+
+/** Mirrors core `PolarScatterOptions`. */
+typedef struct ph_polar_scatter_desc {
+  uint32_t        struct_size;
+  const double*   theta;
+  const double*   r;
+  int32_t         count;
+  ph_color        color;
+  /** Marker diameter in logical px. 0 means 5. */
+  float           size;
+  /** Per-point sizes and colours, `count` entries each. NULL for uniform. */
+  const float*    sizes;
+  const ph_color* colors;
+  ph_marker       marker;
+  const char*     name;
+  ph_render_type  render_type;
+} ph_polar_scatter_desc;
+
+PH_API void PH_CALL ph_polar_scatter_desc_init(ph_polar_scatter_desc* out);
+PH_API ph_result PH_CALL ph_plot_add_polar_scatter(ph_plot plot,
+                                                   const ph_polar_scatter_desc* desc,
+                                                   ph_layer* out);
+
+/**
+ * Replace a polar series' data. The layer keeps (theta, r) rather than the
+ * projection, so this and a later rotation compose the way a caller expects.
+ */
+PH_API ph_result PH_CALL ph_layer_set_polar(ph_layer layer, const double* theta, const double* r,
+                                            int32_t count);
+
+/* ------------------------------------------------------------------------ */
 /* Analysis — pure functions over arrays                                      */
 /* ------------------------------------------------------------------------ */
 

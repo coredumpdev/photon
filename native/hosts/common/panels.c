@@ -73,6 +73,10 @@
 /* A bimodal sample, big enough that the bin shape is the data's and not the
  * sampler's. */
 #define HIST_SAMPLES 4000
+/* A four-petal rose, sampled finely enough that the petals are curves rather
+ * than polygons, plus twelve marks around it. */
+#define ROSE_POINTS 361
+#define ROSE_MARKS 12
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -177,6 +181,11 @@ struct ph_panels {
   ph_layer stream_layers[STREAMS];
   double hist[HIST_SAMPLES];
   double funnel_value[FUNNEL_STAGES];
+
+  double rose_theta[ROSE_POINTS];
+  double rose_r[ROSE_POINTS];
+  double mark_theta[ROSE_MARKS];
+  double mark_r[ROSE_MARKS];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -187,7 +196,7 @@ static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
                                               "Spectrum", "ROC",      "Embedding", "Treemap",
                                               "Sunburst", "Sankey",   "Chord",     "Gauge",
                                               "Parallel", "Grouped",  "Stacked",   "Histogram",
-                                              "Spectrogram"};
+                                              "Spectrogram", "Polar"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -606,6 +615,19 @@ ph_panels* ph_panels_create(void) {
      * through a colormap rather than by index through a palette. */
     for (int i = 0; i < FUNNEL_STAGES; i++) {
       p->funnel_value[i] = (double)(FUNNEL_STAGES - i);
+    }
+
+    /* r = |cos 2t|, which is a four-petal rose. The absolute value keeps the
+     * radius positive, so the petals point outwards rather than folding back
+     * through the origin. */
+    for (int i = 0; i < ROSE_POINTS; i++) {
+      const double deg = i;
+      p->rose_theta[i] = deg;
+      p->rose_r[i] = fabs(cos(2.0 * deg * 3.14159265358979323846 / 180.0));
+    }
+    for (int i = 0; i < ROSE_MARKS; i++) {
+      p->mark_theta[i] = i * 30.0;
+      p->mark_r[i] = 0.55 + 0.35 * sin(i * 0.9);
     }
   }
 
@@ -1488,6 +1510,42 @@ static void build_spectrogram(ph_panels* p, ph_plot plot) {
   ph_plot_add_spectrogram(plot, &desc, &layer);
 }
 
+/* Panel 33 — a polar plot, which is a mode rather than a type.
+ *
+ * The same plot handle, the same render, the same events: what differs is that
+ * the grid is rings and spokes, the two axes share a square domain, and
+ * (theta, r) is projected on the way in. */
+static void build_polar(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Polar");
+
+  ph_polar_config polar;
+  ph_polar_config_init(&polar);
+  polar.enabled = 1;
+  polar.degrees = 1;
+  ph_plot_set_polar(plot, &polar);
+
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_polar_line_desc rose;
+  ph_polar_line_desc_init(&rose);
+  rose.theta = p->rose_theta;
+  rose.r = p->rose_r;
+  rose.count = ROSE_POINTS;
+  rose.color = parse("#22d3ee");
+  rose.width = 2.0f;
+  rose.closed = 1;
+  ph_plot_add_polar_line(plot, &rose, &layer);
+
+  ph_polar_scatter_desc marks;
+  ph_polar_scatter_desc_init(&marks);
+  marks.theta = p->mark_theta;
+  marks.r = p->mark_r;
+  marks.count = ROSE_MARKS;
+  marks.color = parse("#f472b6");
+  marks.size = 7.0f;
+  marks.marker = PH_MARKER_CIRCLE;
+  ph_plot_add_polar_scatter(plot, &marks, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -1524,7 +1582,8 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 29: build_grouped(panels, plot); break;
     case 30: build_stacked(panels, plot); break;
     case 31: build_histogram(panels, plot); break;
-    default: build_spectrogram(panels, plot); break;
+    case 32: build_spectrogram(panels, plot); break;
+    default: build_polar(panels, plot); break;
   }
 }
 

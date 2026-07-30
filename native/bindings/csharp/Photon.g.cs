@@ -190,6 +190,80 @@ public static partial class Ph
         public int discrete_steps;
     }
 
+    /// <summary>ph_polar_config — 40 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_polar_config
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 4</summary>
+        public int enabled;
+        /// <summary>offset 8</summary>
+        public int degrees;
+        /// <summary>offset 16</summary>
+        public double max_radius;
+        /// <summary>offset 24</summary>
+        public double rotation;
+        /// <summary>offset 32</summary>
+        public double spoke_step;
+    }
+
+    /// <summary>ph_polar_line_desc — 72 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_polar_line_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr theta;
+        /// <summary>offset 16</summary>
+        public IntPtr r;
+        /// <summary>offset 24</summary>
+        public int count;
+        /// <summary>offset 28</summary>
+        public uint color;
+        /// <summary>offset 32</summary>
+        public float width;
+        /// <summary>offset 36</summary>
+        public int closed;
+        /// <summary>offset 40</summary>
+        public IntPtr dash;
+        /// <summary>offset 48</summary>
+        public int dash_count;
+        /// <summary>offset 56</summary>
+        public IntPtr name;
+        /// <summary>offset 64</summary>
+        public int render_type;
+    }
+
+    /// <summary>ph_polar_scatter_desc — 80 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_polar_scatter_desc
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 8</summary>
+        public IntPtr theta;
+        /// <summary>offset 16</summary>
+        public IntPtr r;
+        /// <summary>offset 24</summary>
+        public int count;
+        /// <summary>offset 28</summary>
+        public uint color;
+        /// <summary>offset 32</summary>
+        public float size;
+        /// <summary>offset 40</summary>
+        public IntPtr sizes;
+        /// <summary>offset 48</summary>
+        public IntPtr colors;
+        /// <summary>offset 56</summary>
+        public int marker;
+        /// <summary>offset 64</summary>
+        public IntPtr name;
+        /// <summary>offset 72</summary>
+        public int render_type;
+    }
+
     /// <summary>ph_pivot_levels — 56 bytes, alignment 8.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_pivot_levels
@@ -1651,6 +1725,13 @@ public static partial class Ph
         "ph_palette_count",
         "ph_palette_name",
         "ph_palette_color",
+        "ph_polar_config_init",
+        "ph_plot_set_polar",
+        "ph_polar_line_desc_init",
+        "ph_plot_add_polar_line",
+        "ph_polar_scatter_desc_init",
+        "ph_plot_add_polar_scatter",
+        "ph_layer_set_polar",
         "ph_fin_sma",
         "ph_fin_wma",
         "ph_fin_ema",
@@ -1887,6 +1968,36 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_palette_color")]
     public static extern uint ph_palette_color([MarshalAs(UnmanagedType.LPUTF8Str)] string name, int index);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_polar_config_init")]
+    public static extern void ph_polar_config_init(out ph_polar_config @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_polar")]
+    public static extern int ph_plot_set_polar(ulong plot, IntPtr config);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_set_polar")]
+    public static extern int ph_plot_set_polar(ulong plot, in ph_polar_config config);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_polar_line_desc_init")]
+    public static extern void ph_polar_line_desc_init(out ph_polar_line_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_polar_line")]
+    public static extern int ph_plot_add_polar_line(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_polar_line")]
+    public static extern int ph_plot_add_polar_line(ulong plot, in ph_polar_line_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_polar_scatter_desc_init")]
+    public static extern void ph_polar_scatter_desc_init(out ph_polar_scatter_desc @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_polar_scatter")]
+    public static extern int ph_plot_add_polar_scatter(ulong plot, IntPtr desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_plot_add_polar_scatter")]
+    public static extern int ph_plot_add_polar_scatter(ulong plot, in ph_polar_scatter_desc desc, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_layer_set_polar")]
+    public static extern int ph_layer_set_polar(ulong layer, double[] theta, double[] r, int count);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_fin_sma")]
     public static extern int ph_fin_sma(double[] values, int count, int period, out double @out);
