@@ -23,10 +23,14 @@
 #include <vector>
 
 #include "color/colormap.hpp"
+#include "data/csv.hpp"
+#include "data/downsample.hpp"
 #include "error.hpp"
 #include "finance/indicators.hpp"
 #include "finance/transforms.hpp"
 #include "layer.hpp"
+#include "ml/metrics.hpp"
+#include "ml/reduce.hpp"
 #include "plot.hpp"
 #include "registry.hpp"
 #include "stats/regression.hpp"
@@ -160,6 +164,8 @@ extern "C" void PH_CALL ph_shutdown(void) {
   // Layers first: their refs point at plots that are about to go away.
   registry.layers.clear();
   registry.plots.clear();
+  // Tables hold no GPU objects and belong to no plot, so their order is free.
+  registry.tables.clear();
   registry.host = ph_host_desc{};
   registry.gl = photon::gl::Api{};
   registry.gl_error.clear();
@@ -1223,6 +1229,371 @@ extern "C" ph_result PH_CALL ph_stat_cross_correlate(const double* a, const doub
   if (out_lags && writable > 0) {
     std::memcpy(out_lags, c.lags.data(), writable * sizeof(int32_t));
   }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_confusion_matrix(const double* y_true, const double* y_pred,
+                                                    int32_t count, int32_t classes,
+                                                    double* out_counts, double* out_normalized,
+                                                    double* out_support, int32_t capacity,
+                                                    int32_t* out_classes) {
+  clear_error();
+  ph_result r = check_series(y_true, count, "y_true");
+  if (r != PH_OK) return r;
+  r = check_series(y_pred, count, "y_pred");
+  if (r != PH_OK) return r;
+  if (!out_classes) return fail(PH_E_INVALID_ARGUMENT, "out_classes must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::ml::ConfusionMatrix m =
+      photon::ml::confusion_matrix(y_true, y_pred, static_cast<size_t>(count), classes);
+  *out_classes = static_cast<int32_t>(m.classes);
+  const size_t fit = std::min(m.classes, static_cast<size_t>(capacity));
+  emit_capped(m.support, out_support, fit);
+  emit_capped(m.counts, out_counts, fit * fit);
+  emit_capped(m.normalized, out_normalized, fit * fit);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_roc_curve(const double* scores, const double* labels,
+                                             int32_t count, double* out_fpr, double* out_tpr,
+                                             double* out_thresholds, int32_t capacity,
+                                             int32_t* out_count, double* out_auc) {
+  clear_error();
+  ph_result r = check_series(scores, count, "scores");
+  if (r != PH_OK) return r;
+  r = check_series(labels, count, "labels");
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::ml::RocCurve roc =
+      photon::ml::roc_curve(scores, labels, static_cast<size_t>(count));
+  *out_count = static_cast<int32_t>(roc.fpr.size());
+  const size_t fit = std::min(roc.fpr.size(), static_cast<size_t>(capacity));
+  emit_capped(roc.fpr, out_fpr, fit);
+  emit_capped(roc.tpr, out_tpr, fit);
+  emit_capped(roc.thresholds, out_thresholds, fit);
+  if (out_auc) *out_auc = roc.auc;
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_pr_curve(const double* scores, const double* labels,
+                                            int32_t count, double* out_recall,
+                                            double* out_precision, double* out_thresholds,
+                                            int32_t capacity, int32_t* out_count, double* out_ap,
+                                            double* out_baseline) {
+  clear_error();
+  ph_result r = check_series(scores, count, "scores");
+  if (r != PH_OK) return r;
+  r = check_series(labels, count, "labels");
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::ml::PrCurve pr = photon::ml::pr_curve(scores, labels, static_cast<size_t>(count));
+  *out_count = static_cast<int32_t>(pr.recall.size());
+  const size_t fit = std::min(pr.recall.size(), static_cast<size_t>(capacity));
+  emit_capped(pr.recall, out_recall, fit);
+  emit_capped(pr.precision, out_precision, fit);
+  emit_capped(pr.thresholds, out_thresholds, fit);
+  if (out_ap) *out_ap = pr.ap;
+  if (out_baseline) *out_baseline = pr.baseline;
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_calibration_curve(const double* scores, const double* labels,
+                                                     int32_t count, int32_t bins,
+                                                     double* out_mean_predicted,
+                                                     double* out_fraction_positive,
+                                                     double* out_bin_count, double* out_ece) {
+  clear_error();
+  ph_result r = check_series(scores, count, "scores");
+  if (r != PH_OK) return r;
+  r = check_series(labels, count, "labels");
+  if (r != PH_OK) return r;
+  if (bins < 1) return fail(PH_E_INVALID_ARGUMENT, "bins must be positive");
+  const photon::ml::CalibrationCurve c =
+      photon::ml::calibration_curve(scores, labels, static_cast<size_t>(count), bins);
+  emit(c.mean_predicted, out_mean_predicted);
+  emit(c.fraction_positive, out_fraction_positive);
+  emit(c.bin_count, out_bin_count);
+  if (out_ece) *out_ece = c.ece;
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_ema_smooth(const double* values, int32_t count, double weight,
+                                              double* out) {
+  clear_error();
+  const ph_result r = check_series(values, count, "values");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::ml::ema_smooth(values, static_cast<size_t>(count), weight), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_regression_metrics(const double* y_true, const double* y_pred,
+                                                      int32_t count,
+                                                      ph_regression_metrics* out) {
+  clear_error();
+  ph_result r = check_series(y_true, count, "y_true");
+  if (r != PH_OK) return r;
+  r = check_series(y_pred, count, "y_pred");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  const size_t n = static_cast<size_t>(count);
+  out->mse = photon::ml::mse(y_true, y_pred, n);
+  out->rmse = photon::ml::rmse(y_true, y_pred, n);
+  out->mae = photon::ml::mae(y_true, y_pred, n);
+  out->r2 = photon::ml::r2(y_true, y_pred, n);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_probability_scores(const double* probs, const double* labels,
+                                                      int32_t count, double eps,
+                                                      double* out_log_loss, double* out_brier) {
+  clear_error();
+  ph_result r = check_series(probs, count, "probs");
+  if (r != PH_OK) return r;
+  r = check_series(labels, count, "labels");
+  if (r != PH_OK) return r;
+  const size_t n = static_cast<size_t>(count);
+  if (out_log_loss) *out_log_loss = photon::ml::log_loss(probs, labels, n, eps > 0.0 ? eps : 1e-15);
+  if (out_brier) *out_brier = photon::ml::brier_score(probs, labels, n);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_classification_report(const double* y_true,
+                                                         const double* y_pred, int32_t count,
+                                                         int32_t classes,
+                                                         ph_class_score* out_per_class,
+                                                         int32_t capacity,
+                                                         ph_classification_report* out) {
+  clear_error();
+  ph_result r = check_series(y_true, count, "y_true");
+  if (r != PH_OK) return r;
+  r = check_series(y_pred, count, "y_pred");
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::ml::ClassificationReport report =
+      photon::ml::classification_report(y_true, y_pred, static_cast<size_t>(count), classes);
+  out->accuracy = report.accuracy;
+  out->macro.precision = report.macro.precision;
+  out->macro.recall = report.macro.recall;
+  out->macro.f1 = report.macro.f1;
+  out->weighted.precision = report.weighted.precision;
+  out->weighted.recall = report.weighted.recall;
+  out->weighted.f1 = report.weighted.f1;
+  out->classes = static_cast<int32_t>(report.per_class.size());
+  const size_t fit = std::min(report.per_class.size(), static_cast<size_t>(capacity));
+  for (size_t i = 0; i < fit; ++i) {
+    out_per_class[i].precision = report.per_class[i].precision;
+    out_per_class[i].recall = report.per_class[i].recall;
+    out_per_class[i].f1 = report.per_class[i].f1;
+    out_per_class[i].support = report.per_class[i].support;
+    out_per_class[i].label = report.per_class[i].label;
+  }
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_lift_curve(const double* scores, const double* labels,
+                                              int32_t count, double* out_fraction, double* out_gain,
+                                              double* out_lift, int32_t* out_positives) {
+  clear_error();
+  ph_result r = check_series(scores, count, "scores");
+  if (r != PH_OK) return r;
+  r = check_series(labels, count, "labels");
+  if (r != PH_OK) return r;
+  const photon::ml::LiftCurve lift =
+      photon::ml::lift_curve(scores, labels, static_cast<size_t>(count));
+  emit(lift.fraction, out_fraction);
+  emit(lift.gain, out_gain);
+  emit(lift.lift, out_lift);
+  if (out_positives) *out_positives = static_cast<int32_t>(lift.positives);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_roc_ovr(const double* scores, const double* labels,
+                                           int32_t count, int32_t classes, double* out_auc,
+                                           double* out_macro_auc, double* out_micro_auc) {
+  clear_error();
+  const ph_result r = check_series(labels, count, "labels");
+  if (r != PH_OK) return r;
+  if (classes < 1) return fail(PH_E_INVALID_ARGUMENT, "classes must be positive");
+  if (count > 0 && !scores) {
+    return fail(PH_E_INVALID_ARGUMENT, "scores must be non-null when count > 0");
+  }
+  const photon::ml::MulticlassRoc roc = photon::ml::roc_curve_ovr(
+      scores, labels, static_cast<size_t>(count), static_cast<size_t>(classes));
+  if (out_auc) {
+    for (size_t c = 0; c < roc.per_class.size(); ++c) out_auc[c] = roc.per_class[c].auc;
+  }
+  if (out_macro_auc) *out_macro_auc = roc.macro_auc;
+  if (out_micro_auc) *out_micro_auc = roc.micro_auc;
+  return PH_OK;
+}
+
+namespace {
+
+/// Both PCA entry points want the same two-dimension check.
+ph_result check_matrix(const double* data, int32_t n, int32_t d) {
+  if (n < 0 || d < 0) return fail(PH_E_INVALID_ARGUMENT, "n and d must be non-negative");
+  if (n > 0 && d > 0 && !data) {
+    return fail(PH_E_INVALID_ARGUMENT, "data must be non-null for a non-empty matrix");
+  }
+  return PH_OK;
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_ml_standardize(const double* data, int32_t n, int32_t d,
+                                               double* out) {
+  clear_error();
+  const ph_result r = check_matrix(data, n, d);
+  if (r != PH_OK) return r;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit(photon::ml::standardize(data, static_cast<size_t>(n), static_cast<size_t>(d)), out);
+  return PH_OK;
+}
+
+extern "C" ph_result PH_CALL ph_ml_pca(const double* data, int32_t n, int32_t d, int32_t k,
+                                       double* out_scores, double* out_components,
+                                       double* out_explained, double* out_mean) {
+  clear_error();
+  const ph_result r = check_matrix(data, n, d);
+  if (r != PH_OK) return r;
+  if (k < 1) return fail(PH_E_INVALID_ARGUMENT, "k must be positive");
+  const photon::ml::PcaResult pca = photon::ml::pca(data, static_cast<size_t>(n),
+                                                    static_cast<size_t>(d), static_cast<size_t>(k));
+  emit(pca.scores, out_scores);
+  emit(pca.components, out_components);
+  emit(pca.explained, out_explained);
+  emit(pca.mean, out_mean);
+  return PH_OK;
+}
+
+// ---------------------------------------------------------------------------
+// Data
+// ---------------------------------------------------------------------------
+
+extern "C" ph_result PH_CALL ph_data_lttb(const double* x, const double* y, int32_t count,
+                                          int32_t threshold, double* out_x, double* out_y,
+                                          int32_t capacity, int32_t* out_count) {
+  clear_error();
+  ph_result r = check_series(x, count, "x");
+  if (r != PH_OK) return r;
+  r = check_series(y, count, "y");
+  if (r != PH_OK) return r;
+  if (!out_count) return fail(PH_E_INVALID_ARGUMENT, "out_count must be non-null");
+  if (threshold < 0) return fail(PH_E_INVALID_ARGUMENT, "threshold must be non-negative");
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  const photon::data::Downsampled d = photon::data::lttb(
+      x, y, static_cast<size_t>(count), static_cast<size_t>(threshold));
+  *out_count = static_cast<int32_t>(d.x.size());
+  const size_t fit = std::min(d.x.size(), static_cast<size_t>(capacity));
+  emit_capped(d.x, out_x, fit);
+  emit_capped(d.y, out_y, fit);
+  return PH_OK;
+}
+
+extern "C" void PH_CALL ph_csv_options_init(ph_csv_options* out) {
+  if (!out) return;
+  *out = ph_csv_options{};
+  out->struct_size = static_cast<uint32_t>(sizeof(ph_csv_options));
+  // Everything else is a negation of a default that is on, so zero is right.
+}
+
+extern "C" ph_result PH_CALL ph_csv_parse(const char* text, int32_t length,
+                                          const ph_csv_options* options, ph_table* out) {
+  clear_error();
+  const ph_result init = require_init();
+  if (init != PH_OK) return init;
+  if (!out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  *out = PH_NULL_HANDLE;
+  if (!text) return fail(PH_E_INVALID_ARGUMENT, "text must be non-null");
+  if (length < 0) return fail(PH_E_INVALID_ARGUMENT, "length must be non-negative");
+  if (options && !desc_size_ok(options)) {
+    return fail(PH_E_INVALID_ARGUMENT, "ph_csv_options.struct_size is larger than this build's");
+  }
+  const ph_csv_options normalized = normalize(options, ph_csv_options_init);
+
+  photon::data::CsvOptions opts;
+  opts.delimiter = normalized.delimiter == 0 ? ',' : static_cast<char>(normalized.delimiter);
+  opts.header = normalized.no_header == 0;
+  opts.skip_empty = normalized.keep_empty_lines == 0;
+
+  const size_t n = length > 0 ? static_cast<size_t>(length) : std::strlen(text);
+  try {
+    auto table = std::make_unique<photon::data::Table>(photon::data::parse_csv(text, n, opts));
+    *out = Registry::get().tables.insert(std::move(table));
+  } catch (const std::bad_alloc&) {
+    return fail(PH_E_OUT_OF_MEMORY, "out of memory parsing the CSV");
+  }
+  return PH_OK;
+}
+
+namespace {
+
+photon::data::Table* resolve_table(ph_table handle) {
+  if (!Registry::get().initialized) return nullptr;
+  return Registry::get().tables.get(handle);
+}
+
+}  // namespace
+
+extern "C" ph_result PH_CALL ph_table_destroy(ph_table table) {
+  clear_error();
+  if (table == PH_NULL_HANDLE) return PH_OK;
+  const ph_result init = require_init();
+  if (init != PH_OK) return init;
+  if (!Registry::get().tables.erase(table)) {
+    return fail(PH_E_INVALID_HANDLE, "table handle is stale or invalid");
+  }
+  return PH_OK;
+}
+
+extern "C" ph_bool PH_CALL ph_table_valid(ph_table table) {
+  return resolve_table(table) != nullptr ? 1 : 0;
+}
+
+extern "C" int32_t PH_CALL ph_table_row_count(ph_table table) {
+  const photon::data::Table* t = resolve_table(table);
+  return t ? static_cast<int32_t>(t->row_count()) : -1;
+}
+
+extern "C" int32_t PH_CALL ph_table_column_count(ph_table table) {
+  const photon::data::Table* t = resolve_table(table);
+  return t ? static_cast<int32_t>(t->column_count()) : -1;
+}
+
+extern "C" const char* PH_CALL ph_table_header(ph_table table, int32_t column) {
+  const photon::data::Table* t = resolve_table(table);
+  if (!t || column < 0 || static_cast<size_t>(column) >= t->headers().size()) return nullptr;
+  return t->headers()[static_cast<size_t>(column)].c_str();
+}
+
+extern "C" const char* PH_CALL ph_table_cell(ph_table table, int32_t row, int32_t column) {
+  const photon::data::Table* t = resolve_table(table);
+  if (!t || row < 0 || column < 0) return nullptr;
+  if (static_cast<size_t>(row) >= t->row_count()) return nullptr;
+  return t->cell(static_cast<size_t>(row), static_cast<size_t>(column)).c_str();
+}
+
+extern "C" int32_t PH_CALL ph_table_column_index(ph_table table, const char* name) {
+  const photon::data::Table* t = resolve_table(table);
+  if (!t || !name) return -1;
+  return t->index_of(name);
+}
+
+extern "C" ph_result PH_CALL ph_table_numeric(ph_table table, int32_t column, double* out,
+                                              int32_t capacity) {
+  clear_error();
+  const photon::data::Table* t = resolve_table(table);
+  if (!t) return fail(PH_E_INVALID_HANDLE, "table handle is stale or invalid");
+  if (column < 0 || static_cast<size_t>(column) >= t->column_count()) {
+    return fail(PH_E_INVALID_ARGUMENT, "column is out of range");
+  }
+  if (capacity < 0) return fail(PH_E_INVALID_ARGUMENT, "capacity must be non-negative");
+  if (capacity > 0 && !out) return fail(PH_E_INVALID_ARGUMENT, "out must be non-null");
+  emit_capped(t->numeric(static_cast<size_t>(column)), out, static_cast<size_t>(capacity));
   return PH_OK;
 }
 

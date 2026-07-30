@@ -318,6 +318,76 @@ public static partial class Ph
         public int n;
     }
 
+    /// <summary>ph_regression_metrics — 32 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_regression_metrics
+    {
+        /// <summary>offset 0</summary>
+        public double mse;
+        /// <summary>offset 8</summary>
+        public double rmse;
+        /// <summary>offset 16</summary>
+        public double mae;
+        /// <summary>offset 24</summary>
+        public double r2;
+    }
+
+    /// <summary>ph_class_score — 40 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_class_score
+    {
+        /// <summary>offset 0</summary>
+        public double precision;
+        /// <summary>offset 8</summary>
+        public double recall;
+        /// <summary>offset 16</summary>
+        public double f1;
+        /// <summary>offset 24</summary>
+        public double support;
+        /// <summary>offset 32</summary>
+        public int label;
+    }
+
+    /// <summary>ph_class_average — 24 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_class_average
+    {
+        /// <summary>offset 0</summary>
+        public double precision;
+        /// <summary>offset 8</summary>
+        public double recall;
+        /// <summary>offset 16</summary>
+        public double f1;
+    }
+
+    /// <summary>ph_classification_report — 64 bytes, alignment 8.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_classification_report
+    {
+        /// <summary>offset 0</summary>
+        public double accuracy;
+        /// <summary>offset 8</summary>
+        public ph_class_average macro;
+        /// <summary>offset 32</summary>
+        public ph_class_average weighted;
+        /// <summary>offset 56</summary>
+        public int classes;
+    }
+
+    /// <summary>ph_csv_options — 16 bytes, alignment 4.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ph_csv_options
+    {
+        /// <summary>offset 0</summary>
+        public uint struct_size;
+        /// <summary>offset 4</summary>
+        public int delimiter;
+        /// <summary>offset 8</summary>
+        public int no_header;
+        /// <summary>offset 12</summary>
+        public int keep_empty_lines;
+    }
+
     /// <summary>ph_margin — 16 bytes, alignment 4.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ph_margin
@@ -1224,6 +1294,29 @@ public static partial class Ph
         "ph_stat_welch",
         "ph_stat_savitzky_golay",
         "ph_stat_cross_correlate",
+        "ph_ml_confusion_matrix",
+        "ph_ml_roc_curve",
+        "ph_ml_pr_curve",
+        "ph_ml_calibration_curve",
+        "ph_ml_ema_smooth",
+        "ph_ml_regression_metrics",
+        "ph_ml_probability_scores",
+        "ph_ml_classification_report",
+        "ph_ml_lift_curve",
+        "ph_ml_roc_ovr",
+        "ph_ml_standardize",
+        "ph_ml_pca",
+        "ph_data_lttb",
+        "ph_csv_options_init",
+        "ph_csv_parse",
+        "ph_table_destroy",
+        "ph_table_valid",
+        "ph_table_row_count",
+        "ph_table_column_count",
+        "ph_table_header",
+        "ph_table_cell",
+        "ph_table_column_index",
+        "ph_table_numeric",
         "ph_abi_version",
         "ph_version",
         "ph_init",
@@ -1517,6 +1610,78 @@ public static partial class Ph
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_stat_cross_correlate")]
     public static extern int ph_stat_cross_correlate(double[] a, double[] b, int count, int max_lag, int normalize, out int out_lags, out double out_values, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_confusion_matrix")]
+    public static extern int ph_ml_confusion_matrix(double[] y_true, double[] y_pred, int count, int classes, out double out_counts, out double out_normalized, out double out_support, int capacity, out int out_classes);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_roc_curve")]
+    public static extern int ph_ml_roc_curve(double[] scores, double[] labels, int count, out double out_fpr, out double out_tpr, out double out_thresholds, int capacity, out int out_count, out double out_auc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_pr_curve")]
+    public static extern int ph_ml_pr_curve(double[] scores, double[] labels, int count, out double out_recall, out double out_precision, out double out_thresholds, int capacity, out int out_count, out double out_ap, out double out_baseline);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_calibration_curve")]
+    public static extern int ph_ml_calibration_curve(double[] scores, double[] labels, int count, int bins, out double out_mean_predicted, out double out_fraction_positive, out double out_bin_count, out double out_ece);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_ema_smooth")]
+    public static extern int ph_ml_ema_smooth(double[] values, int count, double weight, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_regression_metrics")]
+    public static extern int ph_ml_regression_metrics(double[] y_true, double[] y_pred, int count, out ph_regression_metrics @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_probability_scores")]
+    public static extern int ph_ml_probability_scores(double[] probs, double[] labels, int count, double eps, out double out_log_loss, out double out_brier);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_classification_report")]
+    public static extern int ph_ml_classification_report(double[] y_true, double[] y_pred, int count, int classes, out ph_class_score out_per_class, int capacity, out ph_classification_report @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_lift_curve")]
+    public static extern int ph_ml_lift_curve(double[] scores, double[] labels, int count, out double out_fraction, out double out_gain, out double out_lift, out int out_positives);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_roc_ovr")]
+    public static extern int ph_ml_roc_ovr(double[] scores, double[] labels, int count, int classes, out double out_auc, out double out_macro_auc, out double out_micro_auc);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_standardize")]
+    public static extern int ph_ml_standardize(double[] data, int n, int d, out double @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_ml_pca")]
+    public static extern int ph_ml_pca(double[] data, int n, int d, int k, out double out_scores, out double out_components, out double out_explained, out double out_mean);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_data_lttb")]
+    public static extern int ph_data_lttb(double[] x, double[] y, int count, int threshold, out double out_x, out double out_y, int capacity, out int out_count);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_csv_options_init")]
+    public static extern void ph_csv_options_init(out ph_csv_options @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_csv_parse")]
+    public static extern int ph_csv_parse([MarshalAs(UnmanagedType.LPUTF8Str)] string text, int length, IntPtr options, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_csv_parse")]
+    public static extern int ph_csv_parse([MarshalAs(UnmanagedType.LPUTF8Str)] string text, int length, in ph_csv_options options, out ulong @out);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_destroy")]
+    public static extern int ph_table_destroy(ulong table);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_valid")]
+    public static extern int ph_table_valid(ulong table);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_row_count")]
+    public static extern int ph_table_row_count(ulong table);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_column_count")]
+    public static extern int ph_table_column_count(ulong table);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_header")]
+    public static extern IntPtr ph_table_header(ulong table, int column);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_cell")]
+    public static extern IntPtr ph_table_cell(ulong table, int row, int column);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_column_index")]
+    public static extern int ph_table_column_index(ulong table, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+
+    [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_table_numeric")]
+    public static extern int ph_table_numeric(ulong table, int column, out double @out, int capacity);
 
     [DllImport(Library, CallingConvention = Cc, EntryPoint = "ph_abi_version")]
     public static extern uint ph_abi_version();

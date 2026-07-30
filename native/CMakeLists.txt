@@ -79,12 +79,16 @@ set(PHOTON_SOURCES
   src/scale.cpp
   src/axes/axis.cpp
   src/axes/ticks.cpp
+  src/data/csv.cpp
+  src/data/downsample.cpp
   src/finance/indicators.cpp
   src/finance/transforms.cpp
   src/geo/earcut.cpp
   src/layers/pick.cpp
   src/graph/force.cpp
   src/graph/quadtree.cpp
+  src/ml/metrics.cpp
+  src/ml/reduce.cpp
   src/color/colormap.cpp
   src/stats/regression.cpp
   src/stats/signal.cpp

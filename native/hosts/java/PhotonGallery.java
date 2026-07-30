@@ -40,7 +40,7 @@ import photon.Photon;
 
 public final class PhotonGallery {
 
-    private static final int PANELS = 21;
+    private static final int PANELS = 23;
     private static final int COLUMNS = 5;
     private static final int SAMPLES = 512;
     private static final int MONTHS = 12;
@@ -68,6 +68,9 @@ public final class PhotonGallery {
     private static final int PSD_SEGMENT = 256;
     private static final int PSD_BINS = PSD_SEGMENT / 2;
     private static final double PSD_RATE = 256.0;
+    private static final int ROC_SAMPLES = 240;
+    private static final int EMBED_POINTS = 300;
+    private static final int EMBED_DIMS = 4;
 
     /** Lives as long as the window: the streaming panel rewrites its arrays. */
     private static final Arena ARENA = Arena.ofShared();
@@ -1107,6 +1110,103 @@ public final class PhotonGallery {
         addLine(plot, freq, power, bins.get(ValueLayout.JAVA_INT, 0), "#a3e635", 1.5f, null, 0, 0);
     }
 
+    /** Panel 21 — a ROC curve with the chance diagonal behind it. */
+    private static void buildRoc(long plot) {
+        MemorySegment scores = doubles(ROC_SAMPLES);
+        MemorySegment labels = doubles(ROC_SAMPLES);
+        int seed = 55443322;
+        for (int i = 0; i < ROC_SAMPLES; i++) {
+            boolean positive = (i % 2) == 0;
+            seed = seed * 1664525 + 1013904223;
+            double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            seed = seed * 1664525 + 1013904223;
+            double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+            // Box-Muller, so the two score distributions are Gaussian and overlap.
+            double g = Math.sqrt(-2.0 * Math.log(u + 1e-12)) * Math.cos(2 * Math.PI * v);
+            labels.setAtIndex(ValueLayout.JAVA_DOUBLE, i, positive ? 1.0 : 0.0);
+            scores.setAtIndex(ValueLayout.JAVA_DOUBLE, i, (positive ? 1.1 : -1.1) + g * 0.9);
+        }
+        MemorySegment fpr = doubles(ROC_SAMPLES + 1);
+        MemorySegment tpr = doubles(ROC_SAMPLES + 1);
+        MemorySegment count = ARENA.allocate(ValueLayout.JAVA_INT);
+        MemorySegment auc = ARENA.allocate(ValueLayout.JAVA_DOUBLE);
+        if (ph_ml_roc_curve(scores, labels, ROC_SAMPLES, fpr, tpr, MemorySegment.NULL,
+                            ROC_SAMPLES + 1, count, auc) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+
+        // The AUC goes in the title because a ROC curve without it is half a chart.
+        int hundredths = (int) (auc.get(ValueLayout.JAVA_DOUBLE, 0) * 100.0 + 0.5);
+        setTitle(plot, String.format("ROC %d.%02d", hundredths / 100, hundredths % 100));
+        styleAxis(plot, "x", "false positive rate", 0);
+        styleAxis(plot, "y", "true positive rate", 0);
+
+        MemorySegment dash = ARENA.allocate(ValueLayout.JAVA_FLOAT, 2);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 5.0f);
+        dash.setAtIndex(ValueLayout.JAVA_FLOAT, 1, 5.0f);
+        MemorySegment chance = doubles(2);
+        chance.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, 1.0);
+        addLine(plot, chance, chance, 2, "#64748b", 1.0f, dash, 2, 0, "chance");
+        addLine(plot, fpr, tpr, count.get(ValueLayout.JAVA_INT, 0), "#f472b6", 2.0f, null, 0, 0,
+                "model");
+    }
+
+    /**
+     * Panel 22 — three four-dimensional clusters projected to two by PCA.
+     *
+     * The colours are the true classes, which the projection never saw: the
+     * clusters separating is the projection's doing, not the palette's.
+     */
+    private static void buildEmbedding(long plot) {
+        double[][] centres = {{2.5, 0.0, -1.0, 0.5}, {-2.0, 2.0, 0.5, -1.0}, {0.0, -2.5, 2.0, 1.5}};
+        String[] classColor = {"#60a5fa", "#f59e0b", "#34d399"};
+        MemorySegment raw = doubles(EMBED_POINTS * EMBED_DIMS);
+        MemorySegment colors = ARENA.allocate(ValueLayout.JAVA_INT, EMBED_POINTS);
+        int seed = 77665544;
+        for (int i = 0; i < EMBED_POINTS; i++) {
+            int cluster = i % 3;
+            for (int d = 0; d < EMBED_DIMS; d++) {
+                seed = seed * 1664525 + 1013904223;
+                double u = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+                seed = seed * 1664525 + 1013904223;
+                double v = ((seed >>> 8) & 0xFFFFFF) / 16777216.0;
+                double g = Math.sqrt(-2.0 * Math.log(u + 1e-12)) * Math.cos(2 * Math.PI * v);
+                raw.setAtIndex(ValueLayout.JAVA_DOUBLE, i * EMBED_DIMS + d,
+                               centres[cluster][d] + g * 0.55);
+            }
+            colors.setAtIndex(ValueLayout.JAVA_INT, i, color(classColor[cluster]));
+        }
+        MemorySegment scores = doubles(EMBED_POINTS * 2);
+        if (ph_ml_pca(raw, EMBED_POINTS, EMBED_DIMS, 2, scores, MemorySegment.NULL,
+                      MemorySegment.NULL, MemorySegment.NULL) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+        MemorySegment xs = doubles(EMBED_POINTS);
+        MemorySegment ys = doubles(EMBED_POINTS);
+        for (int i = 0; i < EMBED_POINTS; i++) {
+            xs.setAtIndex(ValueLayout.JAVA_DOUBLE, i, scores.getAtIndex(ValueLayout.JAVA_DOUBLE, i * 2));
+            ys.setAtIndex(ValueLayout.JAVA_DOUBLE, i, scores.getAtIndex(ValueLayout.JAVA_DOUBLE, i * 2 + 1));
+        }
+
+        setTitle(plot, "Embedding");
+        ph_plot_set_pick_mode(plot, PH_PICK_XY);
+        styleAxis(plot, "x", "PC 1", 0);
+        styleAxis(plot, "y", "PC 2", 0);
+
+        MemorySegment desc = ph_scatter_desc.allocate(ARENA);
+        ph_scatter_desc_init(desc);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_X, xs);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_Y, ys);
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_COUNT, EMBED_POINTS);
+        desc.set(ValueLayout.JAVA_FLOAT, ph_scatter_desc.OFFSET_SIZE, 5.0f);
+        desc.set(ValueLayout.ADDRESS, ph_scatter_desc.OFFSET_COLORS, colors);
+        desc.set(ValueLayout.JAVA_INT, ph_scatter_desc.OFFSET_MARKER, PH_MARKER_CIRCLE);
+        MemorySegment out = ARENA.allocate(ValueLayout.JAVA_LONG);
+        if (ph_plot_add_scatter(plot, desc, out) != PH_OK) {
+            throw new IllegalStateException(Photon.lastError());
+        }
+    }
+
     private static void advanceStream(double seconds) {
         if (fieldLayer != PH_NULL_HANDLE) {
             // Two circular waves travelling outwards — the case a heatmap
@@ -1345,6 +1445,8 @@ public final class PhotonGallery {
         buildSignals(plots[18], bars);
         buildFit(plots[19]);
         buildSpectrum(plots[20]);
+        buildRoc(plots[21]);
+        buildEmbedding(plots[22]);
 
         installCallbacks();
 

@@ -1,6 +1,7 @@
 #include "panels.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define SAMPLES 512
@@ -49,6 +50,13 @@
 #define PSD_SEGMENT 256
 #define PSD_BINS (PSD_SEGMENT / 2)
 #define PSD_RATE 256.0
+/* Enough samples for the ROC to be a curve rather than a staircase, and few
+ * enough that the vertex array is a fixed size here. */
+#define ROC_SAMPLES 240
+/* Three Gaussian blobs in four dimensions, projected to two. Four so that the
+ * projection is doing real work; three clusters so the picture has an answer. */
+#define EMBED_POINTS 300
+#define EMBED_DIMS 4
 
 struct ph_panels {
   double wave_x[SAMPLES];
@@ -127,6 +135,17 @@ struct ph_panels {
   double psd_freq[PSD_BINS];
   double psd_power[PSD_BINS];
   int psd_count;
+
+  double roc_fpr[ROC_SAMPLES + 1];
+  double roc_tpr[ROC_SAMPLES + 1];
+  double roc_chance[2];
+  int roc_count;
+  double roc_auc;
+
+  double embed_raw[EMBED_POINTS * EMBED_DIMS];
+  double embed_x[EMBED_POINTS];
+  double embed_y[EMBED_POINTS];
+  ph_color embed_color[EMBED_POINTS];
 };
 
 static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter", "Streaming",
@@ -134,7 +153,7 @@ static const char* kTitles[PH_PANEL_COUNT] = {"Waves",   "Log decay", "Scatter",
                                               "Yield",   "Latency",   "Field",   "Sprite",
                                               "Candles", "Bars",      "Density", "Flow",
                                               "Contour", "Network",   "Signals", "Fit",
-                                              "Spectrum"};
+                                              "Spectrum", "ROC",      "Embedding"};
 
 /** The interference field at time `t`. Shared by the initial bake and the clock. */
 static void fill_field(ph_panels* p, double t) {
@@ -423,6 +442,56 @@ ph_panels* ph_panels_create(void) {
   }
   ph_stat_welch(p->psd_signal, PSD_SAMPLES, PSD_SEGMENT, 0.5, PH_WINDOW_HANN, PSD_RATE, p->psd_freq,
                 p->psd_power, PSD_BINS, &p->psd_count);
+
+  /* A classifier that is good but not perfect: the two classes' scores overlap
+   * in the middle, which is what gives the curve its shape. */
+  {
+    double scores[ROC_SAMPLES];
+    double labels[ROC_SAMPLES];
+    seed = 55443322u;
+    for (int i = 0; i < ROC_SAMPLES; i++) {
+      const int positive = (i % 2) == 0;
+      seed = seed * 1664525u + 1013904223u;
+      const double u = (double)(seed >> 8) / 16777216.0;
+      seed = seed * 1664525u + 1013904223u;
+      const double v = (double)(seed >> 8) / 16777216.0;
+      /* Box-Muller, so the two score distributions are Gaussian and overlap. */
+      const double g = sqrt(-2.0 * log(u + 1e-12)) * cos(6.283185307179586 * v);
+      labels[i] = positive ? 1.0 : 0.0;
+      scores[i] = (positive ? 1.1 : -1.1) + g * 0.9;
+    }
+    ph_ml_roc_curve(scores, labels, ROC_SAMPLES, p->roc_fpr, p->roc_tpr, NULL, ROC_SAMPLES + 1,
+                    &p->roc_count, &p->roc_auc);
+    p->roc_chance[0] = 0.0;
+    p->roc_chance[1] = 1.0;
+  }
+
+  /* Three Gaussian clusters in four dimensions, projected to two by PCA. The
+   * projection is deterministic, so this panel is the same picture everywhere. */
+  {
+    static const double centres[3][EMBED_DIMS] = {
+        {2.5, 0.0, -1.0, 0.5}, {-2.0, 2.0, 0.5, -1.0}, {0.0, -2.5, 2.0, 1.5}};
+    static const ph_color class_color[3] = {0x60a5faffu, 0xf59e0bffu, 0x34d399ffu};
+    seed = 77665544u;
+    for (int i = 0; i < EMBED_POINTS; i++) {
+      const int cluster = i % 3;
+      for (int d = 0; d < EMBED_DIMS; d++) {
+        seed = seed * 1664525u + 1013904223u;
+        const double u = (double)(seed >> 8) / 16777216.0;
+        seed = seed * 1664525u + 1013904223u;
+        const double v = (double)(seed >> 8) / 16777216.0;
+        const double g = sqrt(-2.0 * log(u + 1e-12)) * cos(6.283185307179586 * v);
+        p->embed_raw[i * EMBED_DIMS + d] = centres[cluster][d] + g * 0.55;
+      }
+      p->embed_color[i] = class_color[cluster];
+    }
+    double scores[EMBED_POINTS * 2];
+    ph_ml_pca(p->embed_raw, EMBED_POINTS, EMBED_DIMS, 2, scores, NULL, NULL, NULL);
+    for (int i = 0; i < EMBED_POINTS; i++) {
+      p->embed_x[i] = scores[i * 2];
+      p->embed_y[i] = scores[i * 2 + 1];
+    }
+  }
 
   return p;
 }
@@ -1046,6 +1115,64 @@ static void build_spectrum(ph_panels* p, ph_plot plot) {
   ph_plot_add_line(plot, &line, &layer);
 }
 
+/* Panel 21 — a ROC curve with the chance diagonal behind it. */
+static void build_roc(ph_panels* p, ph_plot plot) {
+  /* The AUC goes in the title because a ROC curve without it is half a chart.
+   * Formatted from integers rather than with %f: Qt calls setlocale, and a
+   * locale with a comma decimal separator would print "ROC 0,93". */
+  char title[32];
+  const int hundredths = (int)(p->roc_auc * 100.0 + 0.5);
+  snprintf(title, sizeof title, "ROC %d.%02d", hundredths / 100, hundredths % 100);
+  ph_plot_set_title(plot, title);
+  style_axis(plot, "x", "false positive rate", 0);
+  style_axis(plot, "y", "true positive rate", 0);
+
+  static const float dash[2] = {5.0f, 5.0f};
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_line_desc line;
+  ph_line_desc_init(&line);
+  line.x = p->roc_chance;
+  line.y = p->roc_chance;
+  line.count = 2;
+  line.width = 1.0f;
+  line.color = parse("#64748b");
+  line.dash = dash;
+  line.dash_count = 2;
+  line.name = "chance";
+  ph_plot_add_line(plot, &line, &layer);
+
+  ph_line_desc_init(&line);
+  line.x = p->roc_fpr;
+  line.y = p->roc_tpr;
+  line.count = p->roc_count;
+  line.width = 2.0f;
+  line.color = parse("#f472b6");
+  line.name = "model";
+  ph_plot_add_line(plot, &line, &layer);
+}
+
+/* Panel 22 — three four-dimensional clusters projected to two by PCA.
+ *
+ * The colours are the true classes, which the projection never saw: the
+ * clusters separating is the projection's doing, not the palette's. */
+static void build_embedding(ph_panels* p, ph_plot plot) {
+  ph_plot_set_title(plot, "Embedding");
+  ph_plot_set_pick_mode(plot, PH_PICK_XY);
+  style_axis(plot, "x", "PC 1", 0);
+  style_axis(plot, "y", "PC 2", 0);
+
+  ph_layer layer = PH_NULL_HANDLE;
+  ph_scatter_desc points;
+  ph_scatter_desc_init(&points);
+  points.x = p->embed_x;
+  points.y = p->embed_y;
+  points.count = EMBED_POINTS;
+  points.size = 5.0f;
+  points.colors = p->embed_color;
+  points.marker = PH_MARKER_CIRCLE;
+  ph_plot_add_scatter(plot, &points, &layer);
+}
+
 void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
   if (!panels) return;
   const int which = ((index % PH_PANEL_COUNT) + PH_PANEL_COUNT) % PH_PANEL_COUNT;
@@ -1070,7 +1197,9 @@ void ph_panels_build(ph_panels* panels, ph_plot plot, int index) {
     case 17: build_network(panels, plot); break;
     case 18: build_signals(panels, plot); break;
     case 19: build_fit(panels, plot); break;
-    default: build_spectrum(panels, plot); break;
+    case 20: build_spectrum(panels, plot); break;
+    case 21: build_roc(panels, plot); break;
+    default: build_embedding(panels, plot); break;
   }
 }
 

@@ -11,6 +11,7 @@
 
 #include <photon/photon.h>
 
+#include "data/csv.hpp"
 #include "handle_table.hpp"
 #include "layer.hpp"
 #include "plot.hpp"
@@ -28,6 +29,9 @@ struct Registry {
   ph_host_desc host{};
   HandleTable<Plot> plots;
   HandleTable<LayerRef> layers;
+  /// Parsed CSVs. Unlike a layer, a table belongs to nothing and outlives every
+  /// plot — it is data the caller loaded, not something the renderer owns.
+  HandleTable<data::Table> tables;
 
   /// Resolved GL entry points. Empty until the first render, because ph_init
   /// may run long before any context is current — a Qt host initializes the

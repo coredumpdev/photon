@@ -1,5 +1,5 @@
 /**
- * The twenty-one demo charts, built with @photonviz/core.
+ * The twenty-three demo charts, built with @photonviz/core.
  *
  * A transcription of hosts/common/panels.c — deliberately line for line, so the
  * comparison this directory exists to run is comparing the two engines rather
@@ -7,7 +7,7 @@
  * if one changes, both must.
  */
 
-import { Plot, bollinger, linearTrend, loess, welch } from "@photonviz/core";
+import { Plot, bollinger, linearTrend, loess, pca, rocCurve, welch } from "@photonviz/core";
 
 const SAMPLES = 512;
 const SCATTER_POINTS = 1500;
@@ -32,6 +32,9 @@ const FIT_GRID = 60;
 const PSD_SAMPLES = 2048;
 const PSD_SEGMENT = 256;
 const PSD_RATE = 256;
+const ROC_SAMPLES = 240;
+const EMBED_POINTS = 300;
+const EMBED_DIMS = 4;
 
 /** The phase the native `--grab` freezes the streaming panel at. */
 export const STREAM_SECONDS = 1.7;
@@ -594,7 +597,72 @@ function spectrum(container) {
   return plot;
 }
 
+function roc(container) {
+  const scores = new Float64Array(ROC_SAMPLES);
+  const labels = new Float64Array(ROC_SAMPLES);
+  let seed = 55443322;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < ROC_SAMPLES; i++) {
+    const positive = i % 2 === 0;
+    const u = nextUnit();
+    const v = nextUnit();
+    // Box-Muller, so the two score distributions are Gaussian and overlap.
+    const g = Math.sqrt(-2 * Math.log(u + 1e-12)) * Math.cos(2 * Math.PI * v);
+    labels[i] = positive ? 1 : 0;
+    scores[i] = (positive ? 1.1 : -1.1) + g * 0.9;
+  }
+  const curve = rocCurve(scores, labels);
+  const hundredths = Math.round(curve.auc * 100);
+
+  const plot = new Plot(container, {
+    ...common,
+    title: `ROC ${Math.floor(hundredths / 100)}.${String(hundredths % 100).padStart(2, "0")}`,
+    axes: { x: { title: "false positive rate" }, y: { title: "true positive rate" } },
+  });
+  plot.addLine({ x: [0, 1], y: [0, 1], color: "#64748b", width: 1, dash: [5, 5], name: "chance" });
+  plot.addLine({ x: curve.fpr, y: curve.tpr, color: "#f472b6", width: 2, name: "model" });
+  return plot;
+}
+
+function embedding(container) {
+  const centres = [[2.5, 0, -1, 0.5], [-2, 2, 0.5, -1], [0, -2.5, 2, 1.5]];
+  const classColor = ["#60a5fa", "#f59e0b", "#34d399"];
+  const raw = new Float64Array(EMBED_POINTS * EMBED_DIMS);
+  const colors = new Array(EMBED_POINTS);
+  let seed = 77665544;
+  const nextUnit = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return ((seed >>> 8) & 0xffffff) / 16777216;
+  };
+  for (let i = 0; i < EMBED_POINTS; i++) {
+    const cluster = i % 3;
+    for (let d = 0; d < EMBED_DIMS; d++) {
+      const u = nextUnit();
+      const v = nextUnit();
+      const g = Math.sqrt(-2 * Math.log(u + 1e-12)) * Math.cos(2 * Math.PI * v);
+      raw[i * EMBED_DIMS + d] = centres[cluster][d] + g * 0.55;
+    }
+    colors[i] = classColor[cluster];
+  }
+  const { scores } = pca(raw, EMBED_POINTS, EMBED_DIMS, 2);
+  const xs = new Float64Array(EMBED_POINTS);
+  const ys = new Float64Array(EMBED_POINTS);
+  for (let i = 0; i < EMBED_POINTS; i++) { xs[i] = scores[i * 2]; ys[i] = scores[i * 2 + 1]; }
+
+  const plot = new Plot(container, {
+    ...common,
+    title: "Embedding",
+    axes: { x: { title: "PC 1" }, y: { title: "PC 2" } },
+  });
+  // The colours are the true classes, which the projection never saw.
+  plot.addScatter({ x: xs, y: ys, size: 5, colors, marker: "circle" });
+  return plot;
+}
+
 export const PANELS = [waves, decay, scatter, streaming, revenue, funnel,
                        share, impulse, yieldCurve, latency, field, sprite,
                        candles, bars, density, flow, contour, network, signals,
-                       fit, spectrum];
+                       fit, spectrum, roc, embedding];

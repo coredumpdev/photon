@@ -1633,6 +1633,172 @@ public final class PhotonSmokeTest {
         ran("ph_stat_cross_correlate");
     }
 
+    /**
+     * Model metrics, PCA, LTTB and the CSV table.
+     *
+     * The table is the reason this section runs after ph_init rather than
+     * before it: it is the ABI's third handle type, and the only one that owns
+     * nothing on the GPU. Which makes it the cheapest place to check that the
+     * generation tag actually works — destroy it and every accessor must say
+     * so rather than read freed strings.
+     */
+    static void models(Arena arena) {
+        MemorySegment countOut = arena.allocate(ValueLayout.JAVA_INT);
+        MemorySegment scalar = arena.allocate(ValueLayout.JAVA_DOUBLE);
+        MemorySegment other = arena.allocate(ValueLayout.JAVA_DOUBLE);
+
+        MemorySegment truth = doubles(arena, 0, 0, 1, 1, 2);
+        MemorySegment pred = doubles(arena, 0, 1, 1, 1, 2);
+        MemorySegment counts = room(arena, 9);
+        MemorySegment normalized = room(arena, 9);
+        MemorySegment support = room(arena, 3);
+        checkEq(ph_ml_confusion_matrix(truth, pred, 5, 0, counts, normalized, support, 3, countOut),
+                PH_OK, "ph_ml_confusion_matrix");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 3, "three classes were inferred");
+        check(at(counts, 0) == 1.0 && at(counts, 4) == 2.0, "the diagonal counts");
+        check(at(normalized, 0) == 0.5, "and the rows normalise");
+        ran("ph_ml_confusion_matrix");
+
+        MemorySegment scores = doubles(arena, 0.1, 0.4, 0.35, 0.8);
+        MemorySegment labels = doubles(arena, 0, 0, 1, 1);
+        MemorySegment a = room(arena, 8);
+        MemorySegment b = room(arena, 8);
+        MemorySegment c = room(arena, 8);
+        checkEq(ph_ml_roc_curve(scores, labels, 4, a, b, c, 8, countOut, scalar), PH_OK,
+                "ph_ml_roc_curve");
+        check(Math.abs(scalar.get(ValueLayout.JAVA_DOUBLE, 0) - 0.75) < 1e-10,
+              "the hand-computed AUC arrives intact");
+        check(at(a, 0) == 0.0 && at(b, 0) == 0.0, "the curve starts at the origin");
+        checkEq(ph_ml_pr_curve(scores, labels, 4, a, b, c, 8, countOut, scalar, other), PH_OK,
+                "ph_ml_pr_curve");
+        check(Math.abs(other.get(ValueLayout.JAVA_DOUBLE, 0) - 0.5) < 1e-10,
+              "half the samples are positive");
+        ran("ph_ml_roc_curve", "ph_ml_pr_curve");
+
+        MemorySegment probs = doubles(arena, 0.1, 0.2, 0.8, 0.9);
+        checkEq(ph_ml_calibration_curve(probs, labels, 4, 2, a, b, c, scalar), PH_OK,
+                "ph_ml_calibration_curve");
+        check(Math.abs(scalar.get(ValueLayout.JAVA_DOUBLE, 0) - 0.15) < 1e-10, "the ECE");
+        checkEq(ph_ml_calibration_curve(probs, labels, 4, 0, a, b, c, scalar),
+                PH_E_INVALID_ARGUMENT, "zero bins is refused");
+        checkEq(ph_ml_ema_smooth(probs, 4, 0.6, a), PH_OK, "ph_ml_ema_smooth");
+        check(Math.abs(at(a, 0) - 0.1) < 1e-10, "the debias makes the first sample exact");
+        ran("ph_ml_calibration_curve", "ph_ml_ema_smooth");
+
+        MemorySegment metrics = ph_regression_metrics.allocate(arena);
+        MemorySegment yTrue = doubles(arena, 1, 2, 3, 4);
+        MemorySegment yPred = doubles(arena, 1.5, 2.5, 2.5, 3.5);
+        checkEq(ph_ml_regression_metrics(yTrue, yPred, 4, metrics), PH_OK,
+                "ph_ml_regression_metrics");
+        check(metrics.get(ValueLayout.JAVA_DOUBLE, ph_regression_metrics.OFFSET_MSE) == 0.25, "MSE");
+        check(metrics.get(ValueLayout.JAVA_DOUBLE, ph_regression_metrics.OFFSET_RMSE) == 0.5,
+              "and RMSE is its root");
+        checkEq(ph_ml_probability_scores(probs, labels, 4, 0.0, scalar, other), PH_OK,
+                "ph_ml_probability_scores");
+        check(scalar.get(ValueLayout.JAVA_DOUBLE, 0) > 0, "a log loss");
+        ran("ph_ml_regression_metrics", "ph_ml_probability_scores");
+
+        MemorySegment perClass = arena.allocate(ph_class_score.LAYOUT, 3);
+        MemorySegment report = ph_classification_report.allocate(arena);
+        checkEq(ph_ml_classification_report(truth, pred, 5, 3, perClass, 3, report), PH_OK,
+                "ph_ml_classification_report");
+        checkEq(report.get(ValueLayout.JAVA_INT, ph_classification_report.OFFSET_CLASSES), 3,
+                "three classes");
+        checkEq(perClass.get(ValueLayout.JAVA_INT, ph_class_score.SIZE * 2 + ph_class_score.OFFSET_LABEL),
+                2, "and the third one knows its own label");
+        ran("ph_ml_classification_report");
+
+        MemorySegment fraction = room(arena, 5);
+        MemorySegment gain = room(arena, 5);
+        MemorySegment lift = room(arena, 5);
+        MemorySegment ranked = doubles(arena, 0.9, 0.8, 0.2, 0.1);
+        MemorySegment hits = doubles(arena, 1, 1, 0, 0);
+        checkEq(ph_ml_lift_curve(ranked, hits, 4, fraction, gain, lift, countOut), PH_OK,
+                "ph_ml_lift_curve");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 2, "two positives");
+        check(at(gain, 2) == 1.0 && at(lift, 2) == 2.0,
+              "the top half holds every positive, so lift is 2");
+        ran("ph_ml_lift_curve");
+
+        MemorySegment ovrScores = doubles(arena, 0.8, 0.1, 0.1, 0.1, 0.8, 0.1, 0.1, 0.1, 0.8);
+        MemorySegment ovrLabels = doubles(arena, 0, 1, 2);
+        MemorySegment aucs = room(arena, 3);
+        checkEq(ph_ml_roc_ovr(ovrScores, ovrLabels, 3, 3, aucs, scalar, other), PH_OK,
+                "ph_ml_roc_ovr");
+        check(at(aucs, 0) == 1.0 && scalar.get(ValueLayout.JAVA_DOUBLE, 0) == 1.0,
+              "every one-vs-rest problem separates perfectly here");
+        checkEq(ph_ml_roc_ovr(ovrScores, ovrLabels, 3, 0, aucs, scalar, other),
+                PH_E_INVALID_ARGUMENT, "zero classes is refused");
+        ran("ph_ml_roc_ovr");
+
+        MemorySegment matrix = doubles(arena, -3, 0, -1, 0, 1, 0, 3, 0);
+        MemorySegment z = room(arena, 8);
+        checkEq(ph_ml_standardize(matrix, 4, 2, z), PH_OK, "ph_ml_standardize");
+        MemorySegment pcaScores = room(arena, 4);
+        MemorySegment components = room(arena, 2);
+        MemorySegment explained = room(arena, 1);
+        MemorySegment mean = room(arena, 2);
+        checkEq(ph_ml_pca(matrix, 4, 2, 1, pcaScores, components, explained, mean), PH_OK,
+                "ph_ml_pca");
+        check(Math.abs(Math.abs(at(components, 0)) - 1.0) < 1e-3,
+              "the dominant axis is the one the variance is in");
+        check(Math.abs(at(explained, 0) - 1.0) < 1e-6, "and it explains everything");
+        ran("ph_ml_standardize", "ph_ml_pca");
+
+        MemorySegment lx = room(arena, 64);
+        MemorySegment ly = room(arena, 64);
+        for (int i = 0; i < 64; i++) {
+            lx.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i);
+            ly.setAtIndex(ValueLayout.JAVA_DOUBLE, i, i == 32 ? 100.0 : 0.0);
+        }
+        MemorySegment dx = room(arena, 16);
+        MemorySegment dy = room(arena, 16);
+        checkEq(ph_data_lttb(lx, ly, 64, 16, dx, dy, 16, countOut), PH_OK, "ph_data_lttb");
+        checkEq(countOut.get(ValueLayout.JAVA_INT, 0), 16, "down to sixteen points");
+        double peak = 0;
+        for (int i = 0; i < 16; i++) peak = Math.max(peak, at(dy, i));
+        check(peak == 100.0, "and the lone spike survived, which is the whole point");
+        ran("ph_data_lttb");
+
+        MemorySegment options = ph_csv_options.allocate(arena);
+        ph_csv_options_init(options);
+        checkEq(options.get(ValueLayout.JAVA_INT, ph_csv_options.OFFSET_STRUCT_SIZE),
+                (int) ph_csv_options.SIZE, "ph_csv_options_init");
+        MemorySegment handle = arena.allocate(ValueLayout.JAVA_LONG);
+        MemorySegment text = utf8(arena, "x,y\n1,2\n3,4\n5,6");
+        checkEq(ph_csv_parse(text, 0, options, handle), PH_OK, "ph_csv_parse");
+        long table = handle.get(ValueLayout.JAVA_LONG, 0);
+        check(ph_table_valid(table) != 0, "the table handle is live");
+        checkEq(ph_table_row_count(table), 3, "three data rows");
+        checkEq(ph_table_column_count(table), 2, "two columns");
+        checkEq(Photon.string(ph_table_header(table, 0)), "x", "the first header");
+        checkEq(Photon.string(ph_table_cell(table, 1, 1)), "4", "and a cell by row and column");
+        checkEq(ph_table_column_index(table, utf8(arena, "y")), 1, "a column by name");
+        checkEq(ph_table_column_index(table, utf8(arena, "nope")), -1, "and one that is not there");
+        MemorySegment column = room(arena, 3);
+        checkEq(ph_table_numeric(table, 1, column, 3), PH_OK, "ph_table_numeric");
+        check(at(column, 0) == 2.0 && at(column, 2) == 6.0, "parsed to doubles");
+        checkEq(ph_table_numeric(table, 9, column, 3), PH_E_INVALID_ARGUMENT,
+                "a column past the end is refused");
+        ran("ph_csv_options_init", "ph_csv_parse", "ph_table_valid", "ph_table_row_count",
+            "ph_table_column_count", "ph_table_header", "ph_table_cell", "ph_table_column_index",
+            "ph_table_numeric");
+
+        // The generation tag: after destroy, every accessor says so rather than
+        // reading strings that are gone.
+        checkEq(ph_table_destroy(table), PH_OK, "ph_table_destroy");
+        check(ph_table_valid(table) == 0, "the handle is stale now");
+        checkEq(ph_table_row_count(table), -1, "and the accessors say so");
+        check(ph_table_header(table, 0).equals(MemorySegment.NULL), "with NULL, not a dangling one");
+        checkEq(ph_table_destroy(table), PH_E_INVALID_HANDLE, "a second destroy is refused");
+        checkEq(ph_table_destroy(PH_NULL_HANDLE), PH_OK, "destroying nothing is fine");
+        ran("ph_table_destroy");
+    }
+
+    static void checkEq(String actual, String expected, String what) {
+        check(expected.equals(actual), what + " (got \"" + actual + "\", want \"" + expected + "\")");
+    }
+
     public static void main(String[] args) {
         try (Arena arena = Arena.ofConfined()) {
             step("versionAndInit");
@@ -1647,6 +1813,8 @@ public final class PhotonSmokeTest {
             analysis(arena);
             step("statistics");
             statistics(arena);
+            step("models");
+            models(arena);
             step("buildPlot");
             long plot = buildPlot(arena);
             step("axes");

@@ -90,6 +90,8 @@ typedef int32_t ph_bool;
 /** Opaque generation-tagged handles. 0 is always invalid. */
 typedef uint64_t ph_plot;
 typedef uint64_t ph_layer;
+/** A parsed CSV. Owns its strings, and belongs to no plot. */
+typedef uint64_t ph_table;
 
 #define PH_NULL_HANDLE ((uint64_t)0)
 
@@ -836,6 +838,218 @@ PH_API ph_result PH_CALL ph_stat_cross_correlate(const double* a, const double* 
                                                  int32_t max_lag, ph_bool normalize,
                                                  int32_t* out_lags, double* out_values,
                                                  int32_t capacity, int32_t* out_count);
+
+/* -- Machine learning ----------------------------------------------------- */
+
+/**
+ * Confusion matrix of integer class labels. `classes` of 0 means max(label)+1,
+ * which is only known after the pass, so this is counted: `out_counts` and
+ * `out_normalized` take `out_classes * out_classes` doubles and `out_support`
+ * takes `out_classes`. `capacity` is in classes, not cells.
+ */
+PH_API ph_result PH_CALL ph_ml_confusion_matrix(const double* y_true, const double* y_pred,
+                                                int32_t count, int32_t classes, double* out_counts,
+                                                double* out_normalized, double* out_support,
+                                                int32_t capacity, int32_t* out_classes);
+
+/**
+ * ROC curve for binary labels ranked by score, higher meaning more positive.
+ * Ties collapse to one vertex, so the vertex count is at most `count + 1` and
+ * usually less — counted. `out_auc` is NaN when either class is absent, because
+ * an area under a curve that never rises is not zero, it is undefined.
+ */
+PH_API ph_result PH_CALL ph_ml_roc_curve(const double* scores, const double* labels, int32_t count,
+                                         double* out_fpr, double* out_tpr, double* out_thresholds,
+                                         int32_t capacity, int32_t* out_count, double* out_auc);
+
+/** Precision-recall curve. `out_ap` is NaN with no positives; `out_baseline` is the base rate. */
+PH_API ph_result PH_CALL ph_ml_pr_curve(const double* scores, const double* labels, int32_t count,
+                                        double* out_recall, double* out_precision,
+                                        double* out_thresholds, int32_t capacity,
+                                        int32_t* out_count, double* out_ap, double* out_baseline);
+
+/**
+ * Reliability diagram: predicted confidence against observed frequency, in
+ * `bins` equal-width buckets. Empty bins come back NaN and simply do not draw.
+ */
+PH_API ph_result PH_CALL ph_ml_calibration_curve(const double* scores, const double* labels,
+                                                 int32_t count, int32_t bins,
+                                                 double* out_mean_predicted,
+                                                 double* out_fraction_positive,
+                                                 double* out_bin_count, double* out_ece);
+
+/**
+ * TensorBoard's debiased EMA over a noisy training curve. `weight` in [0,1) is
+ * the momentum. Non-finite values pass through and do not advance the average.
+ */
+PH_API ph_result PH_CALL ph_ml_ema_smooth(const double* values, int32_t count, double weight,
+                                          double* out);
+
+/** The four regression scores, which are always read together. */
+typedef struct ph_regression_metrics {
+  double mse;
+  /** The error in the target's own units. */
+  double rmse;
+  /** Less swayed by outliers than rmse. */
+  double mae;
+  /** 1 is perfect, 0 matches predicting the mean, negative is worse than that. */
+  double r2;
+} ph_regression_metrics;
+
+PH_API ph_result PH_CALL ph_ml_regression_metrics(const double* y_true, const double* y_pred,
+                                                  int32_t count, ph_regression_metrics* out);
+
+/**
+ * Log loss and Brier score of predicted probabilities. `eps` of 0 means 1e-15;
+ * probabilities are clipped away from 0 and 1 by it, so one confident mistake
+ * cannot return infinity.
+ */
+PH_API ph_result PH_CALL ph_ml_probability_scores(const double* probs, const double* labels,
+                                                  int32_t count, double eps, double* out_log_loss,
+                                                  double* out_brier);
+
+/** Precision, recall, F1 and support for one class. */
+typedef struct ph_class_score {
+  double  precision;
+  double  recall;
+  double  f1;
+  /** True instances of this class. */
+  double  support;
+  int32_t label;
+} ph_class_score;
+
+/** One averaging rule's view of a report. */
+typedef struct ph_class_average {
+  double precision;
+  double recall;
+  double f1;
+} ph_class_average;
+
+/** The scalars of a scikit-learn shaped classification report. */
+typedef struct ph_classification_report {
+  double            accuracy;
+  /** Unweighted over classes — every class counts the same. */
+  ph_class_average  macro;
+  /** Support-weighted — dominated by the common classes. */
+  ph_class_average  weighted;
+  /** How many classes there were, whatever `capacity` allowed room for. */
+  int32_t           classes;
+} ph_classification_report;
+
+/**
+ * Per-class precision, recall and F1 plus the two averages. A class the model
+ * never predicts scores 0 precision rather than NaN, so the macro average stays
+ * comparable across runs.
+ */
+PH_API ph_result PH_CALL ph_ml_classification_report(const double* y_true, const double* y_pred,
+                                                     int32_t count, int32_t classes,
+                                                     ph_class_score* out_per_class,
+                                                     int32_t capacity,
+                                                     ph_classification_report* out);
+
+/**
+ * Cumulative gain and lift down a score-ranked list — "if I contact the top
+ * X%, what share of the buyers do I get?". Each output takes `count + 1`
+ * doubles: the curve starts at the origin.
+ */
+PH_API ph_result PH_CALL ph_ml_lift_curve(const double* scores, const double* labels, int32_t count,
+                                          double* out_fraction, double* out_gain, double* out_lift,
+                                          int32_t* out_positives);
+
+/**
+ * One-vs-rest ROC areas for a multiclass problem. `scores` is row-major
+ * `count * classes`, `labels` the true class index; `out_auc` takes `classes`
+ * doubles.
+ *
+ * The per-class *curves* are not returned: they have different vertex counts,
+ * and a jagged array is the one shape this ABI has no honest way to hand back.
+ * Extract a class's score column and call ph_ml_roc_curve on it — which is
+ * exactly what this does internally.
+ */
+PH_API ph_result PH_CALL ph_ml_roc_ovr(const double* scores, const double* labels, int32_t count,
+                                       int32_t classes, double* out_auc, double* out_macro_auc,
+                                       double* out_micro_auc);
+
+/** Z-score each of the `d` columns of a row-major `n * d` matrix. */
+PH_API ph_result PH_CALL ph_ml_standardize(const double* data, int32_t n, int32_t d, double* out);
+
+/**
+ * PCA of a row-major `n * d` matrix onto its top `k` components, by covariance
+ * power iteration with deflation. Deterministic — the seed vector is arithmetic
+ * rather than random, so an embedding plot is the same picture on every run.
+ *
+ * `out_scores` takes `n * k`, `out_components` `k * d`, `out_explained` `k` and
+ * `out_mean` `d` doubles. Any may be NULL.
+ */
+PH_API ph_result PH_CALL ph_ml_pca(const double* data, int32_t n, int32_t d, int32_t k,
+                                   double* out_scores, double* out_components,
+                                   double* out_explained, double* out_mean);
+
+/* -- Data ----------------------------------------------------------------- */
+
+/**
+ * Largest-Triangle-Three-Buckets: reduce a series to `threshold` points while
+ * keeping its shape. Peaks and troughs survive where a stride would drop them.
+ * Counted, because a threshold at or above the input length copies through.
+ */
+PH_API ph_result PH_CALL ph_data_lttb(const double* x, const double* y, int32_t count,
+                                      int32_t threshold, double* out_x, double* out_y,
+                                      int32_t capacity, int32_t* out_count);
+
+/** How to read a CSV. Zero means the defaults, as everywhere else. */
+typedef struct ph_csv_options {
+  uint32_t struct_size;
+  /** Field delimiter as a character code. 0 means ','. */
+  int32_t  delimiter;
+  /** The first row is data, not headers — which are then named col0, col1, … */
+  ph_bool  no_header;
+  /** Keep blank lines instead of dropping them. */
+  ph_bool  keep_empty_lines;
+} ph_csv_options;
+
+PH_API void PH_CALL ph_csv_options_init(ph_csv_options* out);
+
+/**
+ * Parse CSV text into a table. Quoted fields, doubled quotes as an escape, and
+ * LF or CRLF endings; anything past that is a job for a real CSV library, and
+ * this exists so the simple case needs no dependency at all.
+ *
+ * `length` of 0 with a non-NULL `text` means "measure it with strlen"; pass the
+ * length explicitly when the text may hold embedded NULs.
+ */
+PH_API ph_result PH_CALL ph_csv_parse(const char* text, int32_t length,
+                                      const ph_csv_options* options, ph_table* out);
+
+/** Free a table and every string in it. Destroying PH_NULL_HANDLE is a no-op. */
+PH_API ph_result PH_CALL ph_table_destroy(ph_table table);
+
+/** Non-zero when the handle still refers to a live table. Never fails. */
+PH_API ph_bool PH_CALL ph_table_valid(ph_table table);
+
+/** Data rows, not counting the header row. -1 when the handle is invalid. */
+PH_API int32_t PH_CALL ph_table_row_count(ph_table table);
+PH_API int32_t PH_CALL ph_table_column_count(ph_table table);
+
+/**
+ * A header name, or one cell, as UTF-8. NULL when out of range.
+ *
+ * The pointer belongs to the table and stays valid until it is destroyed —
+ * which is the whole reason a table is a handle rather than a struct of
+ * pointers a caller would have to keep alive itself.
+ */
+PH_API const char* PH_CALL ph_table_header(ph_table table, int32_t column);
+PH_API const char* PH_CALL ph_table_cell(ph_table table, int32_t row, int32_t column);
+
+/** A column's index by header name, or -1. */
+PH_API int32_t PH_CALL ph_table_column_index(ph_table table, const char* name);
+
+/**
+ * A column parsed to doubles, `min(capacity, row_count)` of them. A cell that
+ * holds no number becomes NaN, which is what every layer already treats as a
+ * hole in a series rather than as a zero.
+ */
+PH_API ph_result PH_CALL ph_table_numeric(ph_table table, int32_t column, double* out,
+                                          int32_t capacity);
 
 /* ------------------------------------------------------------------------ */
 /* Descriptors                                                                */

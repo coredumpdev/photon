@@ -1,5 +1,5 @@
 /*
- * The Qt Widgets gallery — the same twenty-one charts, in QOpenGLWidgets.
+ * The Qt Widgets gallery — the same twenty-three charts, in QOpenGLWidgets.
  *
  * Shorter than the Quick one by roughly the size of a thread boundary.
  */

@@ -126,6 +126,41 @@ PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, r2) == 16, "ph_linear_fit.r2 offset");
 PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, stderror) == 24, "ph_linear_fit.stderror offset");
 PH_ASSERT_LAYOUT(offsetof(ph_linear_fit, n) == 32, "ph_linear_fit.n offset");
 
+PH_ASSERT_LAYOUT(sizeof(ph_regression_metrics) == 32, "ph_regression_metrics size");
+PH_ASSERT_LAYOUT(_Alignof(ph_regression_metrics) == 8, "ph_regression_metrics alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_regression_metrics, mse) == 0, "ph_regression_metrics.mse offset");
+PH_ASSERT_LAYOUT(offsetof(ph_regression_metrics, rmse) == 8, "ph_regression_metrics.rmse offset");
+PH_ASSERT_LAYOUT(offsetof(ph_regression_metrics, mae) == 16, "ph_regression_metrics.mae offset");
+PH_ASSERT_LAYOUT(offsetof(ph_regression_metrics, r2) == 24, "ph_regression_metrics.r2 offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_class_score) == 40, "ph_class_score size");
+PH_ASSERT_LAYOUT(_Alignof(ph_class_score) == 8, "ph_class_score alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_class_score, precision) == 0, "ph_class_score.precision offset");
+PH_ASSERT_LAYOUT(offsetof(ph_class_score, recall) == 8, "ph_class_score.recall offset");
+PH_ASSERT_LAYOUT(offsetof(ph_class_score, f1) == 16, "ph_class_score.f1 offset");
+PH_ASSERT_LAYOUT(offsetof(ph_class_score, support) == 24, "ph_class_score.support offset");
+PH_ASSERT_LAYOUT(offsetof(ph_class_score, label) == 32, "ph_class_score.label offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_class_average) == 24, "ph_class_average size");
+PH_ASSERT_LAYOUT(_Alignof(ph_class_average) == 8, "ph_class_average alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_class_average, precision) == 0, "ph_class_average.precision offset");
+PH_ASSERT_LAYOUT(offsetof(ph_class_average, recall) == 8, "ph_class_average.recall offset");
+PH_ASSERT_LAYOUT(offsetof(ph_class_average, f1) == 16, "ph_class_average.f1 offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_classification_report) == 64, "ph_classification_report size");
+PH_ASSERT_LAYOUT(_Alignof(ph_classification_report) == 8, "ph_classification_report alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_classification_report, accuracy) == 0, "ph_classification_report.accuracy offset");
+PH_ASSERT_LAYOUT(offsetof(ph_classification_report, macro) == 8, "ph_classification_report.macro offset");
+PH_ASSERT_LAYOUT(offsetof(ph_classification_report, weighted) == 32, "ph_classification_report.weighted offset");
+PH_ASSERT_LAYOUT(offsetof(ph_classification_report, classes) == 56, "ph_classification_report.classes offset");
+
+PH_ASSERT_LAYOUT(sizeof(ph_csv_options) == 16, "ph_csv_options size");
+PH_ASSERT_LAYOUT(_Alignof(ph_csv_options) == 4, "ph_csv_options alignment");
+PH_ASSERT_LAYOUT(offsetof(ph_csv_options, struct_size) == 0, "ph_csv_options.struct_size offset");
+PH_ASSERT_LAYOUT(offsetof(ph_csv_options, delimiter) == 4, "ph_csv_options.delimiter offset");
+PH_ASSERT_LAYOUT(offsetof(ph_csv_options, no_header) == 8, "ph_csv_options.no_header offset");
+PH_ASSERT_LAYOUT(offsetof(ph_csv_options, keep_empty_lines) == 12, "ph_csv_options.keep_empty_lines offset");
+
 PH_ASSERT_LAYOUT(sizeof(ph_margin) == 16, "ph_margin size");
 PH_ASSERT_LAYOUT(_Alignof(ph_margin) == 4, "ph_margin alignment");
 PH_ASSERT_LAYOUT(offsetof(ph_margin, top) == 0, "ph_margin.top offset");
@@ -549,7 +584,7 @@ PH_ASSERT_LAYOUT(offsetof(ph_event, point_valid) == 100, "ph_event.point_valid o
 
 int main(void) {
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-  printf("%d struct layouts match the generated bindings\n", 40);
+  printf("%d struct layouts match the generated bindings\n", 45);
   return 0;
 #else
   printf("SKIP: not a 64-bit target\n");
