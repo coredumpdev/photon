@@ -79,6 +79,51 @@ export function waterfallTimeTicks(now: number, span: number, opts: WaterfallTic
 }
 
 /**
+ * Ticks for a waterfall whose rows did not arrive on a fixed cadence: each row
+ * carries its own clock, so the age axis is no longer linear in time.
+ *
+ * `times` is row-major like the history — row 0 at the bottom, oldest — and rows
+ * that never streamed are `NaN`. Whole clock steps are placed between the oldest
+ * and newest row and positioned by interpolating the piecewise-linear map from
+ * clock to row, each row's clock sitting at its top edge (where the uniform
+ * formula already puts it).
+ */
+export function waterfallRowTicks(times: ArrayLike<number>, span: number, opts: WaterfallTickOptions = {}): Tick[] {
+  const rows = times.length;
+  if (!(span > 0) || rows === 0) return [];
+  const fmt = opts.format ?? "hh:mm:ss";
+  const label = typeof fmt === "function" ? fmt : (s: number): string => formatDuration(s, fmt);
+
+  // Rows that carry a clock, oldest first. A row's clock sits at its top edge.
+  const at: number[] = [];
+  for (let i = 0; i < rows; i++) if (Number.isFinite(times[i]!)) at.push(i);
+  if (at.length === 0) return [];
+  const edge = (i: number): number => ((i + 1) * span) / rows;
+
+  const oldest = times[at[0]!]!;
+  const newest = times[at[at.length - 1]!]!;
+  // A run's first row has no span to step across, but the pane sits in that
+  // state long enough to be worth a label.
+  if (!(newest > oldest)) return [{ value: edge(at[at.length - 1]!), label: label(newest) }];
+
+  const step = niceTimeStep(newest - oldest, opts.count);
+  const out: Tick[] = [];
+  let j = 1;
+  for (let k = Math.ceil(oldest / step); k * step <= newest + 1e-9 && out.length < 512; k++) {
+    const s = k * step;
+    // Ticks ascend, so the cursor into `at` never has to walk back.
+    while (j < at.length - 1 && times[at[j]!]! < s) j++;
+    const hi = at[j]!;
+    const lo = at[j - 1]!;
+    const tl = times[lo]!;
+    const th = times[hi]!;
+    const f = th === tl ? 0 : (s - tl) / (th - tl);
+    out.push({ value: edge(lo) + f * (edge(hi) - edge(lo)), label: label(s) });
+  }
+  return out;
+}
+
+/**
  * Reduce a column to `cols` cells by taking each block's maximum — the right
  * reduction for a waterfall, where a peak two bins wide must survive fitting a
  * 200k-bin spectrum into a few hundred cells. Shorter columns are stretched by
@@ -117,8 +162,12 @@ export interface WaterfallOptions {
   cols: number;
   /** Rows of history kept on screen. */
   rows: number;
-  /** Seconds of signal one row covers; with `rows` this sets the time span. */
-  rowSeconds: number;
+  /**
+   * Seconds of signal one row covers; with `rows` this sets the time span. Omit
+   * when rows arrive irregularly and carry their own clock — see
+   * {@link WaterfallHandle.push} — and the axis counts rows instead.
+   */
+  rowSeconds?: number;
   /**
    * Value range mapped to the colormap. Strongly recommended: without it the
    * heatmap re-reads its own min/max on every push and the colours breathe.
@@ -139,6 +188,8 @@ export interface WaterfallOptions {
   name?: string;
   /** Clock of the first pushed row, in seconds. Default 0. */
   startTime?: number;
+  /** Clocks for `history`'s rows, row 0 first. Ignored without `history`. */
+  historyTimes?: ArrayLike<number>;
   /** Time tick labels: a preset or your own formatter. Default `"hh:mm:ss"`. */
   timeFormat?: TimeFormat | ((seconds: number) => string);
   /** Roughly how many time ticks to place. Default 8. */
@@ -162,8 +213,12 @@ export interface WaterfallHandle {
   span: number;
   /** Clock of the newest row — the top of the time axis. */
   now(): number;
-  /** Newest column in: the history ages one row down and the clock advances one. */
-  push(column: ArrayLike<number>): void;
+  /**
+   * Newest column in: the history ages one row down. Without `time` the clock
+   * advances by `rowSeconds`; with it, that row is stamped and the time axis
+   * switches to interpolating the stamps it holds.
+   */
+  push(column: ArrayLike<number>, time?: number): void;
   /** Re-label the time axis — swap the format, the tick count or the title. */
   setTimeAxis(opts: { format?: TimeFormat | ((seconds: number) => string); count?: number; title?: string }): void;
   /** Wipe the history back to `fill` and restart the clock at `startTime`. */
@@ -184,7 +239,7 @@ export function addWaterfall(plot: Plot, opts: WaterfallOptions): WaterfallHandl
   if (!(cols >= 2) || !(rows >= 2)) {
     throw new Error(`addWaterfall: cols and rows must be >= 2 (got ${opts.cols} x ${opts.rows})`);
   }
-  if (!(opts.rowSeconds > 0)) {
+  if (opts.rowSeconds !== undefined && !(opts.rowSeconds > 0)) {
     throw new Error(`addWaterfall: rowSeconds must be > 0 (got ${opts.rowSeconds})`);
   }
   const [x0, x1] = opts.extent;
@@ -192,7 +247,8 @@ export function addWaterfall(plot: Plot, opts: WaterfallOptions): WaterfallHandl
     throw new Error(`addWaterfall: extent must be a finite non-empty range (got [${x0}, ${x1}])`);
   }
 
-  const rowSeconds = opts.rowSeconds;
+  // Omitted means the rows carry their own clocks; the axis is then row units.
+  const rowSeconds = opts.rowSeconds ?? 1;
   const span = rows * rowSeconds;
   const start = opts.startTime ?? 0;
   const fill = opts.fill ?? opts.domain?.[0] ?? 0;
@@ -202,6 +258,14 @@ export function addWaterfall(plot: Plot, opts: WaterfallOptions): WaterfallHandl
     ...(opts.timeFormat ? { format: opts.timeFormat } : {}),
     startTime: start,
   };
+
+  const times = new Float64Array(cols === 0 ? 0 : rows).fill(NaN);
+  if (opts.history && opts.historyTimes) {
+    const n = Math.min(rows, opts.historyTimes.length);
+    for (let i = 0; i < n; i++) times[i] = opts.historyTimes[i]!;
+  }
+  // The row clocks drive the axis as soon as any row has one.
+  let stamped = times.some((t) => Number.isFinite(t));
 
   const values = new Float64Array(cols * rows).fill(fill);
   if (opts.history) {
@@ -234,7 +298,7 @@ export function addWaterfall(plot: Plot, opts: WaterfallOptions): WaterfallHandl
   const setTicks = (): void => {
     plot.setAxis(yAxis, {
       ...(title === undefined ? {} : { title }),
-      ticks: waterfallTimeTicks(clock, span, tickOpts),
+      ticks: stamped ? waterfallRowTicks(times, span, tickOpts) : waterfallTimeTicks(clock, span, tickOpts),
     });
   };
   setTicks();
@@ -245,12 +309,20 @@ export function addWaterfall(plot: Plot, opts: WaterfallOptions): WaterfallHandl
     rowSeconds,
     span,
     now: () => clock,
-    push(column) {
+    push(column, time) {
       // Row 0 is the bottom of the image, so ageing the whole history by one row
       // is a single memmove; the fresh column lands on top.
       values.copyWithin(0, cols);
       reduceInto(column, values, (rows - 1) * cols, cols);
-      clock += rowSeconds;
+      times.copyWithin(0, 1);
+      if (time === undefined || !Number.isFinite(time)) {
+        times[rows - 1] = NaN;
+        clock += rowSeconds;
+      } else {
+        times[rows - 1] = time;
+        clock = time;
+        stamped = true;
+      }
       heatmap.setData(values, cols, rows);
       setTicks();
     },
@@ -262,6 +334,8 @@ export function addWaterfall(plot: Plot, opts: WaterfallOptions): WaterfallHandl
     },
     reset() {
       values.fill(fill);
+      times.fill(NaN);
+      stamped = false;
       clock = start - rowSeconds;
       heatmap.setData(values, cols, rows);
       setTicks();

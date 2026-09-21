@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockMax, formatDuration, niceTimeStep, waterfallTimeTicks } from "../src/stats/waterfall.js";
+import { blockMax, formatDuration, niceTimeStep, waterfallRowTicks, waterfallTimeTicks } from "../src/stats/waterfall.js";
 
 describe("formatDuration", () => {
   it("writes hh:mm:ss", () => {
@@ -132,5 +132,63 @@ describe("blockMax", () => {
   it("handles blocks that do not divide evenly", () => {
     // 5 into 2: floor boundaries → [0,1] and [2,3,4].
     expect(Array.from(blockMax([1, 5, 2, 9, 3], 2))).toEqual([5, 9]);
+  });
+});
+
+describe("waterfallRowTicks", () => {
+  /** Row clocks for a waterfall fed every `rowSeconds`, oldest first. */
+  const uniform = (rows: number, rowSeconds: number, now: number): Float64Array =>
+    Float64Array.from({ length: rows }, (_, i) => now - (rows - 1 - i) * rowSeconds);
+
+  it("agrees with the uniform formula when the rows are evenly spaced", () => {
+    const rows = 40;
+    const rowSeconds = 0.25;
+    const span = rows * rowSeconds;
+    const times = uniform(rows, rowSeconds, 30);
+
+    const even = waterfallRowTicks(times, span);
+    const uniformTicks = waterfallTimeTicks(30, span, { startTime: times[0]! });
+
+    expect(even.map((t) => t.label)).toEqual(uniformTicks.map((t) => t.label));
+    for (let i = 0; i < even.length; i++) {
+      expect(even[i]!.value).toBeCloseTo(uniformTicks[i]!.value, 6);
+    }
+  });
+
+  it("interpolates rows that did not arrive on a cadence", () => {
+    // A baud pane: ten rows over four and a half seconds, irregularly.
+    const times = Float64Array.from([0, 0.31, 0.74, 1.02, 1.55, 2.1, 2.2, 3.4, 3.9, 4.6]);
+    const ticks = waterfallRowTicks(times, 10, { format: "mm:ss.mmm" });
+
+    expect(ticks.length).toBeGreaterThan(1);
+    // Ascending in both clock and position, and inside the image.
+    for (let i = 0; i < ticks.length; i++) {
+      expect(ticks[i]!.value).toBeGreaterThan(0);
+      expect(ticks[i]!.value).toBeLessThanOrEqual(10);
+      if (i > 0) expect(ticks[i]!.value).toBeGreaterThan(ticks[i - 1]!.value);
+    }
+    // A clock landing exactly on a row sits at that row's top edge.
+    const atRow4 = waterfallRowTicks(Float64Array.from([0, 2]), 2)[0]!;
+    expect(atRow4.value).toBeCloseTo(1, 6);
+  });
+
+  it("labels only the rows that have streamed", () => {
+    const times = Float64Array.from([NaN, NaN, NaN, 1, 2, 3]);
+    const ticks = waterfallRowTicks(times, 6);
+    expect(ticks.length).toBeGreaterThan(0);
+    // Nothing is placed below the oldest row carrying a clock.
+    for (const tick of ticks) expect(tick.value).toBeGreaterThanOrEqual(4);
+  });
+
+  it("gives a run's first row a label rather than nothing", () => {
+    const ticks = waterfallRowTicks(Float64Array.from([NaN, NaN, 7]), 3);
+    expect(ticks).toHaveLength(1);
+    expect(ticks[0]!.label).toBe(formatDuration(7));
+  });
+
+  it("returns nothing when no row carries a clock", () => {
+    expect(waterfallRowTicks(Float64Array.from([NaN, NaN]), 2)).toEqual([]);
+    expect(waterfallRowTicks(Float64Array.from([]), 2)).toEqual([]);
+    expect(waterfallRowTicks(Float64Array.from([1, 2]), 0)).toEqual([]);
   });
 });

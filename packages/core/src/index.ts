@@ -106,7 +106,7 @@ export type { Histogram, Histogram2D, BoxStats, Density, Spectrogram } from "./s
 export { windowFunction, welch, savitzkyGolay, crossCorrelate } from "./stats/signal.js";
 export type { WindowName, Psd, WelchOptions, Correlation } from "./stats/signal.js";
 // Scrolling waterfall (spectrogram that streams downwards) + its time-axis math.
-export { addWaterfall, waterfallTimeTicks, formatDuration, niceTimeStep, blockMax } from "./stats/waterfall.js";
+export { addWaterfall, waterfallTimeTicks, waterfallRowTicks, formatDuration, niceTimeStep, blockMax } from "./stats/waterfall.js";
 export type { WaterfallOptions, WaterfallHandle, WaterfallTickOptions, TimeFormat } from "./stats/waterfall.js";
 // Fits + summaries: regression, LOESS, ECDF, z-score, correlation matrix.
 export {
